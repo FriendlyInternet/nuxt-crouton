@@ -280,6 +280,20 @@ interface TranslationWithOverride {
 const { teamSlug } = useTeamContext()
 const notify = useNotify()
 
+// Locales for override form (derived from i18n config)
+const { locales: i18nLocales, getLocaleMessage, loadLocaleMessages } = useI18n()
+const locales = computed(() =>
+  i18nLocales.value.map((l: any) => typeof l === 'string' ? l : l.code)
+)
+
+// @nuxtjs/i18n 10 only loads the current language's file — load them all
+// so the list is the same whatever language the app is in.
+await loadAllLocales(loadLocaleMessages, locales.value)
+
+function messagesFor(locale: string) {
+  return toRaw(getLocaleMessage(locale)) as Record<string, any>
+}
+
 // Fetch team overrides from DB
 const { data: dbItems, pending, error, refresh } = await useFetch<TranslationWithOverride[]>(
   () => `/api/teams/${teamSlug.value}/translations-ui/with-system`,
@@ -300,15 +314,8 @@ const items = computed(() => {
       // Build from locale files
       const systemValues: Record<string, string> = {}
       for (const locale of locales.value) {
-        const messages = toRaw(getLocaleMessage(locale)) as Record<string, any>
-        let current: any = messages
-        for (const part of key.split('.')) current = current?.[part]
-        // Handle vue-i18n compiled messages
-        if (current && typeof current === 'object' && current.loc?.source) {
-          systemValues[locale] = current.loc.source
-        } else if (typeof current === 'string') {
-          systemValues[locale] = current
-        }
+        const value = valueAt(messagesFor(locale), key)
+        if (value !== undefined) systemValues[locale] = value
       }
       result.push({
         keyPath: key,
@@ -340,43 +347,13 @@ const columns = computed(() => [
   { accessorKey: 'actions', header: '' }
 ])
 
-// Locales for override form (derived from i18n config)
-const { locales: i18nLocales, getLocaleMessage } = useI18n()
-const locales = computed(() =>
-  i18nLocales.value.map((l: any) => typeof l === 'string' ? l : l.code)
+// Key list = union over every language (English value preferred for the label)
+const flatKeys = computed(() =>
+  collectKeys(
+    Object.fromEntries(locales.value.map(l => [l, messagesFor(l)])),
+    ['en', ...locales.value]
+  )
 )
-
-// Build flattened key list from i18n locale messages
-// Handles vue-i18n compiled messages where each key is stored as:
-// { loc: { source: "value" }, body: { static: "value" } }
-function flattenMessages(obj: Record<string, any>, prefix = '', depth = 0, seen = new WeakSet()): { key: string, value: string }[] {
-  if (depth > 10 || typeof obj !== 'object' || obj === null || Array.isArray(obj)) return []
-  const raw = toRaw(obj)
-  if (seen.has(raw)) return []
-  seen.add(raw)
-
-  const result: { key: string, value: string }[] = []
-  for (const [k, v] of Object.entries(raw)) {
-    const path = prefix ? `${prefix}.${k}` : k
-    if (typeof v === 'string') {
-      result.push({ key: path, value: v })
-    } else if (typeof v === 'object' && v !== null && !Array.isArray(v)) {
-      const rawV = toRaw(v)
-      // Detect vue-i18n compiled message: { loc: { source: "..." }, body: { ... } }
-      if (rawV.loc?.source && typeof rawV.loc.source === 'string') {
-        result.push({ key: path, value: rawV.loc.source })
-      } else {
-        result.push(...flattenMessages(rawV, path, depth + 1, seen))
-      }
-    }
-  }
-  return result
-}
-
-const flatKeys = computed(() => {
-  const messages = toRaw(getLocaleMessage('en')) as Record<string, any>
-  return flattenMessages(messages)
-})
 
 const availableKeyItems = computed(() =>
   flatKeys.value.map(({ key, value }) => ({
@@ -390,18 +367,8 @@ const selectedKeySystemValues = computed(() => {
   if (!newKeyPath.value) return null
   const values: Record<string, string> = {}
   for (const locale of locales.value) {
-    const messages = toRaw(getLocaleMessage(locale)) as Record<string, any>
-    const parts = newKeyPath.value.split('.')
-    let current: any = messages
-    for (const part of parts) {
-      current = current?.[part]
-    }
-    // Handle vue-i18n compiled messages
-    if (current && typeof current === 'object' && current.loc?.source) {
-      values[locale] = current.loc.source
-    } else if (typeof current === 'string') {
-      values[locale] = current
-    }
+    const value = valueAt(messagesFor(locale), newKeyPath.value)
+    if (value !== undefined) values[locale] = value
   }
   return Object.keys(values).length > 0 ? values : null
 })

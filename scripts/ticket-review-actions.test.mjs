@@ -8,7 +8,7 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import { mkdtempSync, writeFileSync, readFileSync, readdirSync, mkdirSync, chmodSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { reviewActions } from './ticket-review-actions.mjs'
+import { reviewActions, retitleActions, shouldRetitle } from './ticket-review-actions.mjs'
 import { decide, renderComment } from './lib/ticket-verdict.mjs'
 import { normalizeSteps, renderSteps, stepsPending, HARNESS_BOT, PLAN_WRONG_MARKER, PLAN_GO_MARKER } from './lib/epic-steps.mjs'
 
@@ -180,15 +180,51 @@ test('3. the next ready step is only a NOTE (written by hand), never a dispatch'
 test('7. an epic without tickets:rolling keeps today\'s whole-epic flow', () => {
   const subs = [sub(1, 0, { body: 'Rule: x. Test: y.' }), sub(2, 0, { body: 'Rule: x. Test: y.\nBlocked-by: #1' })]
   const go = decide(subs, verdictFile(ticketSection(1), ticketSection(2)))
+  // #4456: the whole-epic path removes tickets:approved first (moved here from ticket-review.yml)
+  const unapprove = { kind: 'unlabel', issue: 9, label: 'tickets:approved' }
   assert.deepEqual(reviewActions({ epic: 9, labels: ['epic'], decision: go, comments: [], tickets: subs }), [
-    { kind: 'label', issue: 9, label: 'tickets:approved' }, { kind: 'label', issue: 1, label: 'work-this' },
+    unapprove, { kind: 'label', issue: 9, label: 'tickets:approved' }, { kind: 'label', issue: 1, label: 'work-this' },
   ])
   const nogo = decide(subs, verdictFile(ticketSection(1), ticketSection(2, 'no-go', '3')))
   assert.deepEqual(reviewActions({ epic: 9, labels: ['epic'], decision: nogo, comments: [], tickets: subs }), [
-    { kind: 'dispatch', issue: 9, workflow: 'ticket-revise.yml', inputs: { epic: '9' } },
+    unapprove, { kind: 'dispatch', issue: 9, workflow: 'ticket-revise.yml', inputs: { epic: '9' } },
   ])
   const legacy = bot('<!-- ticket-review:v1 -->\n<!-- ticket-review-verdict:no-go -->')
-  assert.deepEqual(reviewActions({ epic: 9, labels: ['epic'], decision: nogo, comments: [legacy, legacy], tickets: subs }), [{ kind: 'block', issue: 9 }])
+  assert.deepEqual(reviewActions({ epic: 9, labels: ['epic'], decision: nogo, comments: [legacy, legacy], tickets: subs }), [unapprove, { kind: 'block', issue: 9 }])
+})
+
+// covers: T5
+test('T5 (#4456): a ticket subject on an epic without tickets:rolling touches only that ticket', () => {
+  const plain = (n) => sub(n, 0, { body: 'Rule: x. Test: y.' })
+  const subs = [plain(11), plain(12), plain(13)]
+  const labels = ['epic', 'tickets:approved']
+  const one = [subs[0]]
+  const go = decide(one, verdictFile(ticketSection(11)), { subject: '11' })
+  assert.equal(go.ok, true, String(go.errors))
+  const goLines = kinds(reviewActions({ epic: 10, subject: '11', labels, decision: go, comments: [], tickets: one, subIssues: subs }))
+  assert.deepEqual(goLines, [{ kind: 'unlabel', issue: 11, label: 'work-this' }, { kind: 'label', issue: 11, label: 'work-this' }])
+  assert.ok(!goLines.some((l) => l.label === 'tickets:approved'), 'a per-ticket review leaves tickets:approved alone')
+  const nogo = decide(one, verdictFile(ticketSection(11, 'no-go', '3')), { subject: '11' })
+  const nogoLines = kinds(reviewActions({ epic: 10, subject: '11', labels, decision: nogo, comments: [], tickets: one, subIssues: subs }))
+  assert.deepEqual(nogoLines, [{ kind: 'dispatch', issue: 10, workflow: 'ticket-revise.yml', inputs: { epic: '10', subject: '11' } }])
+  // a blank subject keeps the whole-epic flow, which removes tickets:approved first
+  const all = decide(subs, verdictFile(ticketSection(11), ticketSection(12), ticketSection(13)))
+  const blank = reviewActions({ epic: 10, subject: '', labels, decision: all, comments: [], tickets: subs })
+  assert.deepEqual(blank[0], { kind: 'unlabel', issue: 10, label: 'tickets:approved' })
+  assert.deepEqual(blank.slice(1).map((l) => l.issue), [10, 11, 12, 13])
+})
+
+// covers: T5
+test('T5 (#4456): the CLI with --subject 11 on a non-rolling epic labels only #11', () => {
+  const d = mkdtempSync(join(tmpdir(), 'tra-gate-'))
+  const w = (n, v) => { writeFileSync(join(d, n), typeof v === 'string' ? v : JSON.stringify(v)); return join(d, n) }
+  const plain = (n) => sub(n, 0, { body: 'Rule: x. Test: y.' })
+  const subs = [plain(11), plain(12), plain(13)]
+  const decision = decide([subs[0]], verdictFile(ticketSection(11)), { subject: '11' })
+  const out = execFileSync('node', [new URL('./ticket-review-actions.mjs', import.meta.url).pathname,
+    w('decision.json', decision), w('comments.json', []), w('epic.json', { number: 10, labels: ['epic', 'tickets:approved'] }), w('subs.json', subs), w('steps.json', ''), '--subject', '11'], { encoding: 'utf8' })
+  const lines = out.trim().split('\n').map((l) => JSON.parse(l))
+  assert.deepEqual(kinds(lines), [{ kind: 'unlabel', issue: 11, label: 'work-this' }, { kind: 'label', issue: 11, label: 'work-this' }])
 })
 
 test('the CLI prints one JSON line per hand-off (the path ticket-review.yml runs)', () => {
@@ -236,6 +272,58 @@ test('ticket-review.yml has the subject input and runs the scripted hand-offs', 
   assert.match(t, /- name: Gather the epic and its tickets\n\s+id: gather\n/)
   assert.match(t, /- id: pi\n\s+if: \$\{\{ steps\.gather\.outputs\.held != 'true' \}\}/)
   assert.match(t, /- name: Post the verdict and release\n\s+if: \$\{\{ !cancelled\(\) && steps\.gather\.outputs\.held != 'true' \}\}/)
+})
+
+// ── #4353: the reviewer's suggested title renames a go ticket before it starts ──
+const BAD = 'velo: the bookings cancel route returns 404'
+const GOOD = 'Cancelling a booking works again'
+const titled = (n, suggestion, v = 'go', fail = '') => ticketSection(n, v, fail).replace(`## Ticket #${n}\n`, `## Ticket #${n}\nSuggested title: ${suggestion}\n`)
+
+test('T5: go + valid suggestion + rule-breaking title → a retitle line before the label, legacy and rolling', () => {
+  const legacySubs = [sub(1, 0, { title: BAD, body: 'Rule: x. Test: y.' })]
+  const ld = decide(legacySubs, verdictFile(titled(1, GOOD)))
+  assert.equal(ld.ok, true, String(ld.errors))
+  const legacy = reviewActions({ epic: 9, labels: ['epic'], decision: ld, comments: [], tickets: legacySubs })
+  const r1 = legacy.findIndex((l) => l.kind === 'retitle')
+  assert.deepEqual(legacy[r1], { kind: 'retitle', issue: 1, title: GOOD, seenTitle: BAD })
+  assert.ok(r1 < legacy.findIndex((l) => l.kind === 'label' && l.issue === 1))
+
+  const steps = normalizeSteps([STEP(0, { ticket: 11 }), STEP(1)])
+  const subs = [sub(11, 0, { title: BAD })]
+  const rd = decide(subs, verdictFile(planSection(), titled(11, GOOD)), { subject: 'plan' })
+  const rolling = reviewActions({ epic: 9, subject: 'plan', labels: ROLLING, decision: rd, comments: [bot(renderSteps(steps))], tickets: subs, subIssues: subs, steps })
+  const r2 = rolling.findIndex((l) => l.kind === 'retitle')
+  assert.deepEqual(rolling[r2], { kind: 'retitle', issue: 11, title: GOOD, seenTitle: BAD })
+  const lab = rolling.findIndex((l) => l.kind === 'label' && l.issue === 11)
+  assert.ok(lab > r2, JSON.stringify(rolling))
+})
+
+test('T6: no retitle for a no-go ticket, a bad suggestion, or a title that already follows the rule', () => {
+  const subs = [sub(1, 0, { title: BAD, body: 'Rule: x. Test: y.' })]
+  assert.deepEqual(retitleActions(decide(subs, verdictFile(titled(1, GOOD, 'no-go', '3')))), [])
+  assert.deepEqual(retitleActions(decide(subs, verdictFile(titled(1, 'x'.repeat(141))))), [])
+  assert.deepEqual(retitleActions(decide(subs, verdictFile(titled(1, 'fix(velo): cancel works')))), [])
+  const fine = [sub(1, 0, { title: 'Bookings can be cancelled', body: 'Rule: x. Test: y.' })]
+  assert.deepEqual(retitleActions(decide(fine, verdictFile(titled(1, GOOD)))), [])
+})
+
+test('T7: rename only when the live title still equals the one the review saw (pure + CLI)', () => {
+  const a = { kind: 'retitle', issue: 1, title: GOOD, seenTitle: BAD }
+  assert.equal(shouldRetitle(a, BAD), true)
+  assert.equal(shouldRetitle(a, 'Someone renamed it'), false)
+  const cli = (live) => spawnSync('node', [new URL('./ticket-review-actions.mjs', import.meta.url).pathname, 'retitle-ok', JSON.stringify(a), live]).status
+  assert.equal(cli(BAD), 0)
+  assert.equal(cli('Someone renamed it'), 1)
+})
+
+test('T8: ticket-review.yml feeds the title check to the reviewer and runs the retitle line', () => {
+  const t = wf('ticket-review.yml')
+  assert.match(t, /node scripts\/lib\/title-rule\.mjs notes "\$D\/tickets\.json" >> "\$D\/epic\.md"/)
+  const c = t.match(/^\s+retitle\)[^\n]*$/m)?.[0] || ''
+  assert.match(c, /ticket-review-actions\.mjs retitle-ok "\$A" "\$LIVE"/)
+  assert.match(c, /gh issue edit "\$N" --title/)
+  // the notes run after tickets.json is written
+  assert.ok(t.indexOf('title-rule.mjs notes') > t.indexOf('> "$D/tickets.json"'))
 })
 
 test('ticket-revise.yml passes the subject on to the re-review', () => {

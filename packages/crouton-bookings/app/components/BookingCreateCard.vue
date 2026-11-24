@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, useTemplateRef } from 'vue'
 import type { Booking, LocationData } from '../types/booking'
 import { toDateKey } from '@fyit/crouton-core/shared/utils/date'
-import { applyBookingToForm, groupLabel, initialFormFromBooking } from '../utils/booking-form'
+import { applyBookingToForm, editBookingBody, groupLabel, initialFormFromBooking } from '../utils/booking-form'
+import { parseLocationProducts } from '../utils/capacity'
+import { showProductPicker } from '../utils/product-picker'
 
 interface Props {
   /** The date for this booking */
@@ -32,20 +34,19 @@ const {
   formState,
   locations,
   locationsStatus,
+  teamProducts,
   selectedLocation,
   allSlots,
   isSlotDisabled,
-  isSlotTaken,
   getSlotRemaining,
-  getSlotCapacity,
   canAddToCart,
   addToCart,
   clearCart,
   toggleSlot,
   submitAll,
   isSubmitting,
-  isInventoryMode,
-  getInventoryAvailability,
+  hasSlots,
+  maxQuantity,
   availabilityLoading,
   // Group support
   enableGroups,
@@ -137,6 +138,12 @@ watch(localLocationId, (v) => {
   }
   localSlotIds.value = []
   formState.slotIds = []
+  localGroupId.value = null
+})
+
+// Setup is done: the user's first location switch must reset the form too (#4331)
+onMounted(() => {
+  isInitialEditSetup.value = false
 })
 
 // Sync local slots to form state
@@ -181,24 +188,63 @@ watch(
   { immediate: true },
 )
 
-// Get inventory info for selected date
-const inventoryInfo = computed(() => {
-  if (!isInventoryMode.value) return null
-  return getInventoryAvailability(props.date)
+// === Location tabs (#4112) ===
+// One sideways-scrolling row; the selected tab is brought into view (as CroutonTabsPanel does)
+const locationTabs = computed(() => (locations.value ?? []).map((l: LocationData) => ({
+  value: l.id,
+  label: getLocationTitle(l),
+  disabled: !isLocationEnabled(l.id),
+  color: isLocationEnabled(l.id) ? (l.color || '#3b82f6') : '#9ca3af',
+  ui: { trigger: isLocationEnabled(l.id) ? '' : 'opacity-40' },
+})))
+
+const tabsWrap = useTemplateRef<HTMLElement>('tabsWrap')
+function revealActiveTab() {
+  const active = tabsWrap.value?.querySelector<HTMLElement>('[data-state="active"]')
+    ?? tabsWrap.value?.querySelector<HTMLElement>('[aria-selected="true"]')
+  active?.scrollIntoView({ inline: 'nearest', block: 'nearest' })
+}
+useResizeObserver(tabsWrap, revealActiveTab)
+watch(localLocationId, revealActiveTab, { flush: 'post' })
+
+// === Products (#4112) ===
+// The team's products give titles + the active flag; the location lists which it offers.
+// They come from the cart, not awaited, so the card draws at once (#4314).
+const { t: entityT } = useEntityTranslations()
+
+type TeamProduct = { id: string, active?: boolean | null, title?: string }
+
+const listedProducts = computed(() => {
+  const team = (teamProducts.value ?? []) as TeamProduct[]
+  const byId = new Map(team.filter(p => p.active !== false).map(p => [p.id, p]))
+  return parseLocationProducts(selectedLocation.value?.products)
+    .map(p => byId.get(p.product))
+    .filter((p): p is TeamProduct => !!p)
+})
+
+const showPicker = computed(() =>
+  !!selectedLocation.value && showProductPicker(selectedLocation.value, teamProducts.value as TeamProduct[]),
+)
+
+function productTitle(p: TeamProduct): string {
+  return entityT(p, 'title') || p.id
+}
+
+// Never leave an amount that doesn't fit after a product or slot change
+watch(maxQuantity, (m) => {
+  if (m >= 1 && formState.quantity > m) formState.quantity = m
 })
 
 // Can submit
 const canSubmit = computed(() => {
-  if (!localLocationId.value) return false
+  // A new booking: product, slots/full day, an amount that fits, group, limit (#4110)
+  if (!isEditMode.value) return canAddToCart.value
 
+  if (!localLocationId.value) return false
   // If groups are enabled, require a group selection
   if (enableGroups.value && !localGroupId.value) return false
-
-  if (isInventoryMode.value) {
-    return inventoryInfo.value?.available ?? false
-  } else {
-    return localSlotIds.value.length > 0
-  }
+  if (hasSlots.value && localSlotIds.value.length === 0) return false
+  return formState.quantity >= 1 && formState.quantity <= maxQuantity.value
 })
 
 // Handle create or update
@@ -211,13 +257,14 @@ async function handleSubmit() {
     try {
       await $fetch(`/api/crouton-bookings/teams/${teamId.value}/bookings/${props.booking.id}`, {
         method: 'PATCH',
-        body: {
-          location: localLocationId.value,
-          // Slot is stored as JSON array string in DB
-          slot: localSlotIds.value.length > 0 ? JSON.stringify(localSlotIds.value) : null,
-          group: localGroupId.value,
+        body: editBookingBody({
+          locationId: localLocationId.value,
+          slotIds: localSlotIds.value,
+          groupId: localGroupId.value,
           date: toDateKey(props.date),
-        },
+          productId: formState.productId,
+          quantity: formState.quantity,
+        }),
       })
       // Clear editing state
       formState.editingBookingId = null
@@ -313,41 +360,51 @@ const isAlreadyCancelled = computed(() => props.booking?.status === 'cancelled')
       </div>
     </template>
 
-    <!-- Body: locations sidebar + content -->
-    <div class="flex min-h-0">
-        <!-- Location sidebar -->
-        <div class="w-52 shrink-0 border-r border-default flex flex-col gap-0.5 px-1 py-4">
-          <UButton
-            v-for="location in locations"
-            :key="location.id"
+    <!-- Body: location tabs on top, content full width below (#4112) -->
+    <div class="flex flex-col min-h-0">
+        <!-- Location tabs: one row, scrolls sideways, never wraps -->
+        <div ref="tabsWrap" class="border-b border-default px-1">
+          <UTabs
+            :items="locationTabs"
+            :model-value="localLocationId ?? undefined"
+            :content="false"
+            variant="link"
             size="sm"
-            :variant="localLocationId === location.id ? 'soft' : 'ghost'"
-            :color="localLocationId === location.id ? 'primary' : 'neutral'"
-            :disabled="!isLocationEnabled(location.id)"
-            block
-            class="justify-start"
-            :class="!isLocationEnabled(location.id) && 'opacity-40'"
-            @click="localLocationId = location.id"
+            :ui="{ list: SCROLL_ROW_X, trigger: 'min-w-fit' }"
+            @update:model-value="v => localLocationId = String(v)"
           >
-            <span
-              class="w-2 h-2 rounded-full shrink-0"
-              :style="{ backgroundColor: isLocationEnabled(location.id) ? (location.color || '#3b82f6') : '#9ca3af' }"
-            />
-            <span class="text-left break-words">{{ getLocationTitle(location) }}</span>
-          </UButton>
+            <template #leading="{ item }">
+              <span
+                class="w-2 h-2 rounded-full shrink-0"
+                :style="{ backgroundColor: item.color }"
+              />
+            </template>
+          </UTabs>
         </div>
 
-        <!-- Right content -->
-        <div class="flex-1 p-4 flex flex-col gap-4">
-          <!-- Location info + prompt -->
-          <div v-if="selectedLocation" class="flex flex-col gap-2">
-            <span v-if="getLocationAddress(selectedLocation)" class="text-xs text-muted flex items-center gap-1">
-              <UIcon name="i-lucide-map-pin" class="size-3 shrink-0" />
-              {{ getLocationAddress(selectedLocation) }}
-            </span>
-            <span class="text-sm font-medium text-default">
-              {{ isInventoryMode ? t('bookings.createCard.howMany') : t('bookings.createCard.pickTimeSlot') }}
-            </span>
+        <div class="p-4 flex flex-col gap-4">
+          <!-- Location address -->
+          <span v-if="selectedLocation && getLocationAddress(selectedLocation)" class="text-xs text-muted flex items-center gap-1">
+            <UIcon name="i-lucide-map-pin" class="size-3 shrink-0" />
+            {{ getLocationAddress(selectedLocation) }}
+          </span>
+
+          <!-- Product: buttons with 2+ products, plain text with one -->
+          <div v-if="selectedLocation && listedProducts.length > 0" class="flex flex-col gap-1.5">
+            <span class="text-sm font-medium text-default">{{ t('bookings.createCard.product') }}</span>
+            <div v-if="showPicker" class="flex flex-wrap gap-1.5">
+              <UButton
+                v-for="p in listedProducts"
+                :key="p.id"
+                size="sm"
+                :variant="formState.productId === p.id ? 'solid' : 'soft'"
+                :color="formState.productId === p.id ? 'primary' : 'neutral'"
+                @click="formState.productId = p.id"
+              >
+                {{ productTitle(p) }}
+              </UButton>
+            </div>
+            <span v-else class="text-sm text-default">{{ productTitle(listedProducts[0]!) }}</span>
           </div>
 
           <!-- Group selection (when groups are enabled) -->
@@ -364,58 +421,65 @@ const isAlreadyCancelled = computed(() => props.booking?.status === 'cancelled')
             </UButton>
           </div>
 
-          <!-- Slot selection (slot mode) -->
-          <div v-if="selectedLocation && !isInventoryMode" class="flex flex-wrap gap-1.5">
-            <!-- Loading state -->
-            <template v-if="availabilityLoading">
-              <div v-for="i in 3" :key="i" class="h-6 w-16 bg-elevated rounded animate-pulse" />
-            </template>
+          <!-- Time: each slot shows the number free, e.g. 09:00 (3); (0) is greyed -->
+          <div v-if="selectedLocation && hasSlots" class="flex flex-col gap-1.5">
+            <span class="text-sm font-medium text-default">{{ t('bookings.createCard.time') }}</span>
+            <div class="flex flex-wrap gap-1.5">
+              <!-- Loading state -->
+              <template v-if="availabilityLoading">
+                <div v-for="i in 3" :key="i" class="h-6 w-16 bg-elevated rounded animate-pulse" />
+              </template>
 
-            <!-- Slots -->
-            <template v-else>
-              <UButton
-                v-for="slot in allSlots"
-                :key="slot.id"
-                size="sm"
-                :variant="localSlotIds.includes(slot.id) ? 'solid' : 'soft'"
-                :color="localSlotIds.includes(slot.id) ? 'primary' : (isSlotTaken(slot.id) ? 'error' : 'neutral')"
-                :disabled="isSlotDisabled(slot.id)"
-                @click="localSlotIds.includes(slot.id) ? localSlotIds = localSlotIds.filter(id => id !== slot.id) : localSlotIds = [...localSlotIds, slot.id]"
-              >
-                <UIcon
-                  v-if="localSlotIds.includes(slot.id)"
-                  name="i-lucide-check"
-                  class="size-3"
-                />
-                <span :class="{ 'line-through': isSlotTaken(slot.id) }">
-                  {{ slot.id === 'all-day' ? t('bookings.allDay') : (slot.label || slot.id) }}
-                </span>
-                <span v-if="getSlotCapacity(slot.id) > 1 && !isSlotDisabled(slot.id)" class="text-xs opacity-60 ml-0.5">
-                  ({{ getSlotRemaining(slot.id) }} {{ t('bookings.createCard.left') }})
-                </span>
-                <UIcon
-                  v-if="isSlotTaken(slot.id)"
-                  name="i-lucide-ban"
-                  class="size-3 ml-0.5"
-                />
-              </UButton>
-            </template>
+              <!-- Slots -->
+              <template v-else>
+                <UButton
+                  v-for="slot in allSlots"
+                  :key="slot.id"
+                  size="sm"
+                  :variant="localSlotIds.includes(slot.id) ? 'solid' : 'soft'"
+                  :color="localSlotIds.includes(slot.id) ? 'primary' : 'neutral'"
+                  :disabled="isSlotDisabled(slot.id)"
+                  @click="localSlotIds.includes(slot.id) ? localSlotIds = localSlotIds.filter(id => id !== slot.id) : localSlotIds = [...localSlotIds, slot.id]"
+                >
+                  <UIcon
+                    v-if="localSlotIds.includes(slot.id)"
+                    name="i-lucide-check"
+                    class="size-3"
+                  />
+                  {{ slot.id === 'all-day' ? t('bookings.allDay') : (slot.label || slot.id) }} ({{ getSlotRemaining(slot.id) }})
+                </UButton>
+              </template>
+            </div>
           </div>
 
-          <!-- Inventory mode: quantity selector + availability -->
-          <div v-if="localLocationId && isInventoryMode && inventoryInfo" class="flex items-center gap-3">
-            <UInputNumber
-              v-model="formState.quantity"
-              :min="1"
-              :max="inventoryInfo.remaining"
-              :disabled="!inventoryInfo.available"
+          <!-- Amount: − booked/free +, + stops at the number free -->
+          <div v-if="localLocationId" class="flex flex-col gap-1.5">
+            <span class="text-sm font-medium text-default">{{ t('bookings.createCard.amount') }}</span>
+            <div v-if="maxQuantity >= 1 || availabilityLoading" class="relative w-32">
+              <UInputNumber
+                v-model="formState.quantity"
+                :min="1"
+                :max="Math.max(1, maxQuantity)"
+                :disabled="maxQuantity < 1"
+                :aria-label="t('bookings.createCard.amountLabel', { booked: formState.quantity, free: maxQuantity })"
+                variant="soft"
+                size="sm"
+                :ui="{ root: 'w-32', base: 'pe-14 text-end' }"
+              />
+              <span
+                aria-hidden="true"
+                class="pointer-events-none absolute inset-y-0 start-18 flex items-center text-xs text-muted"
+              >/{{ maxQuantity }}</span>
+            </div>
+            <UBadge
+              v-else
+              color="neutral"
               variant="soft"
               size="sm"
-              :ui="{ root: 'w-28' }"
-            />
-            <span class="text-sm text-muted">
-              {{ t('bookings.createCard.ofAvailable', { count: inventoryInfo.remaining }) }}
-            </span>
+              class="self-start"
+            >
+              {{ t('bookings.calendar.fullyBooked') }}
+            </UBadge>
           </div>
 
           <!-- No location selected -->

@@ -12,6 +12,7 @@
     "server",
     "locales",
     "cli",
+    "config-utils.ts",
     "nuxt.config.ts",
     "README.md",
     "docs/llms.txt",
@@ -51,6 +52,8 @@
   },
   "peerDependencies": {
     "nuxt": "^4.0.0",
+    "@fyit/crouton-auth": "workspace:0.x",
+    "@fyit/crouton-core": "workspace:0.x",
     "drizzle-orm": ">=0.30.0",
     "zod": "^4.0.0"
   }

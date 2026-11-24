@@ -68,6 +68,8 @@ export default defineCroutonManifest({
       { name: 'CroutonIconPicker', description: 'Searchable icon picker using the Iconify public API' },
       { name: 'CroutonImageCropper', description: 'Image crop area with a rotate toolbar' },
       { name: 'CroutonImportButton', description: 'Button to import CSV or JSON into a collection' },
+      { name: 'CroutonKanban', description: 'Kanban board grouping collection items into drag-and-drop columns; optional read-only mode' },
+      { name: 'CroutonKanbanColumn', description: 'One kanban column of draggable item cards' },
       { name: 'CroutonItemButtonsMini', description: 'Compact view, edit and delete buttons for an item' },
       { name: 'CroutonItemCardMini', description: 'Compact card that fetches and shows a referenced item' },
       { name: 'CroutonOptionsFieldCardMini', description: 'Shows options field values resolved from a settings collection' },

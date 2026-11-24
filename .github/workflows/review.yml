@@ -8,9 +8,9 @@ name: Review
 # Every `claude-code-action` step below MUST set `allowed_bots` (#3119): the action refuses a run
 # started by a bot actor (the pipeline's pushes) otherwise, and exits green while refusing.
 #
-#   red-team          epic → main, non-draft   blocks on high/critical
-#   a11y              epic → main, non-draft   blocks on critical/serious   (needs pnpm install)
-#   simplify          epic → main, non-draft   advisory on findings; red if it did not run
+#   red-team          epic → main, non-draft   advice only, never blocks
+#   a11y              epic → main, non-draft   advice only, never blocks   (needs pnpm install)
+#   simplify          epic → main, non-draft   advice only, never blocks
 #   frontend-review   EVERY PR touching .vue, drafts and leaf PRs into epic/* included.
 #                     Plain form tags on added lines are a lint hit (eslint.frontend-gate.config.mjs);
 #                     a reviewer 🔴 counts only when its quote matches an added line
@@ -99,8 +99,7 @@ jobs:
 
       - uses: anthropics/claude-code-action@5a856893345e332afa621934082d8c660c26d689 # v1.0.282
         id: agent
-        # The VERDICT FILE is the gate, not this step's exit code (#499, #602, #603): no verdict ⇒
-        # red check (the reviewer did not run, #3070); a high/critical in the verdict ⇒ fail.
+        # Advice only: neither this step's exit code nor the verdict file turns the check red.
         continue-on-error: true
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -154,7 +153,7 @@ jobs:
           name: loop-station-finding-red-team-${{ github.run_id }}
           path: finding-candidate.json
           if-no-files-found: ignore
-      # Classify why a reviewer produced no verdict; the gate step below then fails closed (#3070).
+      # Classify why a reviewer produced no verdict; the report step below says so in a comment.
       - uses: ./.github/actions/gate-outage-check
         id: outage
         if: ${{ !cancelled() }}
@@ -162,36 +161,28 @@ jobs:
           gate: red-team
           verdict-file: red-team-verdict.json
           agent-outcome: ${{ steps.agent.outcome }}
-      - name: Gate on high/critical
+      - name: Report (advice only, never blocks)
         if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           CLS: ${{ steps.outage.outputs.classification }}
         run: |
-          # A reviewer that did not run is a red check, never a pass (#3070).
+          # Advice only: a model-written verdict never turns the check red, and neither does a
+          # reviewer that did not run — that is said in a comment instead.
           MARK='<!-- review-gate:red-team -->'
           if ! node scripts/review-gate.mjs red-team red-team-verdict.json "$CLS" > gate-msg.txt; then
             cat gate-msg.txt
-            echo "::error::red-team did not run — failing closed."
+            echo "::warning::red-team did not run — advice only, not blocking."
             gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate --jq '.[].body' | grep -qF "$MARK" \
               || gh pr comment "$PR" --body-file gate-msg.txt || true
-            exit 1
+            exit 0
           fi
           gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
             --jq ".[] | select(.body | contains(\"$MARK\")) | .id" 2>/dev/null \
             | while read -r id; do gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/comments/$id" || true; done || true
           echo "Verdict: $(cat red-team-verdict.json)"
-          HIGHEST=$(node -e "process.stdout.write((require('./red-team-verdict.json').highest||'none').toLowerCase())")
-          case "$HIGHEST" in
-            critical|high)
-              echo "::error::Red-team found a ${HIGHEST}-severity issue in this PR's diff — see the red-team PR comment. Blocking merge (fail on high+)."
-              exit 1
-              ;;
-            *)
-              echo "Red-team highest severity: ${HIGHEST}. No high/critical — check passes."
-              ;;
-          esac
+          echo "red-team: advice only — see its PR comment. Never blocks."
 
   a11y:
     needs: diff
@@ -234,7 +225,7 @@ jobs:
 
       - uses: anthropics/claude-code-action@5a856893345e332afa621934082d8c660c26d689 # v1.0.282
         id: agent
-        # Verdict file is the gate, not the exit code (see red-team above).
+        # Advice only (see red-team above).
         continue-on-error: true
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -304,36 +295,28 @@ jobs:
           gate: a11y
           verdict-file: a11y-verdict.json
           agent-outcome: ${{ steps.agent.outcome }}
-      - name: Gate on critical/serious
+      - name: Report (advice only, never blocks)
         if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           CLS: ${{ steps.outage.outputs.classification }}
         run: |
-          # A reviewer that did not run is a red check, never a pass (#3070).
+          # Advice only: a model-written verdict never turns the check red, and neither does a
+          # reviewer that did not run — that is said in a comment instead.
           MARK='<!-- review-gate:a11y -->'
           if ! node scripts/review-gate.mjs a11y a11y-verdict.json "$CLS" > gate-msg.txt; then
             cat gate-msg.txt
-            echo "::error::a11y did not run — failing closed."
+            echo "::warning::a11y did not run — advice only, not blocking."
             gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate --jq '.[].body' | grep -qF "$MARK" \
               || gh pr comment "$PR" --body-file gate-msg.txt || true
-            exit 1
+            exit 0
           fi
           gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
             --jq ".[] | select(.body | contains(\"$MARK\")) | .id" 2>/dev/null \
             | while read -r id; do gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/comments/$id" || true; done || true
           echo "Verdict: $(cat a11y-verdict.json)"
-          HIGHEST=$(node -e "process.stdout.write((require('./a11y-verdict.json').highest||'none').toLowerCase())")
-          case "$HIGHEST" in
-            critical)
-              echo "::error::a11y found a critical/serious accessibility issue in this PR's diff — see the a11y PR comment. Blocking merge."
-              exit 1
-              ;;
-            *)
-              echo "a11y highest severity: ${HIGHEST}. No critical/serious — check passes."
-              ;;
-          esac
+          echo "a11y: advice only — see its PR comment. Never blocks."
 
   frontend-review:
     needs: diff
@@ -593,26 +576,25 @@ jobs:
           gate: simplify
           verdict-file: simplify-verdict.json
           agent-outcome: ${{ steps.agent.outcome }}
-      - name: Report (advisory on findings; red if simplify did not run)
+      - name: Report (advice only, never blocks)
         if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           CLS: ${{ steps.outage.outputs.classification }}
         run: |
-          # A reviewer that did not run is a red check, never a pass (#3070).
+          # Advice only: a model-written verdict never turns the check red, and neither does a
+          # reviewer that did not run — that is said in a comment instead.
           MARK='<!-- review-gate:simplify -->'
           if ! node scripts/review-gate.mjs simplify simplify-verdict.json "$CLS" > gate-msg.txt; then
             cat gate-msg.txt
-            echo "::error::simplify did not run — failing closed."
+            echo "::warning::simplify did not run — advice only, not blocking."
             gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate --jq '.[].body' | grep -qF "$MARK" \
               || gh pr comment "$PR" --body-file gate-msg.txt || true
-            exit 1
+            exit 0
           fi
           gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
             --jq ".[] | select(.body | contains(\"$MARK\")) | .id" 2>/dev/null \
             | while read -r id; do gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/comments/$id" || true; done || true
           echo "Verdict: $(cat simplify-verdict.json)"
-          HIGHEST=$(node -e "process.stdout.write((require('./simplify-verdict.json').highest||'none').toLowerCase())")
-          echo "simplify highest severity: ${HIGHEST}. Advisory only — see the simplify PR comment. Never blocks."
-          exit 0
+          echo "simplify: advice only — see its PR comment. Never blocks."

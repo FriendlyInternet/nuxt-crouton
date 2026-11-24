@@ -19,6 +19,7 @@
  *
  * ## Registered Collections
  * - inboxCards (inbox/cards)
+ * - pipelineItems (pipeline/items)
  */
 
 export const queryRegistry: Record<string, {
@@ -33,5 +34,13 @@ export const queryRegistry: Record<string, {
       .then(m => m.getInboxCardsByIds),
     access: () => import('~~/layers/inbox/collections/cards/server/database/queries')
       .then((m: any) => m.InboxCardsAccess),
+  },
+  pipelineItems: {
+    getAll: () => import('~~/layers/pipeline/collections/items/server/database/queries')
+      .then(m => m.getAllPipelineItems),
+    getByIds: () => import('~~/layers/pipeline/collections/items/server/database/queries')
+      .then(m => m.getPipelineItemsByIds),
+    access: () => import('~~/layers/pipeline/collections/items/server/database/queries')
+      .then((m: any) => m.PipelineItemsAccess),
   },
 }

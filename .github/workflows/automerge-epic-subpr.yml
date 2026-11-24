@@ -102,6 +102,10 @@ on:
   # With `pr` it evaluates that PR; empty = sweep all.
   workflow_dispatch:
     inputs:
+      clock:
+        description: "started by the status app's clock: behave as the timed run"
+        type: boolean
+        default: false
       pr:
         description: 'PR number to evaluate; empty = sweep all open sub-PRs'
         required: false
@@ -270,9 +274,9 @@ jobs:
               if (!BOTS.includes(pr.user.login) && !v1) { core.info(`#${pull_number} not pipeline-authored (${pr.user.login}) — skip.`); continue }
 
               // 'dirty' = merge conflicts; 'blocked' = a required check/approval pending. Leave both.
-              // An epic → main PR that conflicts with main would otherwise sit forever with no checks
+              // An epic → main or work-<N> → main (#4260) PR that conflicts with main would otherwise sit forever with no checks
               // (#2875): start the conflict resolver once per head (marker carries the sha).
-              if (epicToMain && state === 'dirty') {
+              if ((epicToMain || leafToMain) && state === 'dirty') {
                 const { startConflictResolver } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/epic-conflict-resolver.mjs`)
                 const { handoffGuard } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`)
                 const r = await startConflictResolver({ github, owner, repo, pull_number, pr, state, handoffGuard })

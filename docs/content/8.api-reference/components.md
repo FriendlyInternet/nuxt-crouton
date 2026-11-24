@@ -376,6 +376,7 @@ Icon Picker Searchable icon picker using the Iconify public API. Supports collec
 | `updateLoading` | `boolean` | no |  |
 | `deleteLoading` | `boolean` | no |  |
 | `disabledTooltip` | `string` | no |  |
+| `itemName` | `string` | no |  |
 
 ## CroutonItemCardMini
 
@@ -398,6 +399,7 @@ Icon Picker Searchable icon picker using the Iconify public API. Supports collec
 | `showFieldSelector` | `boolean` | no | Allow user to select grouping field |
 | `groupableFields` | `string[]` | no | Fields available for grouping (auto-detected if not provided) |
 | `showCollabPresence` | `boolean \| CollabPresenceConfig` | no | Show collaboration presence badges on cards |
+| `readonly` | `boolean` | no | Cards can't be dragged; `move` is never emitted |
 
 ## CroutonKanbanColumn
 
@@ -413,6 +415,7 @@ Icon Picker Searchable icon picker using the Iconify public API. Supports collec
 | `showCount` | `boolean` | no | Show item count badge |
 | `isDropTarget` | `boolean` | no | Whether the column is currently the drop target |
 | `showCollabPresence` | `boolean \| CollabPresenceConfig` | no | Show collaboration presence badges on cards |
+| `readonly` | `boolean` | no | Cards can't be dragged; no Edit/Delete buttons on the default card |
 
 ## CroutonOptionsFieldCardMini
 

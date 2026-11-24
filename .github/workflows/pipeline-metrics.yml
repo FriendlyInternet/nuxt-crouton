@@ -10,6 +10,10 @@ on:
   # timer: the status app's clock (pocs/status/server/utils/clock-jobs.ts)
   workflow_dispatch:
     inputs:
+      clock:
+        description: "started by the status app's clock: behave as the timed run"
+        type: boolean
+        default: false
       max_calls:
         description: 'Max GitHub API calls this run may use'
         default: '1500'

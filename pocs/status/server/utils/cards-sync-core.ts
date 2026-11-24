@@ -29,9 +29,10 @@ export const DESIGN_HOLD_MARKER = '<!-- design-signoff-hold -->'
 export const HOLD_HEADING = '## 🎨 Design sign-off needed before building'
 export const PIPELINE_NOTE = '<!-- pipeline-note -->'
 export const BUILD_REVIEW_FINAL = '<!-- build-review-final -->'
-const BUILD_REVIEW_SHA_RE = /<!-- build-review-sha:([0-9a-f]+) -->/
-const BUILD_REVIEW_FAILED_RE = /<!-- build-review-failed-sha:([0-9a-f]+) -->/
-const BUILD_REVIEW_VERDICT_RE = /<!-- build-review-verdict:([a-z-]+) -->/
+// Exported for the Pipeline board's verdict (board-core.ts `latestVerdict`, #4349).
+export const BUILD_REVIEW_SHA_RE = /<!-- build-review-sha:([0-9a-f]+) -->/
+export const BUILD_REVIEW_FAILED_RE = /<!-- build-review-failed-sha:([0-9a-f]+) -->/
+export const BUILD_REVIEW_VERDICT_RE = /<!-- build-review-verdict:([a-z-]+) -->/
 const PLAN_VERDICT_RE = /<!--\s*plan-review-verdict:(go|no-go|needs-owner)\s*-->/
 export const QUIZ_RE = /<!-- owner-quiz:v1 pr=(\d+) sha=([0-9a-f]*) key=([A-Za-z0-9_-]+) -->/
 export const CI_FIX_MARKER = 'CI-Fix: true'
@@ -86,6 +87,8 @@ export interface SyncItem {
   files?: GhFile[]
   /** Body of the issue the PR closes (`Closes #N`); null/undefined = none or not read. */
   closedIssueBody?: string | null
+  /** Delivery epic only: its newest merged "Epic #N:" PR into main; undefined = not looked up or none found. */
+  epicPr?: { number: number, files: GhFile[], count: number }
   readError?: boolean
 }
 
@@ -100,7 +103,7 @@ export interface EpicSyncItem {
   readError?: boolean
 }
 
-export interface GhFile { filename?: string, previous_filename?: string }
+export interface GhFile { filename?: string, previous_filename?: string, additions?: number, deletions?: number }
 
 export interface QuizItem {
   number: number
@@ -432,6 +435,37 @@ export function packagesPayload(i: SyncItem): PackageEntry[] {
   return names.map(name => ({ name, why, approval }))
 }
 
+export interface ChangesPayload { files: number, added: number, removed: number, top: string[] }
+
+const lineCount = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
+
+/**
+ * The "what changed" summary of a PR review card (#4373): file count, lines added/removed, and the
+ * three largest files (ties by name, code-point order so the payload is stable between syncs).
+ * Null when the file list was not read or is empty.
+ */
+export function changesPayload(i: SyncItem): ChangesPayload | null {
+  return changesFromFiles(i.files)
+}
+
+/** The same summary from any file list (#4501: also the delivery card's epic PR). */
+export function changesFromFiles(files?: GhFile[]): ChangesPayload | null {
+  if (!files?.length) return null
+  let added = 0
+  let removed = 0
+  for (const f of files) {
+    added += lineCount(f.additions)
+    removed += lineCount(f.deletions)
+  }
+  const size = (f: GhFile) => lineCount(f.additions) + lineCount(f.deletions)
+  const top = files
+    .filter((f): f is GhFile & { filename: string } => typeof f.filename === 'string' && !!f.filename)
+    .sort((a, b) => size(b) - size(a) || (a.filename < b.filename ? -1 : a.filename > b.filename ? 1 : 0))
+    .slice(0, 3)
+    .map(f => f.filename)
+  return { files: files.length, added, removed, top }
+}
+
 // ---------------------------------------------------------------- collectAsks
 
 export interface CollectInput {
@@ -484,16 +518,21 @@ const validTime = (iso: string) => !!iso && !Number.isNaN(new Date(iso).getTime(
 const isBlocked = (i: { labels: string[] }) => i.labels.includes('status:blocked')
 const isDeliveryItem = (i: SyncItem) => !i.isPr && !i.readError && i.labels.includes('status:to-test')
 
+/** A PR review card also carries the packages it touches and the size of the change (#3785, #4373). */
+function addReviewPayload(ask: Ask, i: SyncItem) {
+  const packages = packagesPayload(i)
+  if (packages.length) ask.payload = { ...ask.payload, packages }
+  const changes = changesPayload(i)
+  if (changes) ask.payload = { ...ask.payload, changes }
+}
+
 /** True when the PR was claimed (a hold rule or link card) or unreadable. */
 function collectPr(i: SyncItem, sink: AskSink, closers: Set<number>): boolean {
   if (i.readError) sink.skip(i.number)
   else {
     const hit = holdRules(i) ?? (isBlocked(i) ? { ask: linkAsk(i) } : null)
     if (!hit) return false
-    if (hit.ask?.kind === 'review') {
-      const packages = packagesPayload(i)
-      if (packages.length) hit.ask.payload = { ...hit.ask.payload, packages }
-    }
+    if (hit.ask?.kind === 'review') addReviewPayload(hit.ask, i)
     sink.add(i.number, hit.ask)
   }
   if (i.closesIssue) closers.add(i.closesIssue)
@@ -714,6 +753,8 @@ function deliveryAsk(i: SyncItem): Ask {
   const app = appFromLabels(i.labels)
   const payload: Record<string, unknown> = { steps, to: extractTargetPath(steps) }
   if (app) payload.app = app
+  const ch = i.epicPr ? changesFromFiles(i.epicPr.files) : null
+  if (ch && i.epicPr) payload.changes = { ...ch, pr: i.epicPr.number, prCount: i.epicPr.count }
   return { ...base(i), kind: 'delivery', sourceCommentId: askedAt, ask: 'Try it, then reply ok or not ok.', payload, askedAt }
 }
 

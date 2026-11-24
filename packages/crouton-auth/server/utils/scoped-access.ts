@@ -202,7 +202,7 @@ export async function validateScopedTokenFromEvent(
     return validateScopedToken(headerToken)
   }
 
-  // Then cookie (set by redeem/mint for SSR validation)
+  // Then cookie (set by redeem for SSR validation)
   const cookieToken = getCookie(event, cookieName)
   if (cookieToken) {
     return validateScopedToken(cookieToken)

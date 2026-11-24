@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, nextTick, onBeforeUnmount, getCurrentInstance, resolveComponent, inject, type ComputedRef } from 'vue'
+import { ref, computed, watch, onMounted, nextTick, onBeforeUnmount, getCurrentInstance, resolveComponent, inject, useId, type ComputedRef } from 'vue'
 import type { Component } from 'vue'
 import type { TreeNode as TreeNodeType } from './Tree.vue'
 import type { CollabPresenceConfig } from '../types/table'
@@ -51,6 +51,8 @@ const emit = defineEmits<{
 
 // Refs
 const childrenRef = ref<HTMLElement | null>(null)
+// Links the expand toggle to the children container (aria-controls, #4463)
+const childrenId = useId()
 let sortableInstance: SortableType | null = null
 
 // Computed
@@ -337,6 +339,30 @@ const showChildren = computed(() => {
   return props.allowNesting && treeDrag.isDragging()
 })
 
+// Expand toggle a11y (#4463): stable name, aria-controls only while children exist
+const toggleAttrs = computed(() => ({
+  'aria-expanded': isExpanded.value,
+  'aria-label': t('tree.toggleChildren', { name: getItemLabel(props.item), count: childCount.value }),
+  'aria-controls': showChildren.value ? childrenId : undefined
+}))
+
+const toggleClass = computed(() => isCountFlashing.value
+  ? 'count-pulse bg-primary text-primary-foreground hover:bg-primary'
+  : 'text-muted hover:text-default')
+
+// Template conditions kept in script so the template stays readable
+const showCollabBadge = computed(() => !!collabEditingBadgeComponent.value && !!props.item.id)
+const collabRoomType = computed(() => collabConfig.value.roomType || props.collection)
+const collabPollInterval = computed(() => collabConfig.value.pollInterval || 5000)
+const showActions = computed(() => !props.hideActions && !isGhost.value)
+const showAdd = computed(() => props.showAddButton && !isGhost.value)
+const childItems = computed(() => props.item.children || [])
+
+const childrenClass = computed(() => [
+  isDropTarget.value ? 'border-l-[var(--ui-primary)]' : '',
+  !hasChildren.value ? 'min-h-2 !border-transparent' : ''
+])
+
 watch(showChildren, async (show) => {
   if (show) {
     await nextTick()
@@ -395,11 +421,8 @@ onBeforeUnmount(() => {
         variant="soft"
         square
         class="shrink-0 justify-center size-6 p-0 text-xs font-semibold tabular-nums rounded-full transition-colors duration-200"
-        :class="[
-          isCountFlashing
-            ? 'count-pulse bg-primary text-primary-foreground hover:bg-primary'
-            : 'text-muted hover:text-default'
-        ]"
+        :class="toggleClass"
+        v-bind="toggleAttrs"
         @click.stop="treeDrag.toggle(item.id)"
       >
         {{ childCount }}
@@ -441,12 +464,12 @@ onBeforeUnmount(() => {
 
       <!-- Collab presence badge -->
       <component
-        v-if="collabEditingBadgeComponent && item.id"
+        v-if="showCollabBadge"
         :is="collabEditingBadgeComponent"
         :room-id="getCollabRoomId()"
-        :room-type="collabConfig.roomType || collection"
+        :room-type="collabRoomType"
         :current-user-id="collabConfig.currentUserId"
-        :poll-interval="collabConfig.pollInterval || 5000"
+        :poll-interval="collabPollInterval"
         :show-self="collabConfig.showSelf"
         size="sm"
         variant="avatars"
@@ -454,7 +477,7 @@ onBeforeUnmount(() => {
       />
 
       <!-- Actions dropdown -->
-      <div v-if="!hideActions && !isGhost" class="opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100 transition-opacity">
+      <div v-if="showActions" class="opacity-0 group-hover:opacity-100 focus-within:opacity-100 has-data-[state=open]:opacity-100 pointer-coarse:opacity-100 transition-opacity">
         <UDropdownMenu
           :items="getItemActions(item)"
           :content="{ align: 'end' }"
@@ -471,7 +494,7 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- Inline add dropdown (replaces full-width bar) -->
-      <div v-if="showAddButton && !isGhost" class="opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100 transition-opacity">
+      <div v-if="showAdd" class="opacity-0 group-hover:opacity-100 focus-within:opacity-100 has-data-[state=open]:opacity-100 pointer-coarse:opacity-100 transition-opacity">
         <UDropdownMenu
           :items="getAddActions(item)"
           :content="{ align: 'end' }"
@@ -492,17 +515,15 @@ onBeforeUnmount(() => {
     <!-- Children container (SortableJS target) -->
     <div
       v-if="showChildren"
+      :id="childrenId"
       ref="childrenRef"
       class="tree-children mt-1 pl-3 gap-1 min-h-6 border-l-2 border-white/10 transition-colors duration-200 flex flex-col"
       style="margin-left: 1.7em"
-      :class="[
-        isDropTarget ? 'border-l-[var(--ui-primary)]' : '',
-        !hasChildren ? 'min-h-2 !border-transparent' : ''
-      ]"
+      :class="childrenClass"
       :data-parent-id="item.id"
     >
       <CroutonTreeNode
-        v-for="child in item.children || []"
+        v-for="child in childItems"
         :key="child.id"
         :item="child"
         :depth="depth + 1"

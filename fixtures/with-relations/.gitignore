@@ -1,0 +1,27 @@
+# Nuxt dev/build outputs
+.output
+.data
+.nuxt
+.nitro
+.cache
+dist
+
+# Node dependencies
+node_modules
+
+# Logs
+logs
+*.log
+
+# Misc
+.DS_Store
+.fleet
+.idea
+
+# Local env files
+# NB: .env IS committed for fixtures (throwaway, never-deployed test apps) so a
+# bare `pnpm dev` works without exporting BETTER_AUTH_SECRET. Do NOT do this in
+# real apps under apps/ — there the random scaffolded secret stays gitignored.
+.env.*
+!.env.example
+.wrangler/

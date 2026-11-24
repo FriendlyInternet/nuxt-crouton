@@ -16,10 +16,12 @@ Grade EVERY item PASS or FAIL with ONE line of concrete evidence (a file:line, a
    A new gate config file (added, or reported as a copy of another app's) is not an edit (#4143).
 4. Scope: matches the ticket and plan; nothing extra, no drive-by changes.
 5. Plan followed: where a plan was approved, the diff does what it said. No plan → PASS "no approved plan".
-6. Every ticket step done: list every numbered step and acceptance line of the ticket and mark each `done`, `not done` or `dropped: <reason stated in the PR>`. Any `not done` is FAIL; name the step in the evidence.
+6. Every ticket step done: list every numbered step and acceptance line of the ticket and mark each `done`, `not done` or `dropped: <reason stated in the PR>`. Any `not done` is FAIL; name the step in the evidence. A ticket step listed under the approved plan's `### Split` `Moves:` counts as `dropped: moved to #<new>` (the split note on the issue names #<new>).
 7. Docs: (a) in root `CLAUDE.md` "Maintaining AI Documentation", find the row for this change type; the file it names must be updated in the diff, or FAIL (no row fits → that half passes "no row applies"). (b) If the plan has a `### Docs` section, every row that names an edit must be made in the diff or marked `Debt: <reason>`; otherwise FAIL naming the doc. Spot-check two `checked` rows against the code and cite them. A plan without `### Docs` (older plans, or no plan) → judge only (a). (c) Read the newest top-level issue comment containing the line `<!-- doc-mentions -->` (`gh api` on the issue's comments). Each line marked `fixed` must be edited in the diff, or FAIL naming it. A `Debt:` line, `none` or `could not run` passes (list only, #4052); cite the list in the evidence line. No such comment → this part passes, and the evidence says "no Doc mentions list (worker posted none)". The evidence line cites the Docs rows it checked, not just "the CLAUDE.md row".
 
 The ticket's `## Decisions` section overrides the rest of the ticket; a plan or diff that follows a decision is in scope, one that contradicts it fails.
+
+Outside review: a second, outside code reviewer may have looked at this commit. {{outside_review}} For each finding, check the code: `fixed in <commit>` only when a commit on this PR really fixes it, else say why it is not a problem.
 
 Verdict: `no-go` if any item is FAIL; else `needs-owner` only if the change is correct but needs a product, data or cost decision from the owner; else `go`. Write the file in EXACTLY this shape (plain language, written for the owner, no insider jargon):
 
@@ -36,5 +38,9 @@ go | no-go | needs-owner
 - 7: PASS|FAIL — evidence
 ### Question
 (only for needs-owner: ONE yes/no question for the owner, with your recommendation)
+### Outside review
+(only when the outside reviewer has High findings: one line each)
+- Q1: fixed in <commit> — what fixed it
+- Q2: not a problem because <reason>
 
 Writing no verdict file is a FAILED run.

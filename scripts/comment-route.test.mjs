@@ -342,6 +342,32 @@ test('#4168 a 📐 owner-screen comment from the Harness app on a blocked pipeli
   assert.equal(kind({ comment: app(SAVE), issue: heldIssue }), 'resume')
 })
 
+// ── #4192: only the owner's first answer to the worker's question starts the worker ────────────────────────────────────────────────
+const WREC = { kind: 'worker-question', question: 'A or B?', accepts: ['other'], starts: { other: 'answer-worker' } }
+const building = { ...issue(['status:blocked', 'work-this', 'plan:approved']), planHeld: false }
+const chat = (ctx, text = 'x') => c(`> 🤖 **Claude Code** · interactive agent · chat 1be68d · posted from \`@pmcp\`'s account (not Maarten) · _${ctx}_\n\n${text}`, 'COLLABORATOR', 'User', 'pmcp')
+
+// covers: T4
+test('#4192 record: the owner\'s answer (typed or relayed) on an open worker question resumes with answer-worker', () => {
+  assert.deepEqual(pick(routeComment({ comment: c('A'), issue: building, record: WREC })), { kind: 'resume', starts: 'answer-worker' })
+  assert.deepEqual(pick(routeComment({ comment: chat('owner answer in chat 2026-11-17', '**A** — default it off.'), issue: building, record: WREC })), { kind: 'resume', starts: 'answer-worker' })
+})
+
+// covers: T4
+test("#4192 record: a chat's status note from the owner's account (🪪 claim, ✅ FYI) starts nothing", () => {
+  for (const note of [chat('claim', '🪪 claimed by chat 1be68d'), chat('FYI', '✅ done: merged the sibling')]) {
+    const d = routeComment({ comment: note, issue: building, record: WREC })
+    assert.deepEqual(pick(d), pick(routeComment({ comment: note, issue: building, record: null })), 'same as today')
+    assert.equal(d.starts, undefined)
+  }
+})
+
+// covers: T4
+test('#4192 record: a non-owner reply → none; a second owner ok (record closed) → today', () => {
+  assert.equal(kind({ comment: c('A', 'COLLABORATOR', 'User', 'someone-else'), issue: building, record: WREC }), 'none')
+  assert.deepEqual(pick(routeComment({ comment: c('ok'), issue: building, record: null })), { kind: 'resume', starts: undefined })
+})
+
 // covers: T2
 test("#4168 a collaborator's pipeline command on a blocked issue still dispatches", () => {
   assert.equal(kind({ comment: c('/build', 'COLLABORATOR', 'User', 'someone-else'), issue: issue(['status:blocked']) }), 'dispatch')

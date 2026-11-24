@@ -1,5 +1,5 @@
 // The pure epic→main-ready predicate (#1815). A false SKIP is safe; a false OPEN spams main — so
-// these pin the conservative rule: open only when children exist, ALL closed, branch ahead, no PR.
+// these pin the conservative rule: open only when children exist, ALL closed, branch differs from main, no PR.
 //   node --test scripts/epic-ready.test.mjs
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -17,33 +17,42 @@ test('parseEpicNumber pulls the number from an epic branch, else null', () => {
 const CLOSED = { state: 'closed' }
 const OPEN = { state: 'open' }
 
-test('opens when all children closed, branch ahead, no existing PR', () => {
-  const d = decideOpen({ subIssues: [CLOSED, CLOSED], existingEpicMainPrs: [], aheadCount: 3 })
+test('opens when all children closed, files differ from main, no existing PR', () => {
+  const d = decideOpen({ subIssues: [CLOSED, CLOSED], existingEpicMainPrs: [], changedFiles: 3 })
   assert.equal(d.open, true)
 })
 
 test('does NOT open while any child is still open', () => {
-  const d = decideOpen({ subIssues: [CLOSED, OPEN], existingEpicMainPrs: [], aheadCount: 3 })
+  const d = decideOpen({ subIssues: [CLOSED, OPEN], existingEpicMainPrs: [], changedFiles: 3 })
   assert.equal(d.open, false)
   assert.match(d.reason, /1 child/)
 })
 
 test('does NOT open when an epic→main PR already exists (idempotent, no dup)', () => {
-  const d = decideOpen({ subIssues: [CLOSED], existingEpicMainPrs: [{ number: 9 }], aheadCount: 3 })
+  const d = decideOpen({ subIssues: [CLOSED], existingEpicMainPrs: [{ number: 9 }], changedFiles: 3 })
   assert.equal(d.open, false)
   assert.match(d.reason, /already open/)
 })
 
 test('does NOT open an epic with no sub-issues', () => {
-  const d = decideOpen({ subIssues: [], existingEpicMainPrs: [], aheadCount: 3 })
+  const d = decideOpen({ subIssues: [], existingEpicMainPrs: [], changedFiles: 3 })
   assert.equal(d.open, false)
   assert.match(d.reason, /no sub-issues/)
 })
 
-test('does NOT open when the branch is not ahead of main (nothing to land)', () => {
-  const d = decideOpen({ subIssues: [CLOSED], existingEpicMainPrs: [], aheadCount: 0 })
+test('does NOT open when no file differs from main (nothing to land)', () => {
+  const d = decideOpen({ subIssues: [CLOSED], existingEpicMainPrs: [], changedFiles: 0 })
   assert.equal(d.open, false)
-  assert.match(d.reason, /ahead of main/)
+  assert.match(d.reason, /no file differs from main/)
+})
+
+// The branch being "ahead" in commits proves nothing: the pipeline's own "merge main into epic"
+// commits count as ahead. Seen as empty epic→main PRs #4063 (3 merge commits), #4034 (1), #3628 (2).
+test('commits ahead but no file differs (only merge-main commits) → does NOT open', () => {
+  for (const aheadCount of [3, 1, 2]) {
+    const d = decideOpen({ subIssues: [CLOSED, CLOSED], existingEpicMainPrs: [], aheadCount, changedFiles: 0 })
+    assert.equal(d.open, false)
+  }
 })
 
 test('defaults are safe — empty call never opens', () => {
@@ -145,6 +154,33 @@ import { buildEpicMainPr } from './epic-ready.mjs'
 const noCarry = { packagesPrs: [], approved: [], unapproved: [], line: null }
 const mk = o => buildEpicMainPr({ epicNumber: 7, epicBranch: 'epic/7-x', epicTitle: 'Epic: Thing', subIssues: [{ number: 1, title: 'a' }], carry: noCarry, declared: [], owner: 'pmcp', ...o })
 
+// ── #4316: the PR into main names what was built and what was dropped ──
+import { normalizeSteps, renderSteps, stepSummary, HARNESS_BOT, ROLLING_LABEL } from './lib/epic-steps.mjs'
+const kid = (number, reason, step = null) => ({ number, title: `t${number}`, state: 'closed', state_reason: reason, body: step === null ? '' : `<!-- pipeline: epic=7 step=${step} -->` })
+
+// covers: T2
+test('#4316 case 2: a rolling epic with a dropped step → body names the dropped ticket, never "all 3 children closed and merged"', () => {
+  const steps = normalizeSteps([0, 1, 2].map(i => ({ title: `S${i}`, goal: 'g', proves: 'p' })))
+  const subIssues = [kid(11, 'completed', 0), kid(12, 'not_planned', 1), kid(13, 'completed', 2)]
+  const comments = [{ body: renderSteps(steps), user: { login: HARNESS_BOT, type: 'Bot' } }]
+  const summary = stepSummary({ labels: [ROLLING_LABEL], comments, subIssues })
+  const { body } = mk({ subIssues, summary })
+  assert.ok(body.startsWith('Assembles epic #7 into `main` — built 2 of 3 steps, dropped 1 (not planned): #12.'), body)
+  assert.ok(!body.includes('all 3 children closed and merged'))
+  assert.ok(body.includes('- #12 t12 — not planned'))
+  assert.ok(body.includes('**Dropped steps (not planned, not built):** step 1 — #12'))
+})
+
+// covers: T5
+test('#4316 case 5: no step list, 1 of 3 children not planned → decideOpen still opens, body carries the counts line', () => {
+  const subIssues = [kid(11, 'completed'), kid(12, 'not_planned'), kid(13, 'completed')]
+  assert.equal(decideOpen({ subIssues, existingEpicMainPrs: [], changedFiles: 3, pendingSteps: 0 }).open, true)
+  const summary = stepSummary({ labels: [], comments: [], subIssues })
+  const { body } = mk({ subIssues, summary })
+  assert.ok(body.startsWith('Assembles epic #7 into `main` — 2 merged, 1 not planned: #12.'))
+  assert.ok(!body.includes('Dropped steps'))
+})
+
 test('buildEpicMainPr: no packages, no declared → plain body with footer', () => {
   const { title, body } = mk()
   assert.equal(title, 'Epic #7: Thing')
@@ -174,11 +210,11 @@ test('buildEpicMainPr: title strips Epic: and is cut to 250', () => {
 })
 // #3846 rule: a rolling epic is finished only when every step in its step list has a closed ticket.
 test('10. decideOpen: pending steps of a rolling epic keep the epic→main PR closed', () => {
-  const r = decideOpen({ subIssues: [CLOSED], aheadCount: 2, pendingSteps: 3 })
+  const r = decideOpen({ subIssues: [CLOSED], changedFiles: 2, pendingSteps: 3 })
   assert.equal(r.open, false)
   assert.match(r.reason, /step/)
-  assert.equal(decideOpen({ subIssues: [CLOSED], aheadCount: 2, pendingSteps: 0 }).open, true)
-  assert.equal(decideOpen({ subIssues: [CLOSED], aheadCount: 2 }).open, true)
+  assert.equal(decideOpen({ subIssues: [CLOSED], changedFiles: 2, pendingSteps: 0 }).open, true)
+  assert.equal(decideOpen({ subIssues: [CLOSED], changedFiles: 2 }).open, true)
 })
 
 test('buildEpicMainPr: solo-leaf child renders "undefined" title', () => {

@@ -13,10 +13,13 @@ name: weekly
 # cleanup-merged-branches for the design notes (#1064, #1570, #933, #644).
 
 on:
-  schedule:
-    - cron: '30 6 * * 1'   # Mondays 06:30 UTC
+  # timer: the status app's clock (pocs/status/server/utils/clock-jobs.ts) — Mondays 06:30 UTC
   workflow_dispatch:
     inputs:
+      clock:
+        description: "started by the status app's clock: behave as the timed run"
+        type: boolean
+        default: false
       apply:
         description: 'cleanup job: actually delete merged branches (false = dry-run report only)'
         type: boolean

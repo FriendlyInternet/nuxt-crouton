@@ -15,20 +15,22 @@ vi.mock('@fyit/crouton-auth/server/utils/team', () => ({ resolveTeamAndCheckMemb
 vi.mock('../collections/bookings/server/database/queries', () => ({ assertBookingsBookingReferences: hoisted.assertRef }))
 // The bookings write path is the capacity-guarded one (#3379); its own cases live in booking-capacity.test.ts
 vi.mock('../server/utils/booking-capacity', async (orig) => ({ ...(await orig() as object), patchBookingGuarded: hoisted.guarded }))
-vi.mock('../collections/locations/server/database/queries', () => ({ updateBookingsLocation: hoisted.update, getBookingsLocationsByIds: hoisted.existing, createBookingsLocation: hoisted.create }))
+vi.mock('../collections/locations/server/database/queries', () => ({ updateBookingsLocation: hoisted.update, getBookingsLocationsByIds: hoisted.existing, createBookingsLocation: hoisted.create, assertBookingsLocationReferences: hoisted.assertRef }))
+// The location's own product (#4044) runs on the real DB in location-own-product.test.ts; the queries here are stubs
+vi.mock('../server/utils/location-products', () => ({ ensureLocationProducts: async () => undefined }))
 vi.mock('../collections/settings/server/database/queries', () => ({ createBookingsSetting: hoisted.create, updateBookingsSetting: hoisted.update }))
 vi.mock('../collections/emailtemplates/server/database/queries', () => ({ assertBookingsEmailtemplateReferences: hoisted.assertRef, createBookingsEmailtemplate: hoisted.create, updateBookingsEmailtemplate: hoisted.update, getBookingsEmailtemplatesByIds: hoisted.existing }))
 vi.mock('../collections/emaillogs/server/database/queries', () => ({ assertBookingsEmaillogReferences: hoisted.assertRef, createBookingsEmaillog: hoisted.create, updateBookingsEmaillog: hoisted.update }))
 
 const DDL = `
-CREATE TABLE bookings_locations (id text primary key, teamId text not null, title text, street text, city text, content text, translations text, slots text, maxBookingsPerMonth integer, quantity integer, inventoryMode integer, offerFullDay integer);
-CREATE TABLE bookings_bookings (id text primary key, teamId text not null, owner text not null, "order" integer not null, location text not null, date integer not null, slot text not null, "group" text, quantity integer not null, status text not null, createdAt integer not null, updatedAt integer not null, createdBy text not null, updatedBy text not null);
+CREATE TABLE bookings_locations (id text primary key, teamId text not null, title text, street text, city text, content text, translations text, slots text, maxBookingsPerMonth integer, offerFullDay integer, products text);
+CREATE TABLE bookings_bookings (id text primary key, teamId text not null, owner text not null, "order" integer not null, location text not null, date integer not null, slot text not null, "group" text, quantity integer not null, status text not null, createdAt integer not null, updatedAt integer not null, createdBy text not null, updatedBy text not null, product text);
 `
 // Real in-memory DB: the bookings POST writes through the capacity guard, not create()
 const makeDb = (withLocation: boolean) => {
   const client = new Database(':memory:')
   client.exec(DDL)
-  if (withLocation) client.prepare(`insert into bookings_locations (id,teamId,title,slots,inventoryMode) values ('l1','t1','s',?,0)`).run(JSON.stringify([{ id: 'a' }]))
+  if (withLocation) client.prepare(`insert into bookings_locations (id,teamId,title,slots,products) values ('l1','t1','s',?,?)`).run(JSON.stringify([{ id: 'a' }]), JSON.stringify([{ product: 'p1', stock: 1 }]))
   return drizzle(client) as any
 }
 const bookingRows = (db: any) => db.$client.prepare('select * from bookings_bookings').all()
@@ -106,13 +108,13 @@ describe('package collection body validation (#3377)', () => {
   })
 
   it('locations POST accepts what the packaged form sends once English title is entered', async () => {
-    const { applyEnglishTitle } = await import('../collections/locations/app/utils/applyEnglishTitle')
+    const { applyDefaultLocaleLocationFields } = await import('../collections/locations/app/utils/applyDefaultLocaleLocationFields')
     // defaultValues of useBookingsLocations (title starts as '')
-    const state: any = { title: '', color: '', street: '', zip: '', city: '', location: '', content: '', allowedMemberIds: [], slots: [], openDays: [], slotSchedule: {}, blockedDates: [], offerFullDay: false, inventoryMode: false, quantity: 0, maxBookingsPerMonth: 0, translations: {} }
+    const state: any = { title: '', color: '', street: '', zip: '', city: '', location: '', content: '', allowedMemberIds: [], slots: [], openDays: [], slotSchedule: {}, blockedDates: [], offerFullDay: false, maxBookingsPerMonth: 0, translations: {} }
     body = { ...state }
     await expect(run(`../${L}/index.post`)).rejects.toThrow()
     state.translations = { en: { title: 'Studio' } }
-    applyEnglishTitle(state, { field: 'title', value: 'Studio' })
+    applyDefaultLocaleLocationFields(state, { field: 'title', value: 'Studio' })
     body = { ...state }
     await run(`../${L}/index.post`)
     expect(hoisted.create.mock.calls[0]![0]).toMatchObject({ title: 'Studio' })
@@ -137,5 +139,16 @@ describe('package collection body validation (#3377)', () => {
     body = { locationId: null }
     await run(`../${E}/[emailtemplateId].patch`)
     expect(hoisted.update.mock.calls.at(-1)![3].locationId).toBeNull()
+  })
+
+  // covers: T4
+  it('settings PATCH keeps sendEmails: false; POST rejects a non-boolean sendEmails (#3929)', async () => {
+    params = { settingId: 's1' }
+    body = { sendEmails: false }
+    await run(`../${S}/[settingId].patch`)
+    expect(hoisted.update.mock.calls.at(-1)![3]).toMatchObject({ sendEmails: false })
+    body = { sendEmails: 'no' }
+    await expect(run(`../${S}/index.post`)).rejects.toThrow()
+    expect(hoisted.create).not.toHaveBeenCalled()
   })
 })

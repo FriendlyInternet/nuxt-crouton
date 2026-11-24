@@ -35,6 +35,10 @@
     "required": true,
     "reads": [
       {
+        "path": "/api/teams/{teamId}/email-logs",
+        "expectStatus": [200]
+      },
+      {
         "path": "/api/teams/{teamId}/crouton-layouts/default",
         "expectStatus": [200, 204]
       },
@@ -55,6 +59,14 @@
       },
       {
         "path": "/api/teams/{teamId}/sales-events"
+      },
+      {
+        "path": "/api/crouton-sales/events/seed:event:test1:vlaamsekermis/order-data",
+        "expectStatus": [401]
+      },
+      {
+        "path": "/api/crouton-sales/events/seed:event:test1:vlaamsekermis/orders/smoke-none/print-status",
+        "expectStatus": [401]
       },
       {
         "path": "/api/crouton-sales/teams/{teamId}/devices"

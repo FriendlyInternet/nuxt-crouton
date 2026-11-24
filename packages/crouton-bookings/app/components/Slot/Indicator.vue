@@ -116,6 +116,19 @@ function onSlotHover(slotId: string) {
 function onSlotLeave() {
   emit('hoverBooking', null)
 }
+
+// #4302 — a phone tap fires a fake mouseenter and no mouseleave, so the hovered
+// booking stuck and the list showed only that one. Hover reacts to mouse/pen only.
+function onSlotPointerEnter(event: PointerEvent, slotId: string) {
+  if (event.pointerType === 'touch') return
+  if (!isBooked(slotId) && !isPartial(slotId)) return
+  onSlotHover(slotId)
+}
+
+function onSlotPointerLeave(event: PointerEvent) {
+  if (event.pointerType === 'touch') return
+  onSlotLeave()
+}
 </script>
 
 <template>
@@ -139,8 +152,8 @@ function onSlotLeave() {
         opacity: getSlotOpacity(slot.id),
       }"
       :title="slot.label"
-      @mouseenter="(isBooked(slot.id) || isPartial(slot.id)) && onSlotHover(slot.id)"
-      @mouseleave="onSlotLeave"
+      @pointerenter="(e: PointerEvent) => onSlotPointerEnter(e, slot.id)"
+      @pointerleave="onSlotPointerLeave"
     />
   </div>
 </template>

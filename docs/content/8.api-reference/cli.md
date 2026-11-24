@@ -59,6 +59,7 @@ Create a new crouton app end-to-end (scaffold → generate → doctor → summar
 | `--noCf` | boolean |  |  | Deprecated alias for --no-cf |
 | `--domain` | string |  |  | Cloudflare zone for custom-domain routes (e.g. pmcp.dev → app: <app>.pmcp.dev production + <app>-staging.pmcp.dev staging; --poc: staging only at <app>.pmcp.dev) |
 | `--poc` | boolean |  |  | Scaffold into pocs/<name> (the incubator) instead of apps/<name> |
+| `--site` | boolean |  |  | Small public site: one team (test1), one locale (en) with hideLocaleInUrl, an appDomains list to fill in; adds @fyit/crouton-pages |
 | `--out` | string |  |  | Explicit target directory (overrides --poc; default apps/<name> in the monorepo, ./<name> elsewhere) |
 | `--dryRun` | boolean |  |  | Preview what will be generated without writing files |
 

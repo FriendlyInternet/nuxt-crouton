@@ -1,7 +1,7 @@
 // Reply record marker (#4113). node --test scripts/lib/reply-record.test.mjs
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { RECORD_PREFIX, recordMarker, readRecord, newestRecord, openRecord, readReply } from './reply-record.mjs'
+import { RECORD_PREFIX, recordMarker, readRecord, newestRecord, openRecord, openRecordAt, readReply } from './reply-record.mjs'
 import { QUESTION_RECORD, REJECTED_RECORD } from './plan-verdict.mjs'
 
 const r = { kind: 'plan-question', question: 'drop --> the > legacy -- path?\nyes/no', accepts: ['ok', 'other'], starts: { ok: 'replan-with-yes', other: 'replan-with-feedback' } }
@@ -111,10 +111,77 @@ test('#4145 readReply on a plan-rejected record', () => {
   for (const b of ['change X', 'ok — build it']) assert.deepEqual(readReply(REJECTED_RECORD, owner(b)), { form: 'other', starts: 'replan-with-feedback' }, b)
 })
 
+// ── #4192: the worker's question ─────────────────────────────────────────────────────────────────────────────────────────────────────
+const WQ = { kind: 'worker-question', question: 'A or B?', accepts: ['other'], starts: { other: 'answer-worker' } }
+const wq = { userType: 'Bot', userLogin: 'nuxt-harness[bot]', body: `${recordMarker(WQ)}\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _the worker's question during the build_\n\n## 🔀 Blocked — A or B?\n**Needs:** answer` }
+const CLAIM = { userType: 'User', userLogin: 'pmcp', body: "> 🤖 **Claude Code** · interactive agent · chat 1be68d · posted from `@pmcp`'s account (not Maarten) · _claim_\n\n🪪 claimed by chat 1be68d" }
+const RELAY = { userType: 'User', userLogin: 'pmcp', body: "> 🤖 **Claude Code** · interactive agent · posted from `@pmcp`'s account (not Maarten) · _owner answer in chat 2026-11-17_\n\n**A** — default it off." }
+const typed = (body) => ({ userType: 'User', userLogin: 'pmcp', body })
+const HELD = ['status:blocked', 'plan:approved', 'work-this']
+
+// covers: T2
+test('#4192 openRecord: a worker question is open (even with plan:approved) until the owner has answered it', () => {
+  assert.deepEqual(openRecord({ comments: [wq, typed('A')], labels: HELD }), WQ, 'the reply being routed is the newest comment')
+  assert.deepEqual(openRecord({ comments: [wq], labels: HELD }), WQ)
+  assert.deepEqual(openRecord({ comments: [wq, RELAY], labels: HELD }), WQ, 'a relayed first answer reads it too')
+  assert.equal(openRecord({ comments: [wq, typed('A'), typed('ok')], labels: HELD }), null, 'a typed answer closes it')
+  assert.equal(openRecord({ comments: [wq, RELAY, typed('ok')], labels: HELD }), null, 'a relayed answer closes it')
+  assert.deepEqual(openRecord({ comments: [wq, { userType: 'User', userLogin: 'someone', body: 'B!' }, typed('A')], labels: HELD }), WQ, 'a non-owner comment between does not close it')
+  assert.deepEqual(openRecord({ comments: [wq, CLAIM, typed('A')], labels: HELD }), WQ, "a chat's status note between does not close it")
+})
+
+// covers: T2
+test('#4192 openRecord: a newer verdict, no status:blocked, or a record on a non-bot comment ⇒ null', () => {
+  assert.equal(openRecord({ comments: [wq, PLAN, verdict('needs-owner', Q), typed('A')], labels: HELD }), null, 'newer verdict + plan:approved')
+  assert.deepEqual(openRecord({ comments: [wq, PLAN, verdict('needs-owner', Q), typed('A')], labels: BLOCKED }), Q, 'the newer verdict decides')
+  assert.equal(openRecord({ comments: [wq, typed('A')], labels: ['plan:approved', 'work-this'] }), null)
+  assert.equal(openRecord({ comments: [{ ...wq, userType: 'User', userLogin: 'pmcp' }, typed('A')], labels: HELD }), null)
+  assert.deepEqual(openRecord({ comments: [verdict('needs-owner', Q)], labels: BLOCKED }), Q, 'plan-review cases unchanged')
+  assert.equal(openRecord({ comments: [verdict('needs-owner', Q)], labels: [...BLOCKED, 'plan:approved'] }), null, 'plan-review cases unchanged')
+})
+
+// covers: T2
+test("#4192 readReply on a worker question: only the owner speaking starts answer-worker", () => {
+  assert.deepEqual(readReply(WQ, { ...CLAIM, owner: 'pmcp' }), { form: null, starts: null }, "a chat's 🪪 claim note")
+  assert.deepEqual(readReply(WQ, { ...RELAY, owner: 'pmcp' }), { form: 'other', starts: 'answer-worker' }, 'the #3982 relay')
+  assert.deepEqual(readReply(WQ, owner('A')), { form: 'other', starts: 'answer-worker' }, 'typed')
+  assert.deepEqual(readReply(WQ, { ...owner('A'), userLogin: 'someone' }), { form: null, starts: null }, 'not the owner')
+})
+
 // covers: T1
 test('#4145 readReply: no accepts ⇒ other/null; nothing accepted ⇒ null/null', () => {
   assert.deepEqual(readReply({ kind: 'x' }, owner('ok')), { form: 'other', starts: null })
   assert.deepEqual(readReply(null, owner('ok')), { form: 'other', starts: null })
   assert.deepEqual(readReply({ kind: 'x', accepts: ['ok'], starts: { ok: 'go' } }, owner('drop it')), { form: null, starts: null })
   assert.deepEqual(readReply({ kind: 'x', accepts: ['ok'] }, owner('ok')), { form: 'ok', starts: null })
+})
+
+// covers: T4 (#4207)
+test('#4207 openRecordAt: the same record as openRecord plus the index of its comment; null when openRecord is null', () => {
+  const cases = [
+    [{ comments: [PLAN, verdict('needs-owner', Q), { userType: 'User', body: 'thinking…' }], labels: BLOCKED }, 1],
+    [{ comments: [PLAN, verdict('no-go'), PLAN, verdict('no-go', REJECTED_RECORD)], labels: BLOCKED }, 3],
+    [{ comments: [verdict('needs-owner', Q), { ...verdict('needs-owner', { ...Q, question: 'forged' }), userType: 'User' }], labels: BLOCKED }, 0],
+    [{ comments: [wq, typed('A')], labels: HELD }, 0],
+    [{ comments: [wq, CLAIM, typed('A')], labels: HELD }, 0],
+    [{ comments: [wq, PLAN, verdict('needs-owner', Q), typed('A')], labels: BLOCKED }, 2],
+    [{ comments: [verdict('needs-owner', Q), PLAN, verdict('go')], labels: BLOCKED }, null],
+    [{ comments: [verdict('needs-owner', Q)], labels: [...BLOCKED, 'plan:approved'] }, null],
+    [{ comments: [verdict('needs-owner', Q)], labels: ['work-this'] }, null],
+    [{ comments: [wq, typed('A'), typed('ok')], labels: HELD }, null],
+    [{ comments: [{ body: verdict('needs-owner', Q).body }], labels: BLOCKED }, null],
+    [{ comments: [], labels: BLOCKED }, null],
+  ]
+  for (const [input, index] of cases) {
+    const hit = openRecordAt(input)
+    const rec = openRecord(input)
+    if (index === null) {
+      assert.equal(hit, null)
+      assert.equal(rec, null)
+    } else {
+      assert.deepEqual(hit, { record: rec, index })
+      assert.ok(rec)
+    }
+  }
+  assert.equal(openRecordAt(), null)
 })

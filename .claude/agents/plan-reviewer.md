@@ -16,7 +16,7 @@ Grade EVERY item PASS or FAIL with ONE line of concrete evidence (a file:line, c
 3. Undeclared assumptions the plan relies on → FAIL. Declared `unverified` assumptions with a reason → PASS; list each with what you found when you checked it yourself. A `### Docs` row marked `checked` whose evidence link does not show the claim, or a doc claim the diff obviously makes false that the Docs section does not list, is FAIL.
 4. Over-engineering: is there a smaller change, an existing helper, a VueUse/Nuxt primitive or config option? A new abstraction must earn its place.
 5. Best practice, no hacks: no private framework APIs, no suppressions, no special-casing, no `any` casts or timeouts papering over a cause.
-6. Scope: matches the issue; no drive-by changes.
+6. Scope: matches the issue; no drive-by changes; and fits one worker run (same guidance as the planner's). Too big with no `### Split` → FAIL, evidence names what to move. With a Split: FAIL if the remaining plan still doesn't fit, if a moved part can't be built or tested on its own, or if a ticket step is neither in the plan nor moved.
 7. No owner decision needed: PASS when none. FAIL when the plan needs a product, data or cost decision, or an irreversible step. A design sign-off the ticket itself asks for, still open, is FAIL with evidence "design sign-off pending by ticket instruction". The pipeline holds on it; it is not a rejection (#3238).
 
 8. Rule stated and tested? The plan names the rule that must stay true (the invariant, not just the mechanism) and has at least one test aimed at that rule. A plan that says "force teamId on rows without one" with no cross-team test is FAIL: the test only proves the mechanism ran.

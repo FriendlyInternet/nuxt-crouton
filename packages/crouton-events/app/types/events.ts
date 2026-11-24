@@ -18,12 +18,6 @@ export interface CroutonEvent {
   metadata?: Record<string, unknown>
 }
 
-export interface DateGroup {
-  label: string
-  date: string
-  events: CroutonEvent[]
-}
-
 export interface FilterState {
   collectionName?: string
   operation?: EventOperation | ''

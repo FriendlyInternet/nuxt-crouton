@@ -85,11 +85,6 @@ const locationColor = computed(() => {
   return props.booking.locationData?.color || '#3b82f6'
 })
 
-// Is this an inventory mode booking?
-const isInventoryMode = computed(() => {
-  return props.booking.locationData?.inventoryMode === true
-})
-
 // Booker info - handle Drizzle leftJoin which returns { id: null, name: null } instead of null
 const bookerUser = computed(() => {
   const owner = props.booking.ownerUser
@@ -294,6 +289,7 @@ function confirmSend() {
           color="neutral"
           size="xs"
           icon="i-lucide-pencil"
+          :aria-label="t('bookings.card.editBooking')"
           @click="emit('edit', booking)"
         />
       </div>
@@ -306,6 +302,7 @@ function confirmSend() {
         <button
           type="button"
           class="shrink-0 cursor-pointer hover:scale-105 transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 rounded-lg self-start"
+          :aria-label="t('bookings.card.showDayInCalendar', { params: { date: formatShortDate(booking.date) } })"
           @click="emit('date-click', new Date(booking.date))"
         >
           <CroutonBookingsDateBadge
@@ -327,28 +324,18 @@ function confirmSend() {
 
           <!-- Slot indicator + time + group -->
           <div class="flex items-center gap-2 flex-wrap">
-            <template v-if="isInventoryMode">
-              <span
-                class="size-2 rounded-full shrink-0"
-                :style="{ backgroundColor: isCancelled ? '#ef4444' : locationColor }"
-              />
-              <span class="text-xs tabular-nums" :class="isCancelled ? 'text-red-400' : 'text-muted'">
-                {{ booking.quantity ?? 1 }} / {{ booking.locationData?.quantity || '?' }}
-              </span>
-            </template>
-            <template v-else>
-              <!-- Show slot indicator for booked slots only -->
-              <CroutonBookingsSlotIndicator
-                v-if="bookedSlots.length > 0"
-                :slots="bookedSlots"
-                :booked-slot-ids="bookedSlotIds"
-                :cancelled-slot-ids="isCancelled ? bookedSlotIds : []"
-                :color="locationColor"
-                size="sm"
-                variant="dots"
-              />
-              <span class="text-xs text-muted">{{ slotLabel }}</span>
-            </template>
+            <!-- Show slot indicator for booked slots only -->
+            <CroutonBookingsSlotIndicator
+              v-if="bookedSlots.length > 0"
+              :slots="bookedSlots"
+              :booked-slot-ids="bookedSlotIds"
+              :cancelled-slot-ids="isCancelled ? bookedSlotIds : []"
+              :color="locationColor"
+              size="sm"
+              variant="dots"
+            />
+            <span class="text-xs text-muted">{{ slotLabel }}</span>
+            <span v-if="(booking.quantity ?? 1) > 1" class="text-xs text-muted tabular-nums">×{{ booking.quantity }}</span>
 
             <!-- Group badge inline -->
             <UBadge
@@ -365,7 +352,13 @@ function confirmSend() {
           <div class="flex items-center gap-1 text-xs text-muted">
             <template v-if="bookerUser">
               <UPopover>
-                <span class="cursor-pointer hover:text-default transition-colors">{{ bookerUser.name }}</span>
+                <UButton
+                  variant="link"
+                  color="neutral"
+                  size="xs"
+                  :label="bookerUser.name"
+                  class="p-0 font-normal text-inherit hover:text-default"
+                />
                 <template #content>
                   <div class="p-3 space-y-1 text-sm">
                     <div class="font-medium">{{ bookerUser.name }}</div>
@@ -380,6 +373,7 @@ function confirmSend() {
                 variant="link"
                 size="xs"
                 class="p-0 gap-1 whitespace-nowrap font-normal text-inherit hover:text-default"
+                :aria-expanded="isTimelineOpen"
                 @click.stop="isTimelineOpen = !isTimelineOpen"
               >
                 <span>{{ t('bookings.card.on', { params: { date: createdDateText } }) }}</span>
@@ -399,6 +393,7 @@ function confirmSend() {
             size="xs"
             square
             class="p-1 text-muted hover:text-default"
+            :aria-label="t('bookings.card.editBooking')"
             @click.stop="emit('edit', booking)"
           >
             <UIcon name="i-lucide-pencil" class="size-3.5" />
@@ -411,6 +406,8 @@ function confirmSend() {
             square
             class="p-1"
             :class="isEmailPanelOpen ? 'text-default' : 'text-muted hover:text-default'"
+            :aria-label="t('bookings.card.emailPanel')"
+            :aria-expanded="isEmailPanelOpen"
             @click.stop="isEmailPanelOpen = !isEmailPanelOpen"
           >
             <UIcon name="i-lucide-mail" class="size-3.5" />
@@ -471,6 +468,7 @@ function confirmSend() {
       v-if="showAdminFeatures && isEmailEnabled && timelineItems.length > 0"
       class="md:hidden overflow-hidden transition-all duration-200 ease-out"
       :class="isEmailPanelOpen ? 'max-h-28 opacity-100' : 'max-h-0 opacity-0'"
+      :inert="!isEmailPanelOpen"
     >
       <div class="flex items-center gap-4 px-2 pb-2 pt-1 border-t border-muted/20">
         <!-- UButton (not raw) so themes reach it (#1410); flex-col stack kept -->
@@ -501,6 +499,7 @@ function confirmSend() {
     <div
       class="overflow-hidden transition-all duration-300 ease-out"
       :class="isTimelineOpen ? 'max-h-80 opacity-100' : 'max-h-0 opacity-0'"
+      :inert="!isTimelineOpen"
     >
       <div class="border-t border-default/40 px-3 py-2">
         <CroutonBookingsActivityTimeline :booking="booking" />

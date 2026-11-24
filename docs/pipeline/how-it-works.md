@@ -9,8 +9,13 @@ exact word they reply.
 ## The story
 
 1. **Start.** The owner adds the `work-this` label — the only label a human applies.
-   `label-router.yml` (its `work-this` branch) sends the issue down one of four roads, checked in
+   `label-router.yml` (its `work-this` branch) sends the issue down one of five roads, checked in
    this order:
+   - 0. A ticket a chat wrote (not made by the pipeline's split) under an epic, with no ticket-review
+     go for itself → `scripts/ticket-review-gate.mjs` takes `work-this` off and starts
+     `ticket-review.yml -f subject=<n>` for that ticket alone (#4456); on go it puts `work-this`
+     back, or, if a `Blocked-by:` ticket is still open, notes "waits for #N" and the blocker's close
+     starts it.
    - a. The issue already has `plan:approved` → straight to the build (step 4).
    - b. The issue is an epic (`scripts/epic-route.mjs` says `splitter`) **or** its text asks for a
      design sign-off ("Hold for design sign-off", `scripts/lib/signoff-route.mjs`, #3238) → the
@@ -33,6 +38,9 @@ exact word they reply.
      the field that is wrong. To move an existing epic to
      per-ticket verdicts, add the `tickets:rolling` label; write any missing ticket by hand. A rolling
      epic counts as finished (epic→main PR, postmortem) only when every step has a closed ticket.
+     A step whose tickets were all closed as not planned counts as dropped: it does not hold the
+     epic, but it is never counted as built, and the epic's status comment, its PR into main and its
+     postmortem name it (built N, dropped M).
      For a design
      sign-off it first posts one mockup hold: **owner decides here — `ok` on the design, or what to
      change**. Nothing is planned or built before that.
@@ -42,14 +50,20 @@ exact word they reply.
      lists live in `.claude/plan-routing.json`.
    - d. Anything else → `work-issue-pidev.yml` builds directly, with no plan step (step 4).
 2. **Plan.** The planner posts one `<!-- pipeline-plan:v1 -->` comment on the issue, shape-checked
-   by `scripts/lib/plan-shape.mjs`.
+   by `scripts/lib/plan-shape.mjs`. A plan too big for one run may add an optional `### Split`
+   that moves part of the ticket to a follow-up.
 3. **Plan review.** The `plan-review` job in `on-comment.yml` (`scripts/lib/plan-verdict.mjs`)
    judges the plan. `go` → the bot adds `plan:approved` and the build starts. `needs-owner` →
    `status:blocked` plus one yes/no question: **owner answers here — any reply re-plans; the owner's bare `ok` is recorded in the ticket's `## Decisions` as "yes" and re-plans from it**. `no-go` →
    a re-plan, or a hold.
 4. **Build.** `label-router.yml` sees `plan:approved` → `scripts/handoff-exec.mjs` →
    `work-issue-pidev.yml` builds and opens a PR (`Closes #N`) on the epic branch
-   (`scripts/epic-base.mjs`).
+   (`scripts/epic-base.mjs`). If the worker has to ask something, it writes the question to a
+   file; the step after the build posts it with `status:blocked` and, when the PR is open, a reply
+   record, so the owner's first answer (typed or relayed) re-runs the worker on that PR
+   (`scripts/lib/worker-question.mjs`, #4192). If the approved plan has a `### Split`, `handoff-exec.mjs` first
+   files the moved part as a new ticket (`Blocked-by:` this one, same epic) and notes it on the
+   issue; it starts once this one closes.
 5. **Checks and build review.** `ci.yml` (the `CI Gate` check) plus `build-review.yml`
    (`scripts/build-review-pick.mjs`). The build review has three answers: `go` → the reviewer adds
    `build:approved`; `no-go` → a `**Worker:**` revision, and after two sent-back rounds it holds with
@@ -58,6 +72,12 @@ exact word they reply.
    The reviewer is given the PR's `plan-checks` table (`scripts/lib/build-review-prompt.mjs`) as the
    record of which plan tests ran and passed on that commit, and judges only whether each test aims
    at the ticket's rule.
+   It is also given the outside reviewer's High findings (`scripts/lib/outside-review.mjs`, an outside
+   review is no longer asked for (owner decision 2026-11-20, #4360); if one is ever posted it is still
+   read, trusted only from the `qodo-code-review[bot]` app); it must
+   answer each one in its verdict ("fixed in <commit>" or "not a problem because …"), and a go with an
+   unanswered High finding is turned into no-go by `build-verdict.mjs`. With no outside review (paused
+   or never asked) the comment says so in one line.
    The owner can also ask for changes at any time with a top-level `**Worker:** <what to change>`
    comment.
 6. **Merge into the epic branch.** `automerge-epic-subpr.yml` decides it with
@@ -81,7 +101,7 @@ exact word they reply.
    sets `status:to-test`. Above the checks left for the owner, the card lists what the pipeline
    already checked: each finished child's merged PR and the first line of its last ✅ closing note.
 
-A blocked run is resumed by any reply on the issue (the `resume` job in `on-comment.yml`).
+A blocked run is resumed by any reply on the issue (the `resume` job in `on-comment.yml`). Each reply to an open question also gets one plain line at the end of that question saying how it was read (for example "read as **yes** → re-planning with your yes"); a newer reply replaces it (the `receipt` job, `scripts/lib/reply-receipt.mjs`, #4207).
 
 **Stale epic branch.** The owner comments `/fresh-branch` on the epic; the `fresh-branch` job in `on-comment.yml` (`scripts/fresh-epic-branch.mjs`) renames the branch to `archive/<name>` and lists what was left on it, and the next worker run recreates it from main (`scripts/sync-epic-branch.sh`). It refuses a branch whose name does not start with `epic/<N>-` (a child epic is pointed to its parent) and refuses when it cannot list what the branch holds.
 
@@ -98,7 +118,7 @@ The table below is generated from the workflow files and the grouping in
 
 | File | Name | Starts on |
 | --- | --- | --- |
-| [label-ready-epics.yml](../../.github/workflows/label-ready-epics.yml) | label-ready-epics | `schedule`, `workflow_dispatch` |
+| [label-ready-epics.yml](../../.github/workflows/label-ready-epics.yml) | label-ready-epics | `workflow_dispatch` |
 | [label-router.yml](../../.github/workflows/label-router.yml) | Label router (work-this · delegate · plan:approved) | `issues` |
 | [labels.yml](../../.github/workflows/labels.yml) | Sync issue labels | `push`, `workflow_dispatch` |
 | [on-issue-close.yml](../../.github/workflows/on-issue-close.yml) | On issue close | `issues`, `workflow_dispatch` |
@@ -121,13 +141,12 @@ The table below is generated from the workflow files and the grouping in
 | --- | --- | --- |
 | [build-review.yml](../../.github/workflows/build-review.yml) | Build review (independent reviewer — pi.dev) | `workflow_run`, `workflow_dispatch` |
 | [ci.yml](../../.github/workflows/ci.yml) | CI | `push`, `pull_request` |
-| [e2e.yml](../../.github/workflows/e2e.yml) | E2E | `push`, `pull_request`, `schedule`, `workflow_dispatch` |
+| [e2e.yml](../../.github/workflows/e2e.yml) | E2E | `push`, `pull_request`, `workflow_dispatch` |
 | [guard-package-approval.yml](../../.github/workflows/guard-package-approval.yml) | Guard package-edit approval | `pull_request` |
 | [migration-guard.yml](../../.github/workflows/migration-guard.yml) | Migration guard | `pull_request`, `workflow_dispatch` |
 | [packages-guard.yml](../../.github/workflows/packages-guard.yml) | Packages guard | `pull_request` |
 | [post-test-card.yml](../../.github/workflows/post-test-card.yml) | post-test-card | `workflow_run`, `workflow_dispatch` |
 | [preview-screenshot.yml](../../.github/workflows/preview-screenshot.yml) | Preview screenshot | `workflow_run`, `workflow_dispatch` |
-| [qodo-second-opinion.yml](../../.github/workflows/qodo-second-opinion.yml) | Qodo second opinion (advisory) | `workflow_run`, `workflow_dispatch` |
 | [review.yml](../../.github/workflows/review.yml) | Review | `pull_request` |
 | [secret-scan.yml](../../.github/workflows/secret-scan.yml) | Secret scan | `pull_request`, `push` |
 | [skill-freshness-pr.yml](../../.github/workflows/skill-freshness-pr.yml) | Skill freshness (PR advisory) | `pull_request` |
@@ -175,16 +194,16 @@ The table below is generated from the workflow files and the grouping in
 | File | Name | Starts on |
 | --- | --- | --- |
 | [canary.yml](../../.github/workflows/canary.yml) | Canary rig (worker pipeline) | `workflow_dispatch` |
-| [epic-digest.yml](../../.github/workflows/epic-digest.yml) | epic-digest | `schedule`, `workflow_dispatch` |
-| [housekeeping.yml](../../.github/workflows/housekeeping.yml) | housekeeping | `schedule`, `workflow_dispatch` |
+| [epic-digest.yml](../../.github/workflows/epic-digest.yml) | epic-digest | `workflow_dispatch` |
+| [housekeeping.yml](../../.github/workflows/housekeeping.yml) | housekeeping | `workflow_dispatch` |
 | [loop-station-inventory.yml](../../.github/workflows/loop-station-inventory.yml) | loop-station-inventory | `push`, `workflow_dispatch` |
 | [loop-station-refresh.yml](../../.github/workflows/loop-station-refresh.yml) | Loop-station refresh | `push`, `workflow_dispatch` |
-| [pi-key-canary.yml](../../.github/workflows/pi-key-canary.yml) | Provider key canary | `schedule`, `workflow_dispatch` |
+| [pi-key-canary.yml](../../.github/workflows/pi-key-canary.yml) | Provider key canary | `workflow_dispatch` |
 | [pipeline-metrics.yml](../../.github/workflows/pipeline-metrics.yml) | Pipeline metrics (collect + roll up run history) | `workflow_dispatch` |
-| [pipeline-review.yml](../../.github/workflows/pipeline-review.yml) | Pipeline review (every 10 closed epics) | `schedule`, `workflow_dispatch` |
-| [quality-digest.yml](../../.github/workflows/quality-digest.yml) | quality-digest | `schedule`, `workflow_dispatch` |
-| [skills-digest.yml](../../.github/workflows/skills-digest.yml) | skills-digest | `schedule`, `workflow_dispatch` |
-| [sync-changelogs.yml](../../.github/workflows/sync-changelogs.yml) | Sync Changelogs | `schedule`, `workflow_dispatch` |
-| [weekly.yml](../../.github/workflows/weekly.yml) | weekly | `schedule`, `workflow_dispatch` |
+| [pipeline-review.yml](../../.github/workflows/pipeline-review.yml) | Pipeline review (every 10 closed epics) | `workflow_dispatch` |
+| [quality-digest.yml](../../.github/workflows/quality-digest.yml) | quality-digest | `workflow_dispatch` |
+| [skills-digest.yml](../../.github/workflows/skills-digest.yml) | skills-digest | `workflow_dispatch` |
+| [sync-changelogs.yml](../../.github/workflows/sync-changelogs.yml) | Sync Changelogs | `workflow_dispatch` |
+| [weekly.yml](../../.github/workflows/weekly.yml) | weekly | `workflow_dispatch` |
 
 <!-- pipeline-map:end -->

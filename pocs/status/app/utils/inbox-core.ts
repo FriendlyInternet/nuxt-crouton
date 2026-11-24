@@ -131,6 +131,25 @@ const fetchListInto = async <T extends InboxCard>({ list, update }: InboxSources
   }
 }
 
+/** How often an open, visible inbox re-reads its stored cards (#4309). */
+export const REREAD_MS = 30_000
+
+/** Re-read the stored cards now? Only while the tab is visible and no load or sync is running. */
+export function rereadDue(s: { visible: boolean, busy: boolean }): boolean {
+  return s.visible && !s.busy
+}
+
+/**
+ * Re-read the stored cards only (never syncs from GitHub): the clock syncs after a webhook marked a
+ * change, and this picks the new cards up without a reload. Sets `loading`, so overlapping re-reads
+ * are guarded by `rereadDue`'s `busy`.
+ */
+export async function relistInbox<T extends InboxCard>(args: InboxSources<T>): Promise<void> {
+  args.update({ loading: true })
+  await fetchListInto(args)
+  args.update({ loading: false })
+}
+
 export async function loadInbox<T extends InboxCard>(args: InboxSources<T>): Promise<void> {
   args.update({ loading: true, refreshing: true, loadError: null, syncError: null })
   await fetchListInto(args)
@@ -139,18 +158,23 @@ export async function loadInbox<T extends InboxCard>(args: InboxSources<T>): Pro
 }
 
 /**
- * The background half of `loadInbox`: refresh from GitHub, then list again. The page calls this
+ * The background half of `loadInbox`: refresh from GitHub, then list again. A sync that answers
+ * `{ error }` sets `syncError` to "Refreshed with problems: …" and still lists again. The page calls this
  * after it already rendered the stored cards on the server, so nothing on screen waits on GitHub.
  */
 export async function refreshInbox<T extends InboxCard>(args: InboxSources<T>): Promise<void> {
   const { sync, update } = args
   update({ refreshing: true, syncError: null })
+  let body: unknown
   try {
-    await sync()
+    body = await sync()
   } catch (e) {
     update({ syncError: `Could not refresh from GitHub: ${errorText(e, 'sync failed')}`, refreshing: false })
     return
   }
+  // A partial refresh (#4253): the sync answered 200 but names what went wrong in `error`.
+  const problem = (body as { error?: unknown } | null | undefined)?.error
+  if (typeof problem === 'string' && problem) update({ syncError: `Refreshed with problems: ${problem}` })
   await fetchListInto(args)
   update({ refreshing: false })
 }

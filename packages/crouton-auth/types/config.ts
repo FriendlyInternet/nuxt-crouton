@@ -410,6 +410,20 @@ export interface SessionConfig {
  */
 export interface CroutonAuthConfig {
   /**
+   * Sign-in for Claude and other MCP apps (#4096)
+   *
+   * When `true`, the app becomes an OAuth 2.1 sign-in server for MCP clients
+   * (Better Auth `jwt()` + `mcp()`): discovery at `/.well-known/*`, open
+   * client registration (DCR, 10 per minute per IP), and a consent screen at
+   * `/auth/consent`. The access token is for `<baseURL>/mcp`, names the user
+   * and the agreed scopes, and carries no team. Off by default: every OAuth
+   * route answers 404.
+   *
+   * @default false
+   */
+  mcpOAuth?: boolean
+
+  /**
    * Application name
    *
    * Used for auto-created team names and display purposes.

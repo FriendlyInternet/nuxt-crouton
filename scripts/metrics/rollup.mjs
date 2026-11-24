@@ -142,6 +142,151 @@ function tallyJobs(runs, jobs, wk) {
   }
 }
 
+const OUTCOME_KEYS = ['green_same_sha', 'green_new_sha', 'never_green', 'failed_no_pr', 'green_on_rerun', 'failed_with_others', 'failed_alone']
+
+/**
+ * When a PR-tied failure counts as `failed_with_others` (#4303): at least `minOthers` other PRs
+ * failed the same job within ±`windowMin` minutes AND they are at least `share` of all other PRs
+ * that ran it then. A plain count is not enough: CI Gate runs on ~4 PRs an hour and ~30% fail,
+ * so a count alone marked most CI Gate failures as "with others" (see the README).
+ */
+export const CLUSTER = { windowMin: 60, minOthers: 2, share: 0.75 }
+
+/**
+ * PR identity of a run: its head branch when it belongs to a PR, else null. Keyed by branch, not
+ * PR number, because `prs` is empty once a PR has merged (the collector re-reads runs later).
+ */
+function prKey(r) {
+  const isPr = r.prs?.length > 0 || r.event === 'pull_request'
+  return isPr && r.branch ? r.branch : null
+}
+
+/**
+ * Run → PR identity: `prKey`, or for a run with no PR the PR branch of a PR run with the same sha
+ * (smallest branch name when several, so input order does not matter), else null (#4303).
+ */
+function prResolver(runs) {
+  const shaToPr = new Map()
+  for (const r of runs) {
+    const pr = prKey(r)
+    if (pr === null || !r.sha) continue
+    const cur = shaToPr.get(r.sha)
+    if (cur === undefined || pr < cur) shaToPr.set(r.sha, pr)
+  }
+  return (r) => prKey(r) ?? (r.sha ? shaToPr.get(r.sha) : undefined) ?? null
+}
+
+const inc = (e, k) => { e[k] = (e[k] || 0) + 1 }
+
+/** Job events of the kept attempt only (same filter as tallyJobs). */
+function keptJobs(runs, jobs) {
+  const byRun = new Map(runs.map(r => [r.id, r]))
+  const kept = []
+  for (const line of jobs) {
+    const r = byRun.get(line.run_id)
+    if (r && r.attempt === line.attempt) for (const j of line.jobs) kept.push({ r, j, key: `${r.workflow}/${j.name}` })
+  }
+  return kept
+}
+
+/** `${wf/job}|${branch}` → successes on a PR. */
+function indexGreens(kept, prOf) {
+  const greens = new Map()
+  for (const { r, j, key } of kept) {
+    const pr = j.conclusion === 'success' ? prOf(r) : null
+    if (pr === null) continue
+    const k = `${key}|${pr}`
+    if (!greens.has(k)) greens.set(k, [])
+    greens.get(k).push({ id: r.id, created: Date.parse(r.created), sha: r.sha })
+  }
+  return greens
+}
+
+/** Which bucket a failed job falls in. */
+function failureBucket(r, key, greens, prOf) {
+  const pr = prOf(r)
+  if (pr === null) return 'failed_no_pr'
+  const at = Date.parse(r.created)
+  const later = (greens.get(`${key}|${pr}`) || []).filter(s => s.id !== r.id && s.created > at)
+  if (later.some(s => s.sha === r.sha)) return 'green_same_sha'
+  return later.length ? 'green_new_sha' : 'never_green'
+}
+
+/**
+ * Failed kept job events (keyed by the event object) → true when other PRs failed the same job
+ * around the same time (see CLUSTER). Only events with a resolved PR are considered.
+ */
+function clusterFailures(kept, prOf) {
+  const out = new Map()
+  for (const list of countedByKey(kept, prOf).values()) markClusters(list, out)
+  return out
+}
+
+/** job key → counted events with a resolved PR, sorted by time. */
+function countedByKey(kept, prOf) {
+  const byKey = new Map()
+  for (const ev of kept) {
+    const pr = COUNTED.has(ev.j.conclusion) ? prOf(ev.r) : null
+    if (pr === null) continue
+    const list = byKey.get(ev.key) ?? byKey.set(ev.key, []).get(ev.key)
+    list.push({ ev, pr, at: Date.parse(ev.r.created), failed: FAIL.has(ev.j.conclusion) })
+  }
+  for (const list of byKey.values()) list.sort((a, b) => a.at - b.at)
+  return byKey
+}
+
+/** Two-pointer scan over one key's sorted events; sets out[failed event] = with others? */
+function markClusters(list, out) {
+  const win = CLUSTER.windowMin * 60000
+  let lo = 0, hi = 0
+  for (const f of list) {
+    while (list[lo].at < f.at - win) lo++
+    while (hi < list.length && list[hi].at <= f.at + win) hi++
+    if (f.failed) out.set(f.ev, withOthers(list.slice(lo, hi), f.pr))
+  }
+}
+
+/** Do the other PRs in this window meet the CLUSTER rule? */
+function withOthers(windowEvents, pr) {
+  const others = windowEvents.filter(o => o.pr !== pr)
+  const ran = new Set(others.map(o => o.pr))
+  const failedOthers = new Set(others.filter(o => o.failed).map(o => o.pr))
+  return failedOthers.size >= CLUSTER.minOthers && failedOthers.size / ran.size >= CLUSTER.share
+}
+
+/** A success in a re-run attempt that actually ran again (not carried over from an earlier attempt). */
+function reranGreen(r, j) {
+  if (j.conclusion !== 'success' || r.attempt <= 1) return false
+  const carried = j.started && r.started && Date.parse(j.started) < Date.parse(r.started)
+  return !carried
+}
+
+/**
+ * Per failed job: did the same job on the same PR go green later — same sha, new sha, never —
+ * or was there no PR at all. Plus successes in a re-run attempt that actually ran again (#4270).
+ * Each PR-tied failure is also `failed_with_others` or `failed_alone` (#4303).
+ * Likely readings only. Adds the seven keys to every jobs["wf/job"] entry, defaulting to 0.
+ */
+function tallyOutcomes(runs, jobs, wk) {
+  const kept = keptJobs(runs, jobs)
+  const prOf = prResolver(runs)
+  const greens = indexGreens(kept, prOf)
+  const clustered = clusterFailures(kept, prOf)
+  for (const ev of kept) {
+    const { r, j, key } = ev
+    const e = wk(isoWeek(r.created)).jobs[key]
+    if (FAIL.has(j.conclusion)) {
+      const bucket = failureBucket(r, key, greens, prOf)
+      inc(e, bucket)
+      if (bucket !== 'failed_no_pr') inc(e, clustered.get(ev) ? 'failed_with_others' : 'failed_alone')
+    } else if (reranGreen(r, j)) inc(e, 'green_on_rerun')
+  }
+}
+
+function fillOutcomeDefaults(weeks) {
+  for (const w of Object.values(weeks)) for (const e of Object.values(w.jobs)) for (const k of OUTCOME_KEYS) e[k] ??= 0
+}
+
 function tallySchedules(runs, snaps, asOfMs, weeks, wk) {
   const byWf = new Map()
   for (const r of runs) (byWf.get(r.workflow) ?? byWf.set(r.workflow, []).get(r.workflow)).push(r)
@@ -179,6 +324,8 @@ export function rollup({ runs, jobs, schedules = [], lines, dataCommit = null, a
   const wk = (k) => (weeks[k] ??= newWeekBucket())
   tallyRuns(runs, jobs, wk)
   tallyJobs(runs, jobs, wk)
+  tallyOutcomes(runs, jobs, wk)
+  fillOutcomeDefaults(weeks)
   tallySchedules(runs, sortedSnaps, asOfMs, weeks, wk)
   tallyLines(weeks, lines)
   return stable({ data_commit: dataCommit, as_of: asOfIso, weeks })

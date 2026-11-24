@@ -25,6 +25,7 @@ name: On comment
 #   test-card       test-card                test-card-reply.yml
 #   (unrouted)      record-decision          record-decision.yml (#3054; runs beside the routed job)
 #   (unrouted)      plan-review              plan-review.yml (#3313; a BOT's plan comment — own `if:`)
+#   (unrouted)      receipt                  NEW (#4207): one plain line on the question saying how the reply was read
 #
 # Token rules are unchanged: steps that must trigger downstream workflows use the Harness App
 # token; chain-terminal steps use GITHUB_TOKEN. Permissions live at job level only.
@@ -103,6 +104,8 @@ jobs:
       number: ${{ steps.route.outputs.number }}
       blocked: ${{ steps.route.outputs.blocked }}
       starts: ${{ steps.route.outputs.starts }}
+      record_comment: ${{ steps.route.outputs.record_comment }}
+      reason: ${{ steps.route.outputs.reason }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -140,6 +143,45 @@ jobs:
             core.setOutput('starts', d.starts || '')
             core.setOutput('number', String(d.number))
             core.setOutput('blocked', String(d.blocked))
+            core.setOutput('record_comment', facts.recordComment ? String(facts.recordComment) : '')
+            core.setOutput('reason', d.reason || '')
+
+  # The reply receipt (#4207): edit one plain line onto the question the reply answered, saying how
+  # the router read it. Runs beside the acting jobs and never blocks them; the edit fires no
+  # workflow (this file listens only to `created`). Every value goes through env, never into run:.
+  receipt:
+    needs: route
+    if: needs.route.outputs.record_comment != ''
+    concurrency:
+      group: reply-receipt-${{ needs.route.outputs.record_comment }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        continue-on-error: true # the receipt is advisory (#4207): a failed token must never block the reply's real work
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          sparse-checkout: scripts
+      - name: Write the receipt on the question
+        continue-on-error: true # the receipt is advisory (#4207): a failed edit must never block the reply's real work
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          COMMENT_ID: ${{ needs.route.outputs.record_comment }}
+          KIND: ${{ needs.route.outputs.kind }}
+          STARTS: ${{ needs.route.outputs.starts }}
+          REASON: ${{ needs.route.outputs.reason }}
+          REPLY_URL: ${{ github.event.comment.html_url }}
+          REPLY_AT: ${{ github.event.comment.created_at }}
+        run: node scripts/lib/reply-receipt.mjs
 
   automerge-go:
     needs: route
@@ -238,7 +280,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-      issues: read
+      issues: write # #4202: HANDOFF_FALLBACK_TOKEN must be able to save a put-off hand-off
       # #3105: start the CI fix-bot (workflow_dispatch) when the PR is red.
       actions: write
     steps:
@@ -390,7 +432,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
-      issues: read
+      issues: write # #4202: HANDOFF_FALLBACK_TOKEN must be able to save a put-off hand-off
     steps:
       # Mint a Nuxt Harness App installation token so the `delegate` label is applied by
       # `nuxt-harness[bot]`. That makes the dispatched decompose run App-actored, which passes
@@ -605,12 +647,13 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           GH_TOKEN: ${{ github.token }}
+          STARTS: ${{ needs.route.outputs.starts }}
         with:
           script: |
             const { shouldRevise } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/revise-route.mjs`)
             const issue_number = context.payload.issue.number
             const c = context.payload.comment
-            const d = shouldRevise({ body: c.body, authorAssociation: c.author_association, userType: c.user.type, appSlug: c.performed_via_github_app?.slug ?? null, userLogin: c.user.login, labels: (context.payload.issue.labels||[]).map(l => l.name) })
+            const d = shouldRevise({ body: c.body, authorAssociation: c.author_association, userType: c.user.type, appSlug: c.performed_via_github_app?.slug ?? null, userLogin: c.user.login, labels: (context.payload.issue.labels||[]).map(l => l.name), starts: process.env.STARTS })
             if (!d.revise) { core.setOutput('revise', 'false'); core.info(`not a revision: ${d.reason}`); return }
             const { handoffGuard } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`)
             // The PR lookup and the dispatch are one protected step: a limit / 5xx on either saves it for the sweep.

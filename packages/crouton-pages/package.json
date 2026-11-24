@@ -1,7 +1,7 @@
 {
   "name": "@fyit/crouton-pages",
   "version": "0.1.0",
-  "description": "Page management system for Nuxt Crouton with page types, tree layout, and CMS functionality",
+  "description": "Page management system for Nuxt Crouton with page types, tree layout, and CMS functionality — serves a team's public site on its own custom domain, with plain one-language addresses (hideLocaleInUrl)",
   "type": "module",
   "main": "./nuxt.config.ts",
   "exports": {
@@ -23,6 +23,7 @@
     "seed",
     "i18n",
     "nuxt.config.ts",
+    "app-page-segments.ts",
     "README.md",
     "docs/llms.txt",
     "docs/components.md"
@@ -53,15 +54,15 @@
     "access": "public"
   },
   "peerDependencies": {
-    "@fyit/crouton-core": "workspace:*",
-    "@fyit/crouton-editor": "workspace:*",
+    "@fyit/crouton-auth": "workspace:0.x",
+    "@fyit/crouton-core": "workspace:0.x",
+    "@fyit/crouton-editor": "workspace:0.x",
     "@nuxt/ui": "^4.3.0",
     "nuxt": "^4.0.0"
   },
   "dependencies": {
     "@fyit/crouton-i18n": "workspace:*",
     "@tiptap/extension-highlight": "^3.20.0",
-    "@vueuse/core": "^13.3.0",
-    "xss": "1.0.15"
+    "@vueuse/core": "^13.3.0"
   }
 }

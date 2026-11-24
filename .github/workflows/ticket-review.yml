@@ -1,5 +1,5 @@
 name: Ticket review (independent reviewer — pi.dev)
-run-name: "ticket-review #${{ inputs.epic }}"
+run-name: "ticket-review #${{ inputs.epic }}${{ inputs.subject != '' && format(' · {0}', inputs.subject) || '' }}"
 
 # #2776 (epic #2754) — before an epic's first ticket starts, the same top-model reviewer as the plan
 # review (the `review` tier of .claude/pipeline-models.json) reads the epic, its Decisions log, every
@@ -17,7 +17,9 @@ run-name: "ticket-review #${{ inputs.epic }}"
 #   plan    the step list once (P1–P4: coverage, order, size, no owner decision) + the open
 #           ticket(s) of steps with no blocker — started by apply-decompose-plan.mjs for a new epic
 #   <n>     that ONE ticket, just before it is built — run by the orchestrator after writing it by
-#           hand: `gh workflow run ticket-review.yml -f epic=E -f subject=<n>`
+#           hand: `gh workflow run ticket-review.yml -f epic=E -f subject=<n>` — or by
+#           `scripts/ticket-review-gate.mjs` when a chat-made ticket under any epic gets `work-this`
+#           (#4456); a ticket subject never takes the whole-epic path.
 # A rolling epic decides PER TICKET (scripts/ticket-review-actions.mjs): a go ticket starts, a no-go
 # goes to ticket-revise.yml for that ticket only (3 rounds per ticket), never holding a sibling.
 # `plan-wrong` (the step list itself is wrong) removes `steps:approved` and holds the epic; the
@@ -136,6 +138,7 @@ jobs:
           # branch as a read-only second checkout (blank when it has none → the main checkout).
           node scripts/lib/epic-steps.mjs steps "$D/comments.json" > "$D/steps.json" || [ $? -eq 3 ]
           node scripts/lib/epic-steps.mjs narrow "$SUBJECT" "$D/subs.json" "$D/steps.json" > "$D/tickets.json"
+          node scripts/lib/title-rule.mjs notes "$D/tickets.json" >> "$D/epic.md"
           echo "EPIC_SRC=$(node scripts/epic-checkout.mjs --epic "$EPIC" --dest "$RUNNER_TEMP/epic-src")" >> "$GITHUB_ENV"
           echo "tickets: $(jq length "$D/tickets.json") (subject: ${SUBJECT:-all})"
           node scripts/ticket-review-actions.mjs gather "$D/comments.json" "$D/epic.json" "$D/tickets.json" "$D/steps.json" --subject "$SUBJECT"
@@ -183,8 +186,6 @@ jobs:
           node scripts/lib/ticket-verdict.mjs render "$D/tickets.json" "$D/verdict.md" "$MODEL" "${REV[@]}" --subject "$SUBJECT" > "$D/comment.md"
           NOTES="$(jq -r 'select(.kind == "note") | "- " + .text' "$D/actions.jsonl")"
           [ -z "$NOTES" ] || printf '\n**Next steps**\n%s\n' "$NOTES" | tee -a "$D/comment.md" >> "$GITHUB_STEP_SUMMARY"
-          # remove-then-add: re-adding a label the issue already carries fires no event.
-          gh issue edit "$EPIC" --remove-label "tickets:approved" 2>/dev/null || true
           URL="$(gh issue comment "$EPIC" --body-file "$D/comment.md")"
           echo "verdict: $VERDICT (route $ROUTE, round $ROUND) → $URL"
           while read -r A; do
@@ -194,6 +195,8 @@ jobs:
               # || true: removing a label the epic does not carry (steps:approved never set) errors, and that is fine.
               unlabel) gh issue edit "$N" --remove-label "$(jq -r .label <<<"$A")" 2>/dev/null || true ;;
               block) gh issue edit "$N" --add-label "status:blocked" ;;
+              comment) gh issue comment "$N" --body "$(jq -r .text <<<"$A")" ;;
+              retitle) LIVE="$(gh issue view "$N" --json title --jq .title)"; if node scripts/ticket-review-actions.mjs retitle-ok "$A" "$LIVE"; then gh issue edit "$N" --title "$(jq -r .title <<<"$A")" && echo "retitle #$N"; else echo "retitle #$N skipped: title changed during review"; fi ;;
             esac
           done < "$D/actions.jsonl"
 

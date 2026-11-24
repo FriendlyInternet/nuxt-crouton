@@ -26,6 +26,29 @@ export function colorsAreFlat(samples, tolerance = 2) {
   )
 }
 
+/**
+ * True when the browser ended on the path it was asked for (#4201): a redirect to the login page
+ * or the start page is not a screenshot of the requested screen. Compares pathnames only (query
+ * and hash ignored), a trailing `/` removed (a bare `/` stays `/`).
+ * One known move (#4241): the gallery sends `/__review?file=<path>` on to `/__review/<Name>`, so
+ * that ask has landed only on such a page — staying on `/__review` is the list, not the component.
+ */
+export function landedWhereAsked(requested, final) {
+  const parse = (x) => {
+    const u = new URL(String(x ?? ''), 'http://x')
+    const p = u.pathname
+    return { path: p.length > 1 ? p.replace(/\/+$/, '') || '/' : p, file: u.searchParams.get('file') }
+  }
+  try {
+    const asked = parse(requested)
+    const got = parse(final)
+    if (asked.path === '/__review' && asked.file) return /^\/__review\/[^/]+$/.test(got.path)
+    return asked.path === got.path
+  } catch {
+    return false
+  }
+}
+
 // Text fragments that show up on pages we must never mistake for real UI:
 // Nitro/Nuxt error responses, the dev-server error overlay, generic HTTP
 // error bodies.

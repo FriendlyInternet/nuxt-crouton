@@ -21,7 +21,7 @@ const FOLDERS = [
   'pocs/alexdeforce', 'pocs/booking-demo', 'pocs/crate', 'pocs/crouton-builder', 'pocs/gallery',
   'pocs/kdm', 'pocs/kvr', 'pocs/notes', 'pocs/pins', 'pocs/sintlukas', 'pocs/snippets', 'pocs/status',
   'fixtures/minimal', 'fixtures/with-assets', 'fixtures/with-bookings', 'fixtures/with-collab',
-  'fixtures/with-devtools', 'fixtures/with-maps', 'fixtures/with-pages', 'fixtures/with-sales'
+  'fixtures/with-devtools', 'fixtures/with-maps', 'fixtures/with-mcp-oauth', 'fixtures/with-pages', 'fixtures/with-relations', 'fixtures/with-sales'
 ]
 
 const migrationsDir = folder => path.join(ROOT, folder, 'server/db/migrations/sqlite')

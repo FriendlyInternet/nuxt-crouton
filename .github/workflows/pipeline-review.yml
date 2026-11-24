@@ -20,10 +20,14 @@ name: Pipeline review (every 10 closed epics)
 # Workflow-change: new pipeline-review.yml (counter + read-only Opus review + separate post), #3254
 
 on:
-  schedule:
-    - cron: '45 6 * * *'   # daily wake-up; the count decides
+  # timer: the status app's clock (pocs/status/server/utils/clock-jobs.ts) — daily 06:45 UTC
+  # wake-up; the count decides
   workflow_dispatch:
     inputs:
+      clock:
+        description: "started by the status app's clock: behave as the timed run"
+        type: boolean
+        default: false
       threshold:
         description: Completed epics needed to open a review
         default: '10'

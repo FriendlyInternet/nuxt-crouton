@@ -1,7 +1,9 @@
 <script setup lang="ts">
 // The inbox: every card that waits on the owner, newest first. The server renders the stored
 // cards (no GitHub call), then the browser syncs from GitHub (POST /api/cards/sync) in the
-// background and lists again. Load/list/answer rules: utils/inbox-core.ts.
+// background and lists again. While the tab is visible it re-reads the stored cards every 30 s and
+// when it becomes visible again (#4309: the clock syncs after a GitHub webhook), never syncing itself.
+// Load/list/answer rules: utils/inbox-core.ts.
 import { sendDelivery } from '~/utils/delivery-core'
 import CardsEdit from '~/components/cards/Edit.vue'
 import CardsReview from '~/components/cards/Review.vue'
@@ -9,7 +11,7 @@ import CardsIssue from '~/components/cards/Issue.vue'
 import CardsDelivery from '~/components/cards/Delivery.vue'
 import CardsQuizCard from '~/components/cards/QuizCard.vue'
 import CardsPlaceholder from '~/components/cards/Placeholder.vue'
-import { cardView, errorText, nothingWaits, refreshInbox, submitAnswer, waitingCards, type InboxCard, type InboxLoadState, type SendAnswer } from '~/utils/inbox-core'
+import { REREAD_MS, cardView, errorText, nothingWaits, refreshInbox, relistInbox, rereadDue, submitAnswer, waitingCards, type InboxCard, type InboxLoadState, type SendAnswer } from '~/utils/inbox-core'
 
 definePageMeta({ middleware: 'auth' })
 
@@ -46,7 +48,7 @@ function applyLoad(patch: Partial<InboxLoadState>) {
 function refresh() {
   return refreshInbox({
     list: () => $fetch<InboxCard[]>(listUrl),
-    sync: async () => { await $fetch('/api/cards/sync', { method: 'POST' }) },
+    sync: () => $fetch<unknown>('/api/cards/sync', { method: 'POST' }),
     update: applyLoad
   })
 }
@@ -100,6 +102,21 @@ const cardProps = (c: InboxCard) => {
 }
 
 onMounted(refresh)
+
+// Pick up cards the clock synced after a GitHub change, without a reload (stored list only).
+const visibility = useDocumentVisibility()
+function reread() {
+  if (!rereadDue({ visible: visibility.value === 'visible', busy: refreshing.value || loading.value })) return
+  relistInbox({
+    list: () => $fetch<InboxCard[]>(listUrl),
+    sync: () => Promise.resolve(null),
+    update: applyLoad
+  })
+}
+useIntervalFn(reread, REREAD_MS)
+watch(visibility, (v) => {
+  if (v === 'visible') reread()
+})
 </script>
 
 <template>

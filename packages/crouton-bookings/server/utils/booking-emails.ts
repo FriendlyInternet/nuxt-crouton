@@ -10,15 +10,24 @@
 
 /**
  * Resolve a translated field value from the translations JSON column.
- * Falls back to the base column value if no translation is found.
+ * Returns the first non-empty (after trimming) value, in this order (#4244):
+ * the requested `locale` → the app's `defaultLocale` (when given) → the base
+ * column value → any other translation, in the object's key order.
+ * Whitespace-only text counts as empty. The value is returned untrimmed, or
+ * `''` when every candidate is empty.
  */
 export function resolveTranslatedField(
   baseValue: string | null | undefined,
   translations: Record<string, Record<string, string>> | null | undefined,
   field: string,
-  locale: string = 'en'
+  locale: string = 'en',
+  defaultLocale?: string
 ): string {
-  return translations?.[locale]?.[field] || baseValue || ''
+  const filled = (v: unknown): v is string => typeof v === 'string' && v.trim() !== ''
+  const fromLocale = (code?: string) => (code ? translations?.[code]?.[field] : undefined)
+  const candidates: unknown[] = [fromLocale(locale), fromLocale(defaultLocale), baseValue]
+  for (const code of Object.keys(translations ?? {})) candidates.push(fromLocale(code))
+  return (candidates.find(filled) as string | undefined) ?? ''
 }
 
 /**
