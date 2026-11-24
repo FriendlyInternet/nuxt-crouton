@@ -4,15 +4,19 @@
  * events. Mounted with props only: no store, no fetch. The child components
  * (`CroutonBookingsList`, `CroutonBookingsPanelFilters`, `UIcon`) are stubbed;
  * `useT` is stubbed on globalThis (a Nuxt auto-import).
+ *
+ * Lives here, not in crouton-bookings: mounting a .vue file needs the Vue
+ * vite plugin, which this app's vitest config already loads and the
+ * package's does not (its test config is left as it is).
  */
 import { describe, it, expect, beforeAll } from 'vitest'
 import { defineComponent, h } from 'vue'
 import { mount } from '@vue/test-utils'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import LayoutList from '../app/components/Layout/List.vue'
-import LayoutFilters from '../app/components/Layout/Filters.vue'
-import LayoutLocations from '../app/components/Layout/Locations.vue'
+import LayoutList from '../../../packages/crouton-bookings/app/components/Layout/List.vue'
+import LayoutFilters from '../../../packages/crouton-bookings/app/components/Layout/Filters.vue'
+import LayoutLocations from '../../../packages/crouton-bookings/app/components/Layout/Locations.vue'
 
 beforeAll(() => {
   ;(globalThis as any).useT = () => ({ t: (k: string) => k })
@@ -133,7 +137,7 @@ describe('layout blocks are fed by props (#3651)', () => {
   // covers: T1
   it('none of the three blocks loads data or uses the old shared filter composable', () => {
     for (const file of ['List.vue', 'Filters.vue', 'Locations.vue']) {
-      const src = readFileSync(resolve(__dirname, '../app/components/Layout', file), 'utf8')
+      const src = readFileSync(resolve(__dirname, '../../../packages/crouton-bookings/app/components/Layout', file), 'utf8')
       expect(src, file).not.toMatch(/useBookingsList\(|useBookingsLayoutFilters\(|useCrouton\(|useTeam\(/)
     }
   })
