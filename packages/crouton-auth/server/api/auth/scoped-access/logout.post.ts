@@ -22,7 +22,7 @@ export default defineEventHandler(async (event) => {
   const revoked = token ? await revokeScopedToken(token) : false
 
   // Clear the httpOnly cookie regardless — the next SSR request must not carry
-  // a token. Path must match the redeem/mint Set-Cookie (path: '/').
+  // a token. Path must match the redeem Set-Cookie (path: '/').
   deleteCookie(event, 'scoped-access-token', { path: '/' })
 
   return { success: revoked }
