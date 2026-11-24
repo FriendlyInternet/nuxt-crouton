@@ -44,42 +44,41 @@ function importsOf (code, entry) {
  *   files: chunk file name (e.g. "abc.js") → source
  * @returns {{ ok: boolean, sites: Array<{chunk:string,kind:string,ok:boolean,why:string}>, errors: string[] }}
  */
+function reachesSetup (files, start, entry) {
+  const seen = new Set([start])
+  const queue = importsOf(files[start], entry)
+  while (queue.length) {
+    const f = queue.shift()
+    if (seen.has(f) || files[f] == null) continue
+    seen.add(f)
+    if (files[f].includes(SETUP)) return f
+    queue.push(...importsOf(files[f], entry))
+  }
+  return null
+}
+
+function judgeChunk (files, chunk, firstReaderAt, entry) {
+  const setupAt = files[chunk].indexOf(SETUP)
+  if (setupAt !== -1 && setupAt < firstReaderAt) {
+    return { ok: true, why: 'setup earlier in same chunk' }
+  }
+  const via = reachesSetup(files, chunk, entry)
+  if (via) return { ok: true, why: `imports setup via ${via}` }
+  return { ok: false, why: setupAt !== -1 ? 'read before setup in same chunk' : 'no import path to a setup' }
+}
+
 export function checkFetchGlobal ({ files, entry = null, expectReaders = 0 }) {
   const errors = []
   const sites = []
-  const setupChunks = Object.keys(files).filter(f => files[f].includes(SETUP))
-  if (!setupChunks.length) errors.push(`no "${SETUP}" setup found in any chunk`)
-
-  const reachesSetup = (start) => {
-    const seen = new Set([start])
-    const queue = importsOf(files[start], entry)
-    while (queue.length) {
-      const f = queue.shift()
-      if (seen.has(f) || files[f] == null) continue
-      seen.add(f)
-      if (files[f].includes(SETUP)) return f
-      queue.push(...importsOf(files[f], entry))
-    }
-    return null
-  }
+  const hasSetup = Object.keys(files).some(f => files[f].includes(SETUP))
+  if (!hasSetup) errors.push(`no "${SETUP}" setup found in any chunk`)
 
   for (const [chunk, code] of Object.entries(files)) {
     const found = readerSites(code)
     if (!found.length) continue
-    const setupAt = code.indexOf(SETUP)
-    let chunkOk = false
-    let why
-    if (setupAt !== -1 && setupAt < found[0].index) {
-      chunkOk = true
-      why = 'setup earlier in same chunk'
-    }
-    else {
-      const via = reachesSetup(chunk)
-      if (via) { chunkOk = true; why = `imports setup via ${via}` }
-      else why = setupAt !== -1 ? 'read before setup in same chunk' : 'no import path to a setup'
-    }
-    for (const s of found) sites.push({ chunk, kind: s.kind, ok: chunkOk, why })
-    if (!chunkOk) errors.push(`${chunk}: ${why}`)
+    const { ok, why } = judgeChunk(files, chunk, found[0].index, entry)
+    for (const s of found) sites.push({ chunk, kind: s.kind, ok, why })
+    if (!ok) errors.push(`${chunk}: ${why}`)
   }
 
   if (sites.length < expectReaders) {
