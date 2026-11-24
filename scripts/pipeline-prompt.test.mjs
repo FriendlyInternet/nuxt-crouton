@@ -60,6 +60,17 @@ test('pi-conflict-resolver, epic PR (#3002)', () => {
   assert.ok(out.includes('db:generate'))
 })
 
+// covers: T7
+test('#4487 the resolver persona builds the packages before db:generate in its migration paragraph', () => {
+  const out = renderPrompt('pi-conflict-resolver', { pr: '1', branch: 'b', issue: '1', task: 'x', feedback: 'x' })
+  const para = out.split('\n').find((l) => l.startsWith('MIGRATION FILES ARE NEVER HAND-MERGED'))
+  assert.ok(para, 'migration paragraph present')
+  assert.ok(para.includes('build:packages'), para)
+  assert.ok(para.indexOf('build:packages') < para.indexOf('db:generate'), 'build comes before db:generate')
+  assert.ok(para.includes('does not list'))
+  assert.ok(!para.includes("after the base's last journal entry"))
+})
+
 test('pi-conflict-resolver without a task is a hard error', () => {
   assert.throws(() => renderPrompt('pi-conflict-resolver', { pr: '1', branch: 'b', issue: '1', feedback: 'x' }), /missing --var task/)
 })
