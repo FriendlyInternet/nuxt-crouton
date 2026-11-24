@@ -43,12 +43,16 @@ function bound(node: Node, arg: string): string | undefined {
 
 describe('BookingCreateCard.vue (#4112)', () => {
   // covers: T3
-  it('locations are a UTabs row that scrolls sideways and never squeezes a tab', () => {
-    const tabs = find('UTabs')
-    expect(tabs).toHaveLength(1)
-    const ui = bound(tabs[0]!.node, 'ui') ?? ''
-    expect(ui).toContain('SCROLL_ROW_X') // shared sideways-only scroll row classes (#4330)
-    expect(ui).toContain('min-w-fit')
+  // #4471: the row is the shared CroutonBookingsLocationTabs (its classes are pinned in location-tabs-template.test.ts)
+  it('locations are the shared tab row, with no "All" and no "+"', () => {
+    const rows = find('CroutonBookingsLocationTabs')
+    expect(rows).toHaveLength(1)
+    const names = (rows[0]!.node.props ?? []).map((p: Node) => p.type === DIRECTIVE ? p.arg?.content : p.name)
+    expect(names).not.toContain('show-all')
+    expect(names).not.toContain('can-add')
+    expect(names).not.toContain('showAll')
+    expect(names).not.toContain('canAdd')
+    expect(find('UTabs')).toHaveLength(0)
     expect(template).not.toContain('w-52')
   })
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, useTemplateRef } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import type { Booking, LocationData } from '../types/booking'
 import { toDateKey } from '@fyit/crouton-core/shared/utils/date'
 import { applyBookingToForm, editBookingBody, groupLabel, initialFormFromBooking } from '../utils/booking-form'
@@ -57,16 +57,6 @@ const notify = useNotify()
 const { t } = useT()
 
 const { locale } = useI18n()
-
-// Get localized location title with fallbacks
-function getLocationTitle(location: LocationData): string {
-  const translations = location.translations as Record<string, { title?: string }> | undefined
-
-  return translations?.[locale.value]?.title
-    || translations?.en?.title
-    || location.title
-    || t('bookings.untitled')
-}
 
 // Get localized location content/description
 function getLocationContent(location: LocationData): string | null {
@@ -187,25 +177,6 @@ watch(
   },
   { immediate: true },
 )
-
-// === Location tabs (#4112) ===
-// One sideways-scrolling row; the selected tab is brought into view (as CroutonTabsPanel does)
-const locationTabs = computed(() => (locations.value ?? []).map((l: LocationData) => ({
-  value: l.id,
-  label: getLocationTitle(l),
-  disabled: !isLocationEnabled(l.id),
-  color: isLocationEnabled(l.id) ? (l.color || '#3b82f6') : '#9ca3af',
-  ui: { trigger: isLocationEnabled(l.id) ? '' : 'opacity-40' },
-})))
-
-const tabsWrap = useTemplateRef<HTMLElement>('tabsWrap')
-function revealActiveTab() {
-  const active = tabsWrap.value?.querySelector<HTMLElement>('[data-state="active"]')
-    ?? tabsWrap.value?.querySelector<HTMLElement>('[aria-selected="true"]')
-  active?.scrollIntoView({ inline: 'nearest', block: 'nearest' })
-}
-useResizeObserver(tabsWrap, revealActiveTab)
-watch(localLocationId, revealActiveTab, { flush: 'post' })
 
 // === Products (#4112) ===
 // The team's products give titles + the active flag; the location lists which it offers.
@@ -362,24 +333,14 @@ const isAlreadyCancelled = computed(() => props.booking?.status === 'cancelled')
 
     <!-- Body: location tabs on top, content full width below (#4112) -->
     <div class="flex flex-col min-h-0">
-        <!-- Location tabs: one row, scrolls sideways, never wraps -->
-        <div ref="tabsWrap" class="border-b border-default px-1">
-          <UTabs
-            :items="locationTabs"
-            :model-value="localLocationId ?? undefined"
-            :content="false"
-            variant="link"
-            size="sm"
-            :ui="{ list: SCROLL_ROW_X, trigger: 'min-w-fit' }"
-            @update:model-value="v => localLocationId = String(v)"
-          >
-            <template #leading="{ item }">
-              <span
-                class="w-2 h-2 rounded-full shrink-0"
-                :style="{ backgroundColor: item.color }"
-              />
-            </template>
-          </UTabs>
+        <!-- Location tabs: one row, scrolls sideways, never wraps; none with one location (#4471) -->
+        <div v-if="(locations?.length ?? 0) > 1" class="border-b border-default px-1">
+          <CroutonBookingsLocationTabs
+            :locations="locations ?? []"
+            :model-value="localLocationId"
+            :is-disabled="id => !isLocationEnabled(id)"
+            @update:model-value="v => localLocationId = v"
+          />
         </div>
 
         <div class="p-4 flex flex-col gap-4">

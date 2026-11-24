@@ -115,6 +115,25 @@ File: `app/components/List.vue`
 | `emailSent` | `[]` |
 | `newBooking` | `[date: Date]` |
 
+## CroutonBookingsLocationTabs
+
+One sideways-scrolling row of location tabs (optional "All", admin "+"; hidden with one location), shared by the panel and the booking form
+
+File: `app/components/LocationTabs.vue`
+
+| Prop | Type | Default | Required | Description |
+| --- | --- | --- | --- | --- |
+| `locations` | `LocationData[]` | - | yes |  |
+| `modelValue` | `string \| null` | - | yes | Selected location id; `null` = All |
+| `showAll` | `boolean` | `false` | no | Put an "All" tab first (value `null`) |
+| `canAdd` | `boolean` | `false` | no | Show a "+" after the row that emits `add` |
+| `isDisabled` | `((id: string) => boolean)` | `undefined` | no | Locations that can't be picked (dimmed, disabled) |
+
+| Event | Payload |
+| --- | --- |
+| `update:modelValue` | `[value: string \| null]` |
+| `add` | `[]` |
+
 ## CroutonBookingsPanel
 
 Main booking sidebar container

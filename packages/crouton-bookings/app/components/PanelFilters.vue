@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import type { LocationData } from '../types/booking'
+import { locationsFor, tabValueFor } from '../utils/location-tabs'
 
 interface Props {
   locations: LocationData[]
   /** Selected location IDs */
   selectedLocations: string[]
-  /** Whether locations panel is expanded */
-  showLocations?: boolean
   /** Whether map is visible */
   showMap?: boolean
   /** Whether calendar is visible */
@@ -21,12 +20,11 @@ interface Props {
   canManageLocations?: boolean
   /** Current calendar view mode */
   calendarView?: 'week' | 'month'
-  /** Panel-only view controls (Week/Month, Today, fold, map, location cards). Off on composed pages. */
+  /** Panel-only view controls (Week/Month, Today, fold, map). Off on composed pages, where this renders the location tab row itself (#4471). */
   viewToggles?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  showLocations: false,
   showMap: false,
   showCalendar: true,
   hasLocationsWithCoordinates: false,
@@ -38,48 +36,21 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   'update:selectedLocations': [value: string[]]
-  'update:showLocations': [value: boolean]
   'update:showMap': [value: boolean]
   'update:showCalendar': [value: boolean]
   'update:showCancelled': [value: boolean]
   'update:calendarView': [value: 'week' | 'month']
   'go-to-today': []
   'add-location': []
-  'edit-location': [location: LocationData]
-  'focus-on-map': [location: LocationData]
 }>()
 
 const { t } = useT()
-
-// Toggle location selection
-function toggleLocation(locationId: string) {
-  const current = [...props.selectedLocations]
-  const index = current.indexOf(locationId)
-  if (index === -1) {
-    current.push(locationId)
-  } else {
-    current.splice(index, 1)
-  }
-  emit('update:selectedLocations', current)
-}
-
-// Check if location is selected
-function isLocationSelected(locationId: string): boolean {
-  return props.selectedLocations.includes(locationId)
-}
 
 const hasActiveFilter = computed(() => props.selectedLocations.length > 0 || props.showCancelled)
 
 const keepOpen = (e: Event) => e.preventDefault()
 
 const settingsItems = computed(() => {
-  const locationItems = (props.locations ?? []).map(location => ({
-    type: 'checkbox' as const,
-    label: location.title,
-    checked: isLocationSelected(location.id),
-    onUpdateChecked: () => toggleLocation(location.id),
-    onSelect: keepOpen,
-  }))
   const viewItems = [
     ...(props.viewToggles && props.hasLocationsWithCoordinates
       ? [{
@@ -99,21 +70,8 @@ const settingsItems = computed(() => {
       onUpdateChecked: (v: boolean) => emit('update:showCancelled', v),
       onSelect: keepOpen,
     },
-    ...(props.viewToggles && locationItems.length > 0
-      ? [{
-          type: 'checkbox' as const,
-          label: t('bookings.filters.locationCards'),
-          icon: 'i-lucide-map-pin',
-          checked: props.showLocations,
-          onUpdateChecked: (v: boolean) => emit('update:showLocations', v),
-          onSelect: keepOpen,
-        }]
-      : []),
   ]
   return [
-    ...(locationItems.length > 0
-      ? [[{ type: 'label' as const, label: t('bookings.filters.locations') }, ...locationItems]]
-      : []),
     [{ type: 'label' as const, label: t('bookings.filters.view') }, ...viewItems],
   ]
 })
@@ -193,39 +151,15 @@ const settingsItems = computed(() => {
       </UButton>
     </div>
 
-    <!-- Location filter cards (collapsible) -->
-    <Transition
-      enter-active-class="transition-all duration-300 ease-out"
-      enter-from-class="opacity-0 max-h-0"
-      enter-to-class="opacity-100 max-h-[200px]"
-      leave-active-class="transition-all duration-200 ease-in"
-      leave-from-class="opacity-100 max-h-[200px]"
-      leave-to-class="opacity-0 max-h-0"
-    >
-      <div v-if="viewToggles && showLocations && locations && locations.length > 0" class="flex flex-wrap gap-2 overflow-hidden">
-        <CroutonBookingsLocationCard
-          v-for="location in locations"
-          :key="location.id"
-          :location="location"
-          :selected="isLocationSelected(location.id)"
-          :editable="canManageLocations"
-          @click="toggleLocation(location.id)"
-          @edit="emit('edit-location', $event)"
-          @focus-on-map="emit('focus-on-map', $event)"
-        />
-
-        <!-- Add Location button (at end of location cards) -->
-        <UButton
-          v-if="canManageLocations"
-          size="sm"
-          variant="outline"
-          icon="i-lucide-plus"
-          class="self-center"
-          @click="emit('add-location')"
-        >
-          {{ t('bookings.filters.addLocation') }}
-        </UButton>
-      </div>
-    </Transition>
+    <!-- Location tab row on composed pages; the Panel renders its own under the calendar (#4471) -->
+    <CroutonBookingsLocationTabs
+      v-if="!viewToggles && locations.length > 0"
+      :locations="locations"
+      :model-value="tabValueFor(selectedLocations)"
+      show-all
+      :can-add="canManageLocations"
+      @update:model-value="emit('update:selectedLocations', locationsFor($event))"
+      @add="emit('add-location')"
+    />
   </div>
 </template>

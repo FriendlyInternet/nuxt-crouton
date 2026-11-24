@@ -106,19 +106,6 @@ function toggleStatus(statusValue: string) {
   emit('update:filters', { ...props.filters, statuses: current })
 }
 
-// Toggle location filter
-function toggleLocation(locationId: string) {
-  const current = [...props.filters.locations]
-  const index = current.indexOf(locationId)
-  if (index === -1) {
-    current.push(locationId)
-  }
-  else {
-    current.splice(index, 1)
-  }
-  emit('update:filters', { ...props.filters, locations: current })
-}
-
 // Get status color
 function getStatusColor(status: { id: string, color?: string }): string {
   return status.color || '#6b7280'
