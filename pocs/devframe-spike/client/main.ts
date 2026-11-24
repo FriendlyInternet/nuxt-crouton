@@ -1,4 +1,5 @@
 import { connectDevframe } from 'devframe/client'
+import { pollWhileVisible } from './poll'
 
 function table(rows: unknown): string {
   const list = Array.isArray(rows) ? rows : (rows as any)?.data ?? (rows as any)?.operations ?? (rows as any)?.collections ?? []
@@ -12,4 +13,9 @@ function table(rows: unknown): string {
 const rpc = await connectDevframe()
 const call = rpc.call as (name: string, ...args: unknown[]) => Promise<unknown>
 document.getElementById('collections')!.innerHTML = table(await call('crouton-df:list-collections'))
-document.getElementById('operations')!.innerHTML = table(await call('crouton-df:list-operations', {}))
+const refreshOperations = async () => {
+  document.getElementById('operations')!.innerHTML = table(await call('crouton-df:list-operations', {}))
+}
+await refreshOperations()
+// Re-fetch while the dock is open so a new create shows up without a reload.
+pollWhileVisible(refreshOperations, 2000)

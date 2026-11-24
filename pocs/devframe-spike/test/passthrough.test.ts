@@ -28,21 +28,21 @@ describe('passthrough', () => {
     await instance.close()
   })
 
-  it('list-operations is not agent-exposed, so its handler is exercised directly', async () => {
+  it('list-operations is not agent-exposed, so it is invoked through the real devframe RPC host', async () => {
     const fetchJson = vi.fn().mockResolvedValue([{ id: 1 }])
-    const def = createCroutonDevframe({ fetchJson })
-    const registered: any[] = []
-    await def.setup({ rpc: { register: (f: any) => registered.push(f) } } as any)
-    const ops = registered.find(f => f.name === 'crouton-df:list-operations')
-    const out = await ops.handler({ collection: 'x', status: 'success' })
+    const instance = await boot(fetchJson)
+    const ctx: any = await instance.context
+    const out = await ctx.rpc.invokeLocal('crouton-df:list-operations', { collection: 'x', status: 'success' })
     expect(out).toEqual([{ id: 1 }])
     expect(fetchJson).toHaveBeenCalledWith('/__nuxt_crouton_devtools/api/operations', { query: { collection: 'x', status: 'success' } })
-    await ops.handler({})
+    await ctx.rpc.invokeLocal('crouton-df:list-operations', {})
     expect(fetchJson).toHaveBeenLastCalledWith('/__nuxt_crouton_devtools/api/operations', { query: {} })
-    const cols = registered.find(f => f.name === 'crouton-df:list-collections')
+    const cols = ctx.rpc.get('crouton-df:list-collections')
+    const ops = ctx.rpc.get('crouton-df:list-operations')
     expect(cols.type).toBe('query')
     expect(cols.agent).toBeTruthy()
     expect(ops.agent).toBeUndefined()
+    await instance.close()
   })
 
   it('list-operations args validate status as success|error only', () => {
