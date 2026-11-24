@@ -111,8 +111,11 @@ const flush = async () => {
   await nextTick()
 }
 
-// Import after mocking
+// Import after mocking — the real key builder (#4506), resolving to this file's stubs
+import { useCollectionCacheKeys } from '../useCollectionCacheKeys'
 import { useCollectionItem } from '../useCollectionItem'
+
+vi.stubGlobal('useCollectionCacheKeys', useCollectionCacheKeys)
 
 describe('useCollectionItem', () => {
   beforeEach(() => {

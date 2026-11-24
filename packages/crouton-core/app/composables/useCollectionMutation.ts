@@ -35,8 +35,8 @@ interface CollectionMutationReturnUntyped {
  *
  * How it works:
  * 1. Performs the API mutation (POST/PATCH/DELETE)
- * 2. Queries nuxtApp.payload.data to find ALL cache keys for the collection
- * 3. Refreshes all matching keys (including those with query parameters)
+ * 2. Queries nuxtApp.payload.data to find the current team's cache keys for the collection
+ * 3. Refreshes the current team's matching keys (including those with query parameters)
  * 4. UI updates with fresh data from the server
  *
  * @example
@@ -58,6 +58,8 @@ export function useCollectionMutation(collection: string): CollectionMutationRet
   const collections = useCollections()
   const config = collections.getConfig(collection)
   const { getTeamId } = useTeamContext()
+  // Cache slots are named and refreshed only through the one key builder (#4506)
+  const { refreshLists, refreshItems } = useCollectionCacheKeys(collection)
 
   if (!config) {
     console.error(`[useCollectionMutation] Collection "${collection}" not found in registry`)
@@ -88,8 +90,8 @@ export function useCollectionMutation(collection: string): CollectionMutationRet
   }
 
   /**
-   * Invalidate cache for this collection (triggers refetch in all views)
-   * Finds ALL cache keys for this collection (including those with query params) and refreshes them
+   * Invalidate cache for this collection in the current team (triggers refetch in its views)
+   * Finds the current team's cache keys for this collection (including those with query params) and refreshes them
    * Optionally refreshes individual item caches when item IDs are provided
    *
    * @param itemIds - Optional item ID(s) to invalidate individual item caches
@@ -101,41 +103,15 @@ export function useCollectionMutation(collection: string): CollectionMutationRet
     refreshCollection: boolean = true,
     mutationData?: any
   ) => {
-    const nuxtApp = useNuxtApp()
-
-    // Item caches are keyed `collection-item:<collection>:<team>:<id>` (see
-    // useCollectionItem). Ids and team ids may contain colons, so find the
-    // keys by prefix + `:<id>` suffix rather than parsing them.
-    const refreshItemKeys = (coll: string, id: string) =>
-      Promise.all(
-        Object.keys(nuxtApp.payload.data)
-          .filter(k => k.startsWith(`collection-item:${coll}:`) && k.endsWith(`:${id}`))
-          .map(k => refreshNuxtData(k))
-      )
-
-    // Refresh ALL cache keys for this collection (supports queries with parameters)
-    // Queries Nuxt's payload.data to find all matching keys
+    // Refresh the current team's cached lists of this collection (any query
+    // params). Other teams' slots are never touched.
     if (refreshCollection) {
-      const prefix = `collection:${collection}:`
-
-      // Get all matching keys from Nuxt's async data
-      const allKeys = Object.keys(nuxtApp.payload.data)
-      const matchingKeys = new Set(allKeys.filter(key => key.startsWith(prefix)))
-
-      // Always include the base collection key as fallback
-      // (ensures refresh even if payload.data enumeration misses client-side entries)
-      matchingKeys.add(`${prefix}{}`)
-
-      // Refresh all queries for this collection
-      await Promise.all([...matchingKeys].map(key => refreshNuxtData(key)))
+      await refreshLists()
     }
 
-    // Refresh individual item caches if IDs provided - for detail views (e.g., CroutonCardMini)
+    // Refresh the current team's item caches - for detail views (e.g., CroutonCardMini)
     if (itemIds) {
-      const ids = Array.isArray(itemIds) ? itemIds : [itemIds]
-      for (const id of ids) {
-        await refreshItemKeys(collection, id)
-      }
+      await refreshItems(itemIds)
     }
 
     // AUTO-REFRESH REFERENCED COLLECTIONS
@@ -144,16 +120,8 @@ export function useCollectionMutation(collection: string): CollectionMutationRet
     if (config?.references && mutationData) {
       for (const [field, refCollection] of Object.entries(config.references)) {
         const refId = mutationData[field]
-
-        if (refId && typeof refId === 'string') {
-          await refreshItemKeys(refCollection, refId)
-        } else if (Array.isArray(refId)) {
-          // Handle array references (e.g., multiple IDs)
-          for (const id of refId) {
-            if (id && typeof id === 'string') {
-              await refreshItemKeys(refCollection, id)
-            }
-          }
+        if ((refId && typeof refId === 'string') || Array.isArray(refId)) {
+          await refreshItems(refId, refCollection)
         }
       }
     }

@@ -34,7 +34,6 @@ export async function useCollectionItem<T = any>(
   collection: string,
   id: string | Ref<string> | (() => string)
 ): Promise<CollectionItemReturn<T>> {
-  const route = useRoute()
   const collections = useCollections()
   const config = collections.getConfig(collection)
 
@@ -42,14 +41,9 @@ export async function useCollectionItem<T = any>(
     throw new Error(`Collection "${collection}" not registered`)
   }
 
-  // Resolve the team source ONCE at setup. useTeam() is a composable and must
-  // not run inside the key getter, which Nuxt re-evaluates outside setup.
-  let currentTeam: Ref<{ id?: string } | null | undefined> | undefined
-  try {
-    currentTeam = useTeam().currentTeam as Ref<{ id?: string } | null | undefined>
-  } catch {
-    // App has no useTeam — fall back to the route param below
-  }
+  // Team part, super-admin flag and the item key all come from the one
+  // builder, resolved once at setup (#4506).
+  const { teamPart, isSuperAdmin, itemKey } = useCollectionCacheKeys(collection)
 
   const apiPath = config.apiPath || collection
 
@@ -60,17 +54,6 @@ export async function useCollectionItem<T = any>(
   })
 
   const strategy = config.fetchStrategy || 'query'
-  const isSuperAdmin = computed(() => route.path.includes('/super-admin/'))
-
-  // Team part of the cache key AND the API path — same order as getTeamId():
-  // useTeam().currentTeam.id, then the route param. Super-admin has no team.
-  const teamPart = computed(() => {
-    if (isSuperAdmin.value) return 'super-admin'
-    if (currentTeam?.value?.id) return currentTeam.value.id
-    const teamParam = route.params?.team
-    return typeof teamParam === 'string' ? teamParam : ''
-  })
-
   // Build API path based on collection's fetch strategy
   // - 'restful': Uses /{id} pattern (e.g., /api/teams/123/members/456)
   // - 'query': Uses ?ids= pattern (e.g., /api/teams/123/bookings?ids=456)
@@ -98,7 +81,7 @@ export async function useCollectionItem<T = any>(
   // records/teams. Collection stays right after the prefix — crouton-collab
   // and useCollectionMutation match on `collection-item:<collection>:`.
   const { data, pending, error, refresh } = await useAsyncData(
-    () => `collection-item:${collection}:${teamPart.value}:${itemId.value}`,
+    () => itemKey(itemId.value),
     () => {
       if (!itemId.value) return Promise.resolve(null)
       if (!isSuperAdmin.value && !teamPart.value) return Promise.resolve(null)

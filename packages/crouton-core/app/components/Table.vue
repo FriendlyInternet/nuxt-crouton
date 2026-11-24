@@ -327,11 +327,8 @@ async function fetchPage(newPage: number) {
     if (props.refreshFn) {
       await props.refreshFn()
     } else {
-      // Fallback: refresh all cache keys for this collection
-      const prefix = `collection:${props.collection}:`
-      const nuxtApp = useNuxtApp()
-      const matchingKeys = Object.keys(nuxtApp.payload.data).filter(key => key.startsWith(prefix))
-      await Promise.all(matchingKeys.map(key => refreshNuxtData(key)))
+      // Fallback: refresh the current team's cached lists of this collection
+      await cacheKeys?.refreshLists()
     }
   } catch (error) {
     console.error('Error fetching page:', error)
@@ -364,6 +361,9 @@ watch(sort, (newSort, oldSort) => {
 
 // Sortable drag-and-drop functionality
 const reordering = ref(false)
+
+// The one cache-key builder (#4506), used by the page-change fallback refresh
+const cacheKeys = props.collection ? useCollectionCacheKeys(props.collection) : null
 
 // Initialize useTreeMutation for reordering if collection is provided
 const treeMutation = props.collection && sortableEnabled.value
