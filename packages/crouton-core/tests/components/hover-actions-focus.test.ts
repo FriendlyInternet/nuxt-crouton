@@ -26,20 +26,40 @@ const HOVER_TOKEN = /^group-hover(\/[\w-]+)?:opacity-100$/
  * this stays in step where a left-to-right quote regex is thrown off by stray
  * apostrophes in templates and comments.
  */
+function quoteStart(source: string, from: number): number {
+  let start = from
+  while (start > 0 && !QUOTES.has(source[start - 1]!)) start--
+  return start
+}
+
+function quoteEnd(source: string, from: number): number {
+  let end = from
+  while (end < source.length && !QUOTES.has(source[end]!)) end++
+  return end
+}
+
 function hoverClassStrings(source: string): { text: string, line: number }[] {
-  const found: { text: string, line: number }[] = []
-  const seen = new Set<number>()
+  const found = new Map<number, { text: string, line: number }>()
   for (const match of source.matchAll(/group-hover(\/[\w-]+)?:opacity-100/g)) {
-    let start = match.index
-    while (start > 0 && !QUOTES.has(source[start - 1]!)) start--
-    let end = match.index + match[0].length
-    while (end < source.length && !QUOTES.has(source[end]!)) end++
-    if (seen.has(start)) continue
-    seen.add(start)
+    const start = quoteStart(source, match.index)
+    const end = quoteEnd(source, match.index + match[0].length)
     const line = source.slice(0, Math.max(start - 1, 0)).split('\n').length
-    found.push({ text: source.slice(start, end), line })
+    if (!found.has(start)) found.set(start, { text: source.slice(start, end), line })
   }
-  return found
+  return [...found.values()]
+}
+
+/** A hover-revealed hidden string that does not also reveal on focus and open menu. */
+function isOffender(text: string): boolean {
+  const tokens = text.split(/\s+/)
+  if (!tokens.includes('opacity-0') || !tokens.some(t => HOVER_TOKEN.test(t))) return false
+  return !(tokens.includes('focus-within:opacity-100') && tokens.includes('has-data-[state=open]:opacity-100'))
+}
+
+function offendersIn(file: string): string[] {
+  return hoverClassStrings(readFileSync(file, 'utf8'))
+    .filter(({ text }) => isOffender(text))
+    .map(({ line }) => `${relative(componentsDir, file)}:${line}`)
 }
 
 describe('hover-hidden actions are reachable by keyboard (#4405)', () => {
@@ -47,19 +67,6 @@ describe('hover-hidden actions are reachable by keyboard (#4405)', () => {
     const files = vueFiles(componentsDir)
     expect(files.length).toBeGreaterThan(0)
 
-    const offenders: string[] = []
-    for (const file of files) {
-      const source = readFileSync(file, 'utf8')
-      for (const { text, line } of hoverClassStrings(source)) {
-        const tokens = text.split(/\s+/)
-        if (!tokens.includes('opacity-0')) continue
-        if (!tokens.some(t => HOVER_TOKEN.test(t))) continue
-        const ok = tokens.includes('focus-within:opacity-100')
-          && tokens.includes('has-data-[state=open]:opacity-100')
-        if (!ok) offenders.push(`${relative(componentsDir, file)}:${line}`)
-      }
-    }
-
-    expect(offenders).toEqual([])
+    expect(files.flatMap(offendersIn)).toEqual([])
   })
 })
