@@ -63,6 +63,7 @@ const mutationTranslations: Record<string, string> = {
   'mutations.creationFailed': 'Creation failed',
   'mutations.updateFailed': 'Update failed',
   'mutations.deleteFailed': 'Delete failed',
+  'mutations.deletePartial': '{done} of {total} deleted. {failed} could not be deleted: {error}',
   'mutations.createdSuccessfully': 'Created successfully',
   'mutations.updatedSuccessfully': 'Updated successfully',
   'mutations.deletedCount': 'Deleted {count} item(s)',
@@ -70,10 +71,7 @@ const mutationTranslations: Record<string, string> = {
 vi.stubGlobal('useT', () => ({
   t: (key: string, params?: any) => {
     const template = mutationTranslations[key] || key
-    if (params?.count !== undefined) {
-      return template.replace('{count}', String(params.count))
-    }
-    return template
+    return template.replace(/\{(\w+)\}/g, (m, k) => params?.[k] !== undefined ? String(params[k]) : m)
   }
 }))
 
@@ -558,16 +556,17 @@ describe('useCollectionMutation', () => {
 
       const { deleteItems } = useCollectionMutation('products')
 
-      // Partial failures should throw with the first error encountered
+      // covers: T2
+      // Still rejects with the first error, so the delete dialog stays open
       await expect(deleteItems(['id1', 'id2', 'id3'])).rejects.toEqual(error)
 
-      // All three deletes should have been attempted
       expect(mockFetch).toHaveBeenCalledTimes(3)
 
-      // Error toast should be shown for the failure
+      // One toast that says how many rows were deleted and why the rest were not
+      expect(mockToastAdd).toHaveBeenCalledTimes(1)
       expect(mockToastAdd).toHaveBeenCalledWith({
         title: 'Delete failed',
-        description: 'Item id2 is in use',
+        description: '2 of 3 deleted. 1 could not be deleted: Item id2 is in use',
         icon: 'i-lucide-octagon-alert',
         color: 'primary'
       })
@@ -575,29 +574,80 @@ describe('useCollectionMutation', () => {
 
     it('still invalidates caches after partial failure', async () => {
       mockPayloadData = {
+        'collection:products:test-team:{}': [{ id: 'id1' }, { id: 'id2' }, { id: 'id3' }],
+        'collection-item:products:test-team:id1': { id: 'id1' },
+        'collection-item:products:test-team:id2': { id: 'id2' },
+        'collection-item:products:test-team:id3': { id: 'id3' }
+      }
+
+      // id1 succeeds, id2 fails, id3 succeeds
+      mockFetch
+        .mockResolvedValueOnce({ success: true })
+        .mockRejectedValueOnce({ data: { message: 'Item id2 is in use' } })
+        .mockResolvedValueOnce({ success: true })
+
+      const { deleteItems } = useCollectionMutation('products')
+
+      await expect(deleteItems(['id1', 'id2', 'id3'])).rejects.toBeTruthy()
+
+      // covers: T1
+      const mutationCalls = mockCallHook.mock.calls.filter(c => c[0] === 'crouton:mutation')
+      expect(mutationCalls).toHaveLength(1)
+      expect(mutationCalls[0]![1]).toEqual(expect.objectContaining({
+        operation: 'delete',
+        collection: 'products',
+        itemIds: ['id1', 'id3']
+      }))
+
+      const refreshed = mockRefreshNuxtData.mock.calls.map(c => c[0])
+      expect(refreshed).toEqual(expect.arrayContaining([
+        'collection-item:products:test-team:id1',
+        'collection-item:products:test-team:id3',
+        'collection:products:test-team:{}'
+      ]))
+      expect(refreshed).not.toContain('collection-item:products:test-team:id2')
+    })
+
+    it('does not emit or refresh when every delete fails', async () => {
+      mockPayloadData = {
         'collection:products:test-team:{}': [{ id: 'id1' }, { id: 'id2' }],
         'collection-item:products:test-team:id1': { id: 'id1' },
         'collection-item:products:test-team:id2': { id: 'id2' }
       }
-
-      // id1 succeeds, id2 fails
+      const first = { data: { message: 'First refused' } }
       mockFetch
-        .mockResolvedValueOnce({ success: true })
-        .mockRejectedValueOnce({ data: 'Error' })
+        .mockRejectedValueOnce(first)
+        .mockRejectedValueOnce({ data: { message: 'Second refused' } })
 
       const { deleteItems } = useCollectionMutation('products')
 
-      try {
-        await deleteItems(['id1', 'id2'])
-      } catch {
-        // Expected to throw due to partial failure
-      }
+      // guard
+      await expect(deleteItems(['id1', 'id2'])).rejects.toEqual(first)
 
-      // Both delete attempts should have been made (parallel execution)
-      expect(mockFetch).toHaveBeenCalledTimes(2)
+      expect(mockCallHook).not.toHaveBeenCalledWith('crouton:mutation', expect.anything())
+      expect(mockRefreshNuxtData).not.toHaveBeenCalled()
+      expect(mockToastAdd).toHaveBeenCalledTimes(1)
+      expect(mockToastAdd).toHaveBeenCalledWith(expect.objectContaining({
+        title: 'Delete failed',
+        description: 'First refused'
+      }))
+    })
 
-      // Note: Cache invalidation behavior on partial failure depends on implementation
-      // The test documents the current behavior
+    it('treats a 404 as already deleted', async () => {
+      mockFetch
+        .mockRejectedValueOnce({ statusCode: 404 })
+        .mockResolvedValueOnce({ success: true })
+
+      const { deleteItems } = useCollectionMutation('products')
+
+      // guard
+      await expect(deleteItems(['id1', 'id2'])).resolves.toBeUndefined()
+
+      expect(mockCallHook).toHaveBeenCalledWith('crouton:mutation', expect.objectContaining({
+        operation: 'delete',
+        itemIds: ['id1', 'id2']
+      }))
+      expect(mockToastAdd).not.toHaveBeenCalled()
     })
 
     it('works with single item', async () => {
