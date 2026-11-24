@@ -8,7 +8,7 @@
  * token can't reach — it powers the POS order-history slideover.
  *
  * "This person" is keyed on `salesOrders.owner` (the helper displayName stamped
- * at checkout, `orders/index.post.ts`), which is stable across logins — the
+ * at checkout, `orders/index.ts`), which is stable across logins — the
  * same key OrdersTab's helper filter uses. `createdBy` is the scoped-token id,
  * which rotates every login, so it can't identify a person across sessions.
  *
