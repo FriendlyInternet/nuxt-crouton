@@ -32,8 +32,8 @@ export default defineNuxtConfig({
   ],
 
   // Claude edits a page live (#3982): only the page tools, never the generic
-  // collection CRUD + token tools. Page tools are served at <origin>/mcp once
-  // croutonAuth.mcpOAuth is on (#4098); Claude signs in there, no key.
+  // collection CRUD + token tools. Page tools are served at <origin>/mcp
+  // (croutonAuth.mcpOAuth is on below); Claude signs in there, no key.
   croutonMcpToolkit: {
     enabled: true,
     genericTools: false,
@@ -86,7 +86,19 @@ export default defineNuxtConfig({
     teams: { allowCreate: 'superAdmin' },
     methods: {
       passkeys: false
-    }
+    },
+    // Claude / ChatGPT sign in to <origin>/mcp (#4096/#4098)
+    mcpOAuth: true
+  },
+
+  // Velo's own strings (the Assistants IA page, #4098) — merged with the layers'
+  i18n: {
+    locales: [
+      { code: 'fr', name: 'Français', file: 'fr.json' },
+      { code: 'nl', name: 'Nederlands', file: 'nl.json' },
+      { code: 'en', name: 'English', file: 'en.json' }
+    ],
+    langDir: '../i18n/locales'
   },
 
   routeRules: {

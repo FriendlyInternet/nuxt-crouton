@@ -1,0 +1,16 @@
+{
+  "assistants": {
+    "title": "Assistants IA",
+    "urlLabel": "Le lien à coller dans votre assistant",
+    "copy": "Copier",
+    "copied": "Lien copié",
+    "helpClaude": "Claude : Réglages → Connecteurs → Ajouter un connecteur personnalisé → coller → Connecter.",
+    "helpChatgpt": "ChatGPT : Plugins → + → Ajouter un serveur MCP personnalisé → coller",
+    "connections": "Vos connexions",
+    "empty": "Aucune connexion",
+    "connectedOn": "Connecté le {date}",
+    "revoke": "Révoquer",
+    "revokeFailed": "La révocation a échoué",
+    "loadFailed": "Impossible de charger vos connexions"
+  }
+}
