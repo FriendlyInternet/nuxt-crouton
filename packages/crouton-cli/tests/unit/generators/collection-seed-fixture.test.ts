@@ -55,4 +55,18 @@ describe('generateSeedFixture (#298)', () => {
   it('returns null for hierarchy collections', () => {
     expect(generateSeedFixture({ layer: 'blog', plural: 'posts', fields: blogFields, hierarchy: { enabled: true } })).toBeNull()
   })
+
+  it('T1 (#4377): a {value,label} option seeds its plain value string; plain options are unchanged', () => {
+    const fields = withManifest([
+      { name: 'title', type: 'string', meta: {} },
+      { name: 'language', type: 'string', meta: { options: [{ value: 'fr', label: 'Français' }, { value: 'en', label: 'English' }] } },
+      { name: 'status', type: 'string', meta: { options: ['draft', 'published'] } },
+    ])
+    const rows = generateSeedFixture({ layer: 'site', plural: 'posts', fields })!.rows as any[]
+    expect(rows[0].language).toBe('en')
+    expect(rows[1].language).toBe('fr')
+    for (const r of rows) expect(typeof r.language).toBe('string')
+    expect(rows[0].status).toBe('published')
+    expect(rows[1].status).toBe('draft')
+  })
 })
