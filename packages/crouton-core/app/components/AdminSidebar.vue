@@ -89,6 +89,7 @@ const appGroups = computed<NavigationMenuItem[]>(() => {
       const fullPath = buildAdminUrl(app.landingRoute.path)
       const isExactMatch = route.path === fullPath || route.path === `${fullPath}/`
       groups.push({
+        value: `app:${app.id}`,
         label: tLabel(app.name),
         icon: app.icon,
         to: fullPath,
@@ -119,6 +120,7 @@ const appGroups = computed<NavigationMenuItem[]>(() => {
     if (routeItems.length === 1) {
       const singleRoute = routeItems[0]!
       groups.push({
+        value: `app:${app.id}`,
         label: tLabel(app.name),
         icon: app.icon,
         to: singleRoute.to,
@@ -128,6 +130,7 @@ const appGroups = computed<NavigationMenuItem[]>(() => {
     } else {
       // Multi-item apps get a group header
       groups.push({
+        value: `app:${app.id}`,
         label: tLabel(app.name),
         icon: app.icon,
         defaultOpen: true,
@@ -165,6 +168,15 @@ const dashboardItem = computed<NavigationMenuItem | null>(() => {
 // pages this member can open (#4220). Called at setup, not inside the computed.
 const teamAdminPageList = useTeamAdminPages()
 
+// The Team group is only added once the sidebar is mounted in the browser. The
+// server can already know the member's rights while the browser's first render
+// does not yet, so drawing Team on the server made the two menus disagree; Vue
+// does not repair that, and the groups below Team (Bookings → Locations) were
+// left folded away (#4394). Both renders now leave Team out; it joins right
+// after mount, and `openGroups` below unfolds it.
+const isMounted = ref(false)
+onMounted(() => { isMounted.value = true })
+
 // Team group with sub-items (navigates to team section with horizontal tabs)
 const teamItem = computed<NavigationMenuItem | null>(() => {
   if (props.context === 'super') {
@@ -175,10 +187,13 @@ const teamItem = computed<NavigationMenuItem | null>(() => {
   const teamParam = teamSlugRef.value || teamIdRef.value || ''
   if (!teamParam) return null
 
+  if (!isMounted.value) return null
+
   const children = toSidebarItems(teamAdminPageList.value, t, route.path)
   if (children.length === 0) return null
 
   return {
+    value: 'team',
     label: t('navigation.team') || 'Team',
     icon: 'i-lucide-users',
     defaultOpen: true,
@@ -196,6 +211,7 @@ const collectionGroups = computed<NavigationMenuItem[]>(() => {
   const basePath = `/admin/${teamParam}/crouton`
 
   return collectionsByKind.value.map(group => ({
+    value: `collections:${group.kind}`,
     label: t(`navigation.${group.kind}`) || group.label,
     icon: group.icon,
     defaultOpen: group.kind === 'content',
@@ -284,6 +300,25 @@ const navItems = computed<NavigationMenuItem[][]>(() => {
 
   return [mainItems, bottomItems]
 })
+
+// Which groups are unfolded. Nuxt UI reads `defaultOpen` only once, when the
+// menu mounts, so a group that shows up later — the Team group once the
+// member's rights load (#4394) — or a menu that renders before its groups have
+// settled would leave a start-open group folded. So the sidebar holds the open
+// set itself: each group (by its fixed `value` above) opens the first time it
+// appears with `defaultOpen`, and after that the user's own fold/unfold wins.
+const openGroups = ref<string[]>([])
+const seenGroups = new Set<string>()
+watch(() => navItems.value[0]!, (items) => {
+  const added: string[] = []
+  for (const item of items) {
+    const value = item.value
+    if (typeof value !== 'string' || seenGroups.has(value)) continue
+    seenGroups.add(value)
+    if (item.defaultOpen) added.push(value)
+  }
+  if (added.length) openGroups.value = [...openGroups.value, ...added]
+}, { immediate: true })
 </script>
 
 <template>
@@ -328,6 +363,7 @@ const navItems = computed<NavigationMenuItem[][]>(() => {
 
     <template #default="{ collapsed }">
       <UNavigationMenu
+        v-model="openGroups"
         :collapsed="collapsed"
         :items="navItems[0]"
         orientation="vertical"
