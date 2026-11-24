@@ -841,6 +841,28 @@ getOrganizationMembershipDirect(organizationId: string, userId: string): Promise
 
 _Source: `packages/crouton-auth/server/utils/team.ts`_
 
+## canEditPages
+
+The single page-edit rule (#4097): may this user edit this team's pages?
+Today: team `admin` or `owner`. No session needed (MCP sign-in tokens have none).
+
+```ts
+canEditPages(teamId: string, userId: string): Promise<boolean>
+```
+
+_Source: `packages/crouton-auth/server/utils/team.ts`_
+
+## getUserTeamsDirect
+
+The teams a user belongs to, read straight from the database (#4097) — for
+callers with no session (an MCP sign-in token). `{ id, slug, name, role }` per team.
+
+```ts
+getUserTeamsDirect(userId: string): Promise<Array<{ id: string, slug: string, name: string, role: 'owner' | 'admin' | 'member' }>>
+```
+
+_Source: `packages/crouton-auth/server/utils/team.ts`_
+
 ### Types in `team.ts`
 
 ### TeamContext

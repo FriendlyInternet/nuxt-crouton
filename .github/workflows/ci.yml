@@ -866,7 +866,8 @@ jobs:
       - uses: ./.github/actions/warm-packages
         if: steps.plan.outputs.needs_install == 'true'
       # A plan Test line can be a Playwright spec (e2e/*.smoke.spec.ts); the runner has no browser
-      # until one is installed, and the auth setup dies on "Executable doesn't exist" (#4386).
+      # until one is installed, and the auth setup dies on "Executable doesn't exist" (#4386, #4096).
+      # Installed unconditionally: a smoke spec can be named without `test:e2e` in the line.
       - name: Install Chromium for plan Test lines that drive a browser
         if: steps.plan.outputs.needs_install == 'true'
         run: pnpm exec playwright install chromium

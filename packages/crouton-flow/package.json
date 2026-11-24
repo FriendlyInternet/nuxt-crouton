@@ -43,6 +43,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241127.0",
+    "@vitejs/plugin-vue": "^5.2.4",
     "@vitest/coverage-v8": "catalog:",
     "happy-dom": "catalog:",
     "vitest": "catalog:"

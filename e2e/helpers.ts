@@ -319,10 +319,14 @@ async function register(page: Page, base: string): Promise<boolean> {
   const pw = page.locator('input[type="password"]')
   await pw.nth(0).fill(config.testUser.password)
   await pw.nth(1).fill(config.testUser.password)
-  await page.getByRole('button', { name: /create account/i }).first().click()
+  // English, or French for a fixture whose default locale is fr (with-mcp-oauth, #4096).
+  await page.getByRole('button', { name: /create account|créer un compte/i }).first().click()
   await page.waitForTimeout(2500)
   return isAuthenticated(page, base)
 }
+
+/** The auth modal's submit button, in English or French (#4096). */
+export const SIGN_IN_BUTTON = /sign in|se connecter/i
 
 /** Log the test user in via the auth modal. Returns true if a session results. */
 async function login(page: Page, base: string): Promise<boolean> {
@@ -333,7 +337,7 @@ async function login(page: Page, base: string): Promise<boolean> {
   if (!(await email.isVisible().catch(() => false))) return false
   await email.fill(config.testUser.email)
   await page.locator('input[type="password"]').first().fill(config.testUser.password)
-  await page.getByRole('button', { name: /sign in/i }).first().click()
+  await page.getByRole('button', { name: SIGN_IN_BUTTON }).first().click()
   await page.waitForTimeout(2500)
   return isAuthenticated(page, base)
 }
