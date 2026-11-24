@@ -253,19 +253,6 @@ test('changed packages test included by vitest → vitest run', () => {
   assert.ok(w.calls.some((c) => c.join(' ') === `npx --no-install vitest run ${file}`));
 });
 
-test('changed apps test included by vitest → vitest run; not included → not matched', () => {
-  const file = 'apps/velo/tests/claudeConnections.test.ts';
-  const w = world({ status: `?? ${file}\n`, files: { [file]: 'it("x", () => {});\n' }, vitestList: `[velo] ${file}\n` });
-  const r = finishCheck(w.deps);
-  assert.equal(r.status, 'green');
-  assert.ok(w.calls.some((c) => c.join(' ') === `npx --no-install vitest run ${file}`));
-
-  const other = 'apps/kassa/tests/x.test.ts';
-  const r2 = finishCheck(world({ status: `?? ${other}\n`, files: { [other]: 'ok\n' }, vitestList: '' }).deps);
-  assert.equal(r2.status, 'not-run');
-  assert.deepEqual(r2.notRun, [{ file: other, reason: "not matched by its package's vitest include" }]);
-});
-
 test('.fallowrc.json raising a threshold is a finding; lowering is not', () => {
   const raised = scanSuppressions({
     diffText: [

@@ -67,8 +67,6 @@
     "docs/scripts/**",
     // Package test harnesses incl. mocks wired via vitest config aliases
     "packages/*/tests/**",
-    // App unit tests, run through the root vitest `projects` list (apps/velo, #4098)
-    "apps/*/tests/**",
     "pocs/*/scripts/**",
     // Nuxt `#alias` targets (nuxt.config alias maps) — invisible to import analysis (#1239):
     // '#crouton/types' → collections.ts (crouton-core/nuxt.config.ts:175), consumed by
