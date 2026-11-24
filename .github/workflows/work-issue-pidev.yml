@@ -540,7 +540,7 @@ jobs:
         if: ${{ inputs.mode != 'plan' }}
         env:
           JOB_START: ${{ steps.job-start.outputs.ts }}
-        run: node scripts/lib/pi-time-budget.mjs minutes --start "$JOB_START" >> "$GITHUB_OUTPUT"
+        run: node "$RUNNER_TEMP/scripts/lib/pi-time-budget.mjs" minutes --start "$JOB_START" >> "$GITHUB_OUTPUT"
 
       - id: pi
         timeout-minutes: ${{ inputs.mode == 'plan' && 45 || fromJSON(steps.budget.outputs.pi_minutes || '40') }}

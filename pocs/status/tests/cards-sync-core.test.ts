@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  EPIC_SYNC_MARKER, SIGNOFF_PREVIEW_MARKER, cardKey, changesPayload, collectAsks, planSync, stuckCounts,
+  EPIC_SYNC_MARKER, SIGNOFF_PREVIEW_MARKER, cardKey, changesFromFiles, changesPayload, collectAsks, planSync, stuckCounts,
   type Ask, type EpicSyncItem, type ExistingCard, type GhComment, type GhCommit, type GhEvent, type GhUser, type QuizItem, type SyncItem
 } from '../server/utils/cards-sync-core'
 
@@ -600,5 +600,36 @@ describe('review card → payload.changes', () => {
     const one = JSON.stringify(reviewAsk(files).payload.changes)
     const two = JSON.stringify(reviewAsk([...files].reverse()).payload.changes)
     expect(one).toBe(two)
+  })
+})
+
+describe('delivery card → payload.changes (#4501)', () => {
+  const FILES = [
+    { filename: 'pocs/a.ts', additions: 5, deletions: 1 },
+    { filename: 'pocs/b.ts', additions: 100, deletions: 30 },
+    { filename: 'pocs/c.ts', additions: 15, deletions: 4 },
+    { filename: 'pocs/d.ts', additions: 1, deletions: 0 }
+  ]
+
+  // covers: T1
+  it('changesFromFiles equals changesPayload for the same files; null for empty/undefined', () => {
+    expect(changesFromFiles(FILES)).toEqual(changesPayload({ ...signoffPr(10, 11), files: FILES }))
+    expect(changesFromFiles(FILES)).toEqual({ files: 4, added: 121, removed: 35, top: ['pocs/b.ts', 'pocs/c.ts', 'pocs/a.ts'] })
+    expect(changesFromFiles([])).toBeNull()
+    expect(changesFromFiles(undefined)).toBeNull()
+  })
+
+  // covers: T1
+  it('a delivery epic with epicPr → changes with pr and prCount', () => {
+    const a = collectAsks({ items: [{ ...deliveryEpic(), epicPr: { number: 4486, files: FILES, count: 2 } }] }).asks[0]!
+    expect(a.kind).toBe('delivery')
+    expect(a.payload.changes).toEqual({ files: 4, added: 121, removed: 35, top: ['pocs/b.ts', 'pocs/c.ts', 'pocs/a.ts'], pr: 4486, prCount: 2 })
+  })
+
+  // covers: T1
+  it('a delivery epic without epicPr (or with no files) → no changes key', () => {
+    expect(collectAsks({ items: [deliveryEpic()] }).asks[0]!.payload).not.toHaveProperty('changes')
+    const empty = collectAsks({ items: [{ ...deliveryEpic(), epicPr: { number: 4486, files: [], count: 1 } }] }).asks[0]!
+    expect(empty.payload).not.toHaveProperty('changes')
   })
 })
