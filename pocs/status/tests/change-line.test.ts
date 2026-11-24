@@ -44,3 +44,28 @@ describe('changeLine', () => {
     expect(changeLine(card({ changes: { files: 2, added: 0, removed: 0, top: [] } }))?.text).toBe('2 files · +0 −0')
   })
 })
+
+describe('changeLine — delivery card (#4501)', () => {
+  const delivery = (changes: Record<string, unknown>) => card({ changes }, { kind: 'delivery', sourceType: 'issue', sourceNumber: 4388 })
+
+  // covers: T3
+  it('delivery card with changes.pr → links that PR\'s Files tab', () => {
+    expect(changeLine(delivery({ ...CHANGES, pr: 4486, prCount: 1 }))).toEqual({
+      text: '3 files · +12 −4 · cards/Review.vue, utils/a.ts, b.ts',
+      filesUrl: 'https://github.com/FriendlyInternet/nuxt-crouton/pull/4486/files'
+    })
+  })
+
+  // covers: T3
+  it('prCount > 1 → "newest of N PRs into main" suffix', () => {
+    expect(changeLine(delivery({ ...CHANGES, pr: 4486, prCount: 2 }))?.text).toMatch(/ · newest of 2 PRs into main$/)
+  })
+
+  // covers: T3
+  it('delivery card without a valid pr → null; a non-delivery issue card with pr → null', () => {
+    expect(changeLine(delivery(CHANGES))).toBeNull()
+    expect(changeLine(delivery({ ...CHANGES, pr: 0 }))).toBeNull()
+    expect(changeLine(delivery({ ...CHANGES, pr: '4486' }))).toBeNull()
+    expect(changeLine(card({ changes: { ...CHANGES, pr: 4486 } }, { kind: 'issue', sourceType: 'issue' }))).toBeNull()
+  })
+})

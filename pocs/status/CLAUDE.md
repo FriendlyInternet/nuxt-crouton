@@ -21,6 +21,9 @@ closed issue's 👤 For humans section, approval = its `Packages-approved:` line
 Every PR review card whose file list was read also carries `payload.changes = { files, added, removed, top }` (top = the
 3 largest files, ties by name); the card shows one muted "N files · +A −R · …" line with a "See the code changes" link
 (`app/utils/change-line.ts`, `app/components/cards/Changes.vue`).
+A delivery card for an epic whose merged `Epic #N:` PR into main was found carries the same `payload.changes` plus `pr`
+and `prCount` (newest merged PR by `merged_at`; the line links that PR's Files tab and says "newest of N PRs into main"
+when N > 1, #4501). A failed search or file read leaves the card unchanged for that sync.
 A card whose ticket is claimed by a chat (#4019) — directly, or via its parent epic up to 3 hops; a PR card uses its
 `Closes #N` issue — carries `payload.claim = { chat, name }` and shows a `<chat> · <name>` badge
 (`server/utils/claim-core.ts`, a copy of `activeClaim` from `scripts/lib/chat-claim.mjs` — keep in step;
