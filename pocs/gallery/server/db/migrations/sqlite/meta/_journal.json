@@ -47,15 +47,50 @@
     {
       "idx": 6,
       "version": "6",
-      "when": 1795107700445,
-      "tag": "0006_team_roles",
+      "when": 1794846022554,
+      "tag": "0006_futuristic_inhumans",
       "breakpoints": true
     },
     {
       "idx": 7,
       "version": "6",
-      "when": 1795163574928,
-      "tag": "0007_admin_removed_actions",
+      "when": 1794860592780,
+      "tag": "0007_strange_giant_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1794860605018,
+      "tag": "0008_products_per_location",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1795081102439,
+      "tag": "0009_drop_inventory_mode",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1795157791916,
+      "tag": "0010_warm_quasar",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1795511790916,
+      "tag": "0011_fantastic_blink",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1795541809965,
+      "tag": "0012_faithful_groot",
       "breakpoints": true
     }
   ]

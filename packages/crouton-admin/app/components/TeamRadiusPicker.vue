@@ -10,21 +10,27 @@
  *
  * @example
  * ```vue
- * <TeamRadiusPicker v-model="radius" />
+ * <TeamRadiusPicker v-model="radius" :label="`Corners · Soft`" />
  * ```
+ *
+ * `label` overrides the heading (default: the translated "Corners").
  */
-import type { ThemeRadius } from '../composables/useTeamTheme'
+import { RADIUS_OPTIONS, type ThemeRadius } from '../composables/useTeamTheme'
+import { radiusLabel } from '../utils/theme-picker'
 
 interface Props {
   /** Selected radius value */
   modelValue?: ThemeRadius
   /** Disable interaction */
   disabled?: boolean
+  /** Heading text (defaults to the translated "Corners") */
+  label?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
   modelValue: 0.25,
-  disabled: false
+  disabled: false,
+  label: undefined
 })
 
 const emit = defineEmits<{
@@ -34,13 +40,9 @@ const emit = defineEmits<{
 // Available radius options with labels
 const { t } = useT()
 
-const radiusOptions = computed<{ value: ThemeRadius; label: string }[]>(() => [
-  { value: 0, label: t('themeSettings.radiusSharp') },
-  { value: 0.125, label: 'XS' },
-  { value: 0.25, label: 'SM' },
-  { value: 0.375, label: 'MD' },
-  { value: 0.5, label: 'LG' }
-])
+const radiusOptions = computed<{ value: ThemeRadius; label: string }[]>(() =>
+  RADIUS_OPTIONS.map(value => ({ value, label: radiusLabel(value, t) }))
+)
 
 function selectRadius(radius: ThemeRadius) {
   if (!props.disabled) {
@@ -52,7 +54,7 @@ function selectRadius(radius: ThemeRadius) {
 <template>
   <div class="space-y-2">
     <label class="text-sm font-medium text-default">
-      {{ t('themeSettings.borderRadius') }}
+      {{ label ?? t('themeSettings.corners') }}
     </label>
     <div class="flex flex-wrap gap-2">
       <button

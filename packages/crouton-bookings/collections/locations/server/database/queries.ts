@@ -3,6 +3,7 @@ import { eq, and, desc, inArray } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/sqlite-core'
 import * as tables from './schema'
 import type { BookingsLocation, NewBookingsLocation } from '../../types'
+import { catalogProducts } from '@fyit/crouton-catalog/collections/products/server/database/schema'
 import { user } from '~~/server/db/schema'
 
 export async function getAllBookingsLocations(teamId: string) {
@@ -246,4 +247,11 @@ export async function deleteBookingsLocation(
   }
 
   return { success: true }
+}
+
+// Listed products must belong to this team (#3967)
+export async function assertBookingsLocationReferences(teamId: string, data: Record<string, any>) {
+  await assertRefsInTeam(useDB(), teamId, [
+    { field: 'products', table: catalogProducts, value: Array.isArray(data.products) ? data.products.map((p: any) => p.product) : undefined },
+  ])
 }

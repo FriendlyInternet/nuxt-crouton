@@ -61,15 +61,50 @@
     {
       "idx": 8,
       "version": "6",
-      "when": 1795107696540,
-      "tag": "0008_team_roles",
+      "when": 1794853984726,
+      "tag": "0008_brave_gorgon",
       "breakpoints": true
     },
     {
       "idx": 9,
       "version": "6",
-      "when": 1795163574921,
-      "tag": "0009_admin_removed_actions",
+      "when": 1794860589643,
+      "tag": "0009_massive_mister_sinister",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1794860602168,
+      "tag": "0010_products_per_location",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1795081098142,
+      "tag": "0011_drop_inventory_mode",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1795157784715,
+      "tag": "0012_breezy_ben_parker",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1795511786586,
+      "tag": "0013_green_piledriver",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1795541799641,
+      "tag": "0014_hard_christian_walker",
       "breakpoints": true
     }
   ]

@@ -27,9 +27,10 @@
   },
   "pocs/kvr/schemas/settings.json": {
     "package": "packages/crouton-bookings/schemas/settings.json",
-    "reason": "Intentional — kvr is a work-permit app, not a booking app: it drops the package's `groups`/`statuses` repeaters and adds its own `recipients` email list.",
+    "reason": "Intentional — kvr doesn't use crouton-bookings, so its settings table has no `sendEmails` column (nor the `groups`/`statuses` repeaters) and has its own `recipients` email list instead.",
     "fields": [
       "-groups",
+      "-sendEmails",
       "-statuses",
       "+recipients"
     ]

@@ -170,7 +170,7 @@ export function useScopedAccess(
     sessionCookie(maxAge).value = data
 
     // Also set token cookie for server-side validation. Note: when the
-    // server already set its httpOnly copy (redeem/mint), this write is a
+    // server already set its httpOnly copy (redeem), this write is a
     // silent no-op — the httpOnly cookie wins and JS can never clear it.
     const tokenCookie = useCookie(cookieName, { maxAge })
     tokenCookie.value = data.token

@@ -54,7 +54,7 @@ const _bookingsBookingsConfig = {
     date: null,
     slot: null,
     group: '',
-    quantity: 0,
+    quantity: 1,
     status: ''
   },
   columns: bookingsBookingsColumns,

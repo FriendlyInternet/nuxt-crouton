@@ -99,7 +99,6 @@
       "signIn": "Inloggen"
     },
     "calendar": {
-      "units": "Eenheden",
       "noBookings": "Geen boekingen",
       "bookingCount": "{count} boeking | {count} boekingen",
       "closed": "Gesloten",
@@ -110,6 +109,9 @@
     "card": {
       "activity": "Activiteit",
       "on": "op {date}",
+      "editBooking": "Boeking bewerken",
+      "showDayInCalendar": "Toon {date} in de kalender",
+      "emailPanel": "E-mailstatus",
       "emailLabels": {
         "confirm": "Bevestiging",
         "reminder": "Herinnering",
@@ -148,10 +150,10 @@
     "createCard": {
       "editBookingFor": "Boeking bewerken voor",
       "newBookingFor": "Nieuwe boeking voor",
-      "howMany": "Hoeveel heb je nodig?",
-      "pickTimeSlot": "Kies een tijdslot",
-      "left": "over",
-      "ofAvailable": "van {count} beschikbaar",
+      "product": "Product",
+      "time": "Tijd",
+      "amount": "Aantal",
+      "amountLabel": "{booked} van {free} beschikbaar",
       "selectLocation": "Selecteer een locatie",
       "sure": "zeker?",
       "cancel": "Verwijderen",
@@ -205,13 +207,17 @@
       "allTeamMembers": "Alle teamleden",
       "bookingRules": "Boekingsregels",
       "bookingRulesHint": "Bepaal hoe boekingen werken op deze locatie.",
-      "bookingMode": "Boekingsmodus",
-      "timeSlots": "Tijdslots",
-      "timeSlotsDescription": "Boek specifieke benoemde tijdslots per dag",
-      "inventory": "Inventaris",
-      "inventoryDescription": "Boek uit een pool van beschikbare eenheden",
-      "availableUnits": "Beschikbare Eenheden",
-      "availableUnitsHelp": "Aantal eenheden dat tegelijkertijd beschikbaar is voor boeking.",
+      "products": "Producten",
+      "productsHint": "Wat hier geboekt kan worden, en hoeveel van elk tegelijk.",
+      "product": "Product",
+      "stock": "Voorraad",
+      "addProduct": "Product toevoegen",
+      "removeProduct": "Product verwijderen",
+      "pickProduct": "Kies een product",
+      "productInactive": "Inactief",
+      "productRemoved": "Verwijderd",
+      "productsNone": "Deze locatie krijgt bij opslaan een eigen product.",
+      "productsEmpty": "Deze locatie kan pas geboekt worden als er een product is toegevoegd.",
       "maxBookingsPerMonth": "Max Boekingen Per Maand",
       "maxBookingsPerMonthHelp": "Beperk hoeveel boekingen een gebruiker per kalendermaand kan maken. Laat leeg voor onbeperkt.",
       "unlimited": "Onbeperkt",
@@ -512,12 +518,13 @@
       "openDays": "Openingsdagen",
       "slotSchedule": "Slotrooster",
       "blockedDates": "Geblokkeerde datums",
-      "inventoryMode": "Voorraadmodus",
       "maxBookingsPerMonth": "Max boekingen per maand",
       "allowedMemberIds": "Toegestane leden",
       "translations": "Vertalingen",
       "statuses": "Statussen",
       "groups": "Leeftijdsgroepen",
+      "sendEmails": "E-mails versturen",
+      "sendEmailsHint": "Uit: boekingsmails worden niet verstuurd en elk wordt gelogd als overgeslagen",
       "name": "Naam",
       "subject": "Onderwerp",
       "body": "Inhoud",
@@ -561,7 +568,8 @@
     "emailStatus": {
       "pending": "In afwachting",
       "sent": "Verzonden",
-      "failed": "Mislukt"
+      "failed": "Mislukt",
+      "skipped": "Overgeslagen"
     }
   }
 }

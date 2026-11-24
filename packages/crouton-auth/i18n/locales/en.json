@@ -13,6 +13,20 @@
     "justAMoment": "Just a moment…"
   },
   "auth": {
+    "consent": {
+      "title": "{client} wants to access your teams",
+      "unnamedClient": "An app",
+      "via": "Request from {host}",
+      "intro": "If you allow it, this app will be able to:",
+      "scopes": {
+        "pages": "read and edit your pages live — without saving",
+        "offline_access": "stay connected without asking you to sign in again"
+      },
+      "allow": "Allow",
+      "deny": "Deny",
+      "missingRequest": "This request is no longer valid. Start the connection again from the app.",
+      "failed": "Could not send your answer. Try again."
+    },
     "resetLinkSentDescription": "We sent a password reset link to your email. Click the link to reset your password.",
     "inviteOnly": {
       "title": "{app} is invite-only",

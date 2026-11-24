@@ -1,4 +1,5 @@
 import { croutonRedirectsConfig } from './composables/useCroutonRedirects'
+import { disabledButtonCompoundVariants } from './theme/disabled-button'
 
 // NOTE: the `croutonLayoutBlocks` defaults (collection-list / entity-form / stats)
 // moved to @fyit/crouton-layout with the layout engine (#751). They merge back in
@@ -12,5 +13,11 @@ export default defineAppConfig({
   croutonActions: {
     'site:manage': { label: 'permissions.siteManage' },
     'collections:manage': { label: 'permissions.collectionsManage' },
+  },
+  // Disabled UButton reads as disabled, not just faded (#4329).
+  ui: {
+    button: {
+      compoundVariants: disabledButtonCompoundVariants,
+    },
   },
 })

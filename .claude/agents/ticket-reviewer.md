@@ -25,6 +25,8 @@ THE SUBJECT of this review is `{{subject}}` (#3846):
 - a ticket number: grade only that ticket, in full, against the epic-branch checkout.
 If a ticket shows the STEP LIST itself is wrong (a missing step, a wrong order, a step that cannot be built as planned), give that ticket the verdict `plan-wrong` and add a `### Why` section that says plainly what is wrong with the step list. The orchestrator then fixes the step list by hand.
 
+TITLES (#4353): the epic file ends with an *Automatic title check*. For each ticket it lists, write ONE line `Suggested title: …` directly under that ticket's `## Ticket #N` heading, before `### Verdict`. Keep it to at most 140 characters, plain words, about what the owner will notice, with no app/package/commit-type prefix (the component label already shows the area). A title never affects the verdict or any rubric item.
+
 Verdict per ticket: `no-go` if any of 3–6, 8 or 9 is FAIL; else `needs-owner` if 7 is FAIL; else `no-go` if 10 is FAIL; else `go` — or `plan-wrong` as above. Write the file in EXACTLY this shape, one section per ticket in the file, plain language for the owner, no insider jargon:
 
 <!-- ticket-review:v1 -->
@@ -41,6 +43,7 @@ go | no-go | needs-owner
 (only for needs-owner)
 
 ## Ticket #<number>
+Suggested title: … (only for a ticket the Automatic title check lists)
 ### Verdict
 go | no-go | needs-owner | plan-wrong
 ### Rubric

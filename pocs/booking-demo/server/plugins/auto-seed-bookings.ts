@@ -22,6 +22,7 @@
  * try/catch so a seed failure never breaks team creation.
  */
 import { defineNitroPlugin } from 'nitropack/runtime'
+import { and, eq } from 'drizzle-orm'
 import { bookingsBookings } from '@fyit/crouton-bookings/collections/bookings/server/database/schema'
 import { bookingsLocations } from '@fyit/crouton-bookings/collections/locations/server/database/schema'
 import { bookingsSettings } from '@fyit/crouton-bookings/collections/settings/server/database/schema'
@@ -36,12 +37,14 @@ const GROUPS = [
   { id: 'youth', value: 'youth', label: 'Youth' },
 ]
 
+// `stock` = how many of the location's own product can be booked per slot (#4172);
+// a location without slots has an empty `slots` list and books the full day.
 const LOCATIONS = [
-  { key: 'center-court', title: 'Center Court', color: '#3b82f6', city: 'Antwerpen', inventory: false, quantity: null as number | null,
-    slots: [{ id: 'slot-0900', label: '09:00 – 10:00', capacity: 1 }, { id: 'slot-1000', label: '10:00 – 11:00', capacity: 1 }, { id: 'slot-1100', label: '11:00 – 12:00', capacity: 2 }] },
-  { key: 'park-court', title: 'Park Court', color: '#22c55e', city: 'Gent', inventory: false, quantity: null,
-    slots: [{ id: 'slot-1400', label: '14:00 – 15:00', capacity: 1 }, { id: 'slot-1500', label: '15:00 – 16:00', capacity: 1 }] },
-  { key: 'kayak-rental', title: 'Kayak Rental', color: '#f59e0b', city: 'Brugge', inventory: true, quantity: 8, slots: null as unknown[] | null },
+  { key: 'center-court', title: 'Center Court', color: '#3b82f6', city: 'Antwerpen', stock: 1,
+    slots: [{ id: 'slot-0900', label: '09:00 – 10:00' }, { id: 'slot-1000', label: '10:00 – 11:00' }, { id: 'slot-1100', label: '11:00 – 12:00' }] },
+  { key: 'park-court', title: 'Park Court', color: '#22c55e', city: 'Gent', stock: 1,
+    slots: [{ id: 'slot-1400', label: '14:00 – 15:00' }, { id: 'slot-1500', label: '15:00 – 16:00' }] },
+  { key: 'kayak-rental', title: 'Kayak Rental', color: '#f59e0b', city: 'Brugge', stock: 8, slots: [] as { id: string, label: string }[] },
 ]
 
 const BOOKINGS = [
@@ -49,8 +52,8 @@ const BOOKINGS = [
   { loc: 'center-court', slot: ['slot-1100'], inDays: 1, quantity: 1, status: 'confirmed', group: 'youth' },
   { loc: 'center-court', slot: ['slot-1000'], inDays: 4, quantity: 1, status: 'pending', group: 'adults' },
   { loc: 'park-court', slot: ['slot-1400'], inDays: 2, quantity: 1, status: 'pending', group: 'adults' },
-  { loc: 'park-court', slot: ['slot-1500'], inDays: 6, quantity: 2, status: 'confirmed', group: 'youth' },
-  // Inventory (slotless) bookings: an empty slot array, NOT null — `slot` is
+  { loc: 'park-court', slot: ['slot-1500'], inDays: 6, quantity: 1, status: 'confirmed', group: 'youth' },
+  // Slotless bookings: an empty slot array, NOT null — `slot` is
   // NOT NULL, and drizzle binds JS null as SQL NULL (skipping the json column's
   // serializer), which would violate the constraint. `[]` = "no named slots".
   { loc: 'kayak-rental', slot: [] as string[], inDays: 3, quantity: 2, status: 'confirmed', group: null as string | null },
@@ -76,16 +79,25 @@ export default defineNitroPlugin((nitroApp) => {
 
       await db.insert(bookingsLocations).values(LOCATIONS.map(l => ({
         id: locId(l.key), title: l.title, color: l.color, city: l.city,
-        inventoryMode: l.inventory, quantity: l.inventory ? l.quantity : null,
-        slots: l.inventory ? null : l.slots,
+        slots: l.slots,
         translations: { en: { title: l.title, city: l.city }, nl: { title: l.title, city: l.city } },
         ...base,
       }))).onConflictDoNothing()
+      // Every location lists a product: its own `loc-<id>` (#4044, crouton-bookings layer util).
+      // `ensureLocationProducts` gives it stock 1 and returns early when `products` is
+      // already set, so the demo stock is written after it (#4172).
+      for (const l of LOCATIONS) {
+        await ensureLocationProducts(db, teamId, locId(l.key))
+        await db.update(bookingsLocations)
+          .set({ products: [{ product: 'loc-' + locId(l.key), stock: l.stock }] } as any)
+          .where(and(eq(bookingsLocations.id, locId(l.key)), eq(bookingsLocations.teamId, teamId)))
+      }
 
       await db.insert(bookingsBookings).values(BOOKINGS.map((b, i) => ({
         id: `seed-${teamId}-bk-${i}`, location: locId(b.loc),
         date: new Date(now.getTime() + b.inDays * DAY_MS),
         slot: b.slot, group: b.group, quantity: b.quantity, status: b.status,
+        product: 'loc-' + locId(b.loc),
         ...base,
       }))).onConflictDoNothing()
 

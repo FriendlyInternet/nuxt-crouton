@@ -55,6 +55,20 @@ test('pi-conflict-resolver, epic PR (#3002)', () => {
   // #3775: the owner's request runs after the merge (pi-request step), so it can't land inside it.
   assert.ok(!out.includes('Please rename `foo`'), 'the resolver prompt does not carry the owner comment')
   assert.ok(out.includes('Resolve the conflict and nothing else'))
+  // #4320: migrations are regenerated, never typed into
+  assert.ok(out.includes('MIGRATION FILES ARE NEVER HAND-MERGED'))
+  assert.ok(out.includes('db:generate'))
+})
+
+// covers: T7
+test('#4487 the resolver persona builds the packages before db:generate in its migration paragraph', () => {
+  const out = renderPrompt('pi-conflict-resolver', { pr: '1', branch: 'b', issue: '1', task: 'x', feedback: 'x' })
+  const para = out.split('\n').find((l) => l.startsWith('MIGRATION FILES ARE NEVER HAND-MERGED'))
+  assert.ok(para, 'migration paragraph present')
+  assert.ok(para.includes('build:packages'), para)
+  assert.ok(para.indexOf('build:packages') < para.indexOf('db:generate'), 'build comes before db:generate')
+  assert.ok(para.includes('does not list'))
+  assert.ok(!para.includes("after the base's last journal entry"))
 })
 
 test('pi-conflict-resolver without a task is a hard error', () => {

@@ -13,6 +13,20 @@
     "justAMoment": "Un instant…"
   },
   "auth": {
+    "consent": {
+      "title": "{client} veut accéder à vos équipes",
+      "unnamedClient": "Une application",
+      "via": "Demande depuis {host}",
+      "intro": "Si vous autorisez, cette application pourra :",
+      "scopes": {
+        "pages": "lire et modifier vos pages en direct — sans enregistrer",
+        "offline_access": "rester connectée sans vous redemander de vous connecter"
+      },
+      "allow": "Autoriser",
+      "deny": "Refuser",
+      "missingRequest": "Cette demande n'est plus valide. Recommencez la connexion depuis l'application.",
+      "failed": "Impossible d'envoyer votre réponse. Réessayez."
+    },
     "resetLinkSentDescription": "Nous avons envoyé un lien de réinitialisation à votre e-mail. Cliquez sur le lien pour réinitialiser votre mot de passe.",
     "inviteOnly": {
       "title": "{app} fonctionne uniquement sur invitation",

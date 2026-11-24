@@ -73,7 +73,8 @@ app's own rows + layout still seed. `crouton-seed` throws only if **every** chun
 The contract (`SeedProvider`, `SeedContext`, `createPageWithBlocks`) lives in
 `@fyit/crouton-core/shared/seed`; each package ships its provider at `<pkg>/seed`.
 Wire it into an app with `db:seed:local` / `db:seed:remote` scripts (see
-`apps/fanfare/package.json`).
+`apps/fanfare/package.json`). `crouton init` now writes `db:seed` (local) and
+`db:seed:staging` for you; `pnpm preview` calls `db:seed` (#4377).
 
 **Scoped to the tables the app actually has (#1165):** provider discovery follows
 `extends` + *dependencies* (transitively), but a table only exists if the app *extended*
@@ -95,6 +96,8 @@ runner also loads every generated collection's `layers/*/collections/*/seed.json
 app's public surfaces aren't empty. Idempotent (stable ids) — re-deploys upsert
 in place. Edit `seed.json` to replace the samples with real content, or delete it
 to seed nothing for that collection. Hierarchy collections get no fixture.
+Select fields seed the option's plain `value` (a `{value,label}` option becomes
+`"fr"`), matching the string column (#4377).
 
 ## Add Command (Module Installation)
 
@@ -232,6 +235,7 @@ crouton init my-app --dry-run
 | `--domain <zone>` | CF zone for custom-domain routes → `<app>.<zone>` (prod) + `<app>-staging.<zone>` (staging); with `--poc`: staging only, at `<app>.<zone>` (no prod route); auto-bound on deploy. Omit → id-less `*.workers.dev` |
 | `--poc` | Scaffold into `pocs/<name>` (the incubator) instead of `apps/<name>` |
 | `--out <dir>` | Explicit target directory — overrides `--poc`; defaults to `apps/<name>` inside the crouton monorepo, `./<name>` elsewhere |
+| `--site` | Small public site: one team (`test1`, no switcher/creation/management), one locale (`en`) with `runtimeConfig.public.croutonPages.hideLocaleInUrl: true`, an empty `appDomains` to fill in; adds `@fyit/crouton-pages`. Writes no pages, middleware or `routingMode`. See [crouton-pages](../crouton-pages/CLAUDE.md) |
 | `--dry-run` | Preview without writing files |
 
 ```bash
@@ -240,6 +244,9 @@ crouton init quotes --poc
 
 # Explicit output directory (overrides --poc)
 crouton init scratch --out sandboxes/scratch
+
+# A small one-team, one-language public site (#4263)
+crouton init my-site --site --poc
 ```
 
 ### What `crouton init` Does
@@ -251,14 +258,20 @@ crouton init scratch --out sandboxes/scratch
    (has `.crouton.json` or `package.json`); it **scaffolds *into* a config-only dir** (one that has
    just `crouton.config.js`, e.g. the schema-sign-off step's output) and **preserves that reviewed
    config** — so the schema-first pipeline is a single `crouton init` command, not a manual
-   workaround (#1233).
-2. **generate** — Generates collections from `crouton.config.js` (if collections are defined)
+   workaround (#1233). When the preserved config's schemas use a field type a package detects
+   (image/file → `@fyit/crouton-assets`, with `hub.blob` + R2 buckets), that package is added to
+   `extends` and dependencies; a collection with `seed` adds the `drizzle-seed` devDependency;
+   CF scaffolds get `db:seed` / `db:seed:staging` (`crouton-seed`) scripts (#4377).
+2. **generate** — Generates collections from `crouton.config.js` (if collections are defined);
+   if generation throws, init prints the real error and skips migrations, and it says
+   'no collections' only when the config has none (#4377).
 3. **migrations** — Generates the initial D1 migrations **directly** (drizzle-kit,
    no Nuxt build — see the `crouton add` section). On an out-of-monorepo scaffold
    whose deps aren't installed (so a layer can't resolve) it **defers** and the
    summary prints the exact `pnpm install` → `db:generate` sequence — so a fresh
    app is never silently shipped without its migrations (#523, #1445 WS2).
-4. **doctor** — Validates everything is wired correctly
+4. **doctor** — Validates everything is wired correctly — including a warning for any `locales`
+   entry outside the built-in UI languages (en, nl, fr), which falls back to the default locale (#4377).
 5. **Summary** — Prints next steps (dev server, deploy)
 
 ## Rollback Command (`crouton rollback`)
@@ -886,7 +899,7 @@ reads that list instead:
 | Which packages' setup questions (manifest `configuration`) are asked | `lib/utils/manifest-configuration.ts` |
 | Whether the default layout is calendar-primary (bookings extended) | `lib/compose-layout.ts` |
 | Which packages `crouton doctor` expects in `dependencies` | `lib/doctor.ts` |
-| Which packages `crouton init --features` writes into `extends` (core + each feature's manifest package unless core bundles it) | `lib/scaffold-app.ts` |
+| Which packages `crouton init --features` writes into `extends` (core + each feature's manifest package and, transitively, its manifest `dependencies` — named by feature key, package name `@fyit/crouton-x` or bare `crouton-x` — unless core bundles it; an unmatched dependency is skipped with a warning) | `lib/scaffold-app.ts` |
 
 The generator **never writes `extends`** from a features block any more (the hardcoded
 `framework-packages.ts` table and `syncFrameworkPackages` are gone). Add a package with

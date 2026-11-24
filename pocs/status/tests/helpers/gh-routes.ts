@@ -20,14 +20,62 @@ export const gh = {
   /** #3880: one open epic (#900) with a bot conflict comment; `behind_by` of the compare. */
   epicBehind: undefined as number | null | undefined,
   /** PR number → its changed files (served 100 per page); unset → no files. */
-  prFiles: {} as Record<number, Array<{ filename: string }>>,
+  prFiles: {} as Record<number, Array<{ filename: string, additions?: number, deletions?: number }>>,
   /** #4233: cards already stored before the sync. */
   existingCards: [] as unknown[],
   /** #4233: quiz search hits, served only to the matching typed search. */
   quizHits: { issue: [] as any[], pr: [] as any[] },
   /** #4233: issue/PR number → its comments (quiz comments). */
-  quizComments: {} as Record<number, unknown[]>
+  quizComments: {} as Record<number, unknown[]>,
+  /** #4349: issues served by the `labels=<label>` issue lists (blocked, to-test, work-this, …). */
+  labelled: {} as Record<string, any[]>,
+  /** #4349: the `labels=<label>` issue list that answers 500. */
+  failList: null as string | null,
+  /** #4501: issue number → its events (default none). */
+  events: {} as Record<number, unknown[]>,
+  /** #4501: hits for the `in:title "Epic #N:"` merged-epic-PR search. */
+  epicPrHits: [] as any[],
+  /** #4501: the epic-PR search answers 500. */
+  failEpicSearch: false,
+  /** #4349: the in-memory `pipeline_items` table (see `boardQueries`). */
+  board: [] as any[],
+  /** #4349: board writes made by the sync, in order. */
+  boardWrites: [] as Array<{ op: 'create' | 'update' | 'delete', id?: string, data?: any }>
 }
+
+/**
+ * In-memory stand-in for the generated `pipeline_items` queries (no D1 in vitest). Mock the module
+ * with `boardMock()` called lazily from the factory, so it reads THIS module's `gh` (the tests'
+ * `vi.resetModules()` would otherwise hand the factory a fresh copy):
+ * `vi.mock('../layers/pipeline/collections/items/server/database/queries', () => boardMock())`.
+ */
+export const boardQueries = {
+  getAllPipelineItems: vi.fn(async () => gh.board.map(r => ({ ...r }))),
+  createPipelineItem: vi.fn(async (data: any) => {
+    const row = { id: `row${gh.board.length + 1}`, ...data }
+    gh.board.push(row)
+    gh.boardWrites.push({ op: 'create', data })
+    return row
+  }),
+  updatePipelineItem: vi.fn(async (id: string, _team: string, _user: string, patch: any) => {
+    const row = gh.board.find(r => r.id === id)
+    Object.assign(row, patch)
+    gh.boardWrites.push({ op: 'update', id, data: patch })
+    return row
+  }),
+  deletePipelineItem: vi.fn(async (id: string) => {
+    gh.board = gh.board.filter(r => r.id !== id)
+    gh.boardWrites.push({ op: 'delete', id })
+    return { success: true }
+  })
+}
+/** The module shape for `vi.mock`: each query calls `boardQueries` at call time. */
+export const boardMock = () => ({
+  getAllPipelineItems: (...a: unknown[]) => (boardQueries.getAllPipelineItems as any)(...a),
+  createPipelineItem: (...a: unknown[]) => (boardQueries.createPipelineItem as any)(...a),
+  updatePipelineItem: (...a: unknown[]) => (boardQueries.updatePipelineItem as any)(...a),
+  deletePipelineItem: (...a: unknown[]) => (boardQueries.deletePipelineItem as any)(...a)
+})
 
 export function resetGh() {
   gh.failComments = null
@@ -37,12 +85,20 @@ export function resetGh() {
   gh.existingCards = []
   gh.quizHits = { issue: [], pr: [] }
   gh.quizComments = {}
+  gh.labelled = {}
+  gh.failList = null
+  gh.events = {}
+  gh.epicPrHits = []
+  gh.failEpicSearch = false
+  gh.board = []
+  gh.boardWrites = []
+  for (const f of Object.values(boardQueries)) f.mockClear()
   fetchSpy.mockClear()
 }
 
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } })
 
-const signoffPulls = () => [10, 12].map(n => ({ number: n, title: `PR ${n}`, body: `Closes #${n + 1}\n${SIGNOFF}`, html_url: `https://github.com/o/r/pull/${n}`, user: BOT, labels: [], head: { sha: `sha${n}` }, updated_at: OLD }))
+const signoffPulls = () => [10, 12].map(n => ({ number: n, title: `PR ${n}`, body: `Closes #${n + 1}\n${SIGNOFF}`, html_url: `https://github.com/o/r/pull/${n}`, user: BOT, labels: [], head: { sha: `sha${n}` }, base: { ref: 'main' }, updated_at: OLD }))
 const draftPulls = () => Array.from({ length: 100 }, (_, k) => ({ number: 1000 + k, title: `Draft ${k}`, body: '', html_url: `https://github.com/o/r/pull/${1000 + k}`, user: BOT, labels: [], head: { sha: `d${k}` }, draft: true, updated_at: OLD }))
 
 const EPIC_ISSUE = { number: 900, title: 'Epic 900', body: '', html_url: 'https://github.com/o/r/issues/900', labels: [{ name: 'epic' }] }
@@ -57,6 +113,7 @@ function searchRoute(url: URL) {
   if (!q.includes('is:issue') && !q.includes('is:pull-request')) {
     return json({ message: "Query must include 'is:issue' or 'is:pull-request'" }, 422)
   }
+  if (q.includes('in:title') && q.includes('base:main')) return gh.failEpicSearch ? json({ message: 'boom' }, 500) : json({ items: gh.epicPrHits })
   if (q.includes('reached main')) return json({ items: q.includes('is:pull-request') ? gh.quizHits.pr : gh.quizHits.issue })
   const epicSearch = q.includes('no longer merges cleanly with main')
   return json({ items: epicSearch && gh.epicBehind !== undefined ? [EPIC_ISSUE] : [] })
@@ -84,12 +141,15 @@ const prCommitsRoute = (n: string) => json([{ sha: `sha${n}`, parents: [{}], com
 /** Path matcher → response; first match wins. */
 const ROUTES: Array<[RegExp, (url: URL, m: RegExpExecArray) => Response]> = [
   [/\/search\/issues$/, url => searchRoute(url)],
-  [/\/issues$/, () => json([])],
+  [/\/issues$/, (url) => {
+    const label = url.searchParams.get('labels') ?? ''
+    return label === gh.failList ? json({ message: 'boom' }, 500) : json(gh.labelled[label] ?? [])
+  }],
   [/\/pulls$/, url => pullsRoute(url)],
   [/\/repos\/[^/]+\/[^/]+\/commits$/, url => mainCommitsRoute(url)],
   [/\/compare\//, url => compareRoute(url)],
   [/\/issues\/(\d+)\/comments$/, (_u, m) => commentsRoute(Number(m[1]))],
-  [/\/issues\/\d+\/events$/, () => json([])],
+  [/\/issues\/(\d+)\/events$/, (_u, m) => json(gh.events[Number(m[1])] ?? [])],
   [/\/pulls\/(\d+)\/commits$/, (_u, m) => prCommitsRoute(m[1]!)],
   [/\/pulls\/(\d+)\/files$/, (url, m) => prFilesRoute(url, Number(m[1]))],
   [/\/issues\/\d+$/, () => json({ body: '## 👤 For humans\nAdds a field to the core.\n\n## 🤖 For agents\n- x' })]

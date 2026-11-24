@@ -26,6 +26,8 @@ vi.hoisted(() => {
   g.readBody = async (event: any) => event?.__body
   g.readValidatedBody = async (event: any, validate: any) => validate(event?.__body)
   g.createError = (err: any) => Object.assign(new Error(err?.statusText || err?.message || 'error'), err)
+  // Hand edits (#4146): delete/reorder pass useDB() to captureConfigWrite (mocked below)
+  g.useDB = () => ({})
 })
 
 vi.mock('@fyit/crouton-auth/server/utils/team', () => ({
@@ -44,6 +46,12 @@ vi.mock('./server/database/queries', () => ({
   updateSalesProduct: vi.fn(),
   deleteSalesProduct: vi.fn(),
   reorderSiblingsSalesProducts: vi.fn(),
+  // Hand edit (#3378): create/update check every reference belongs to the team
+  assertSalesProductReferences: vi.fn(),
+}))
+// Hand edit: every write is captured for config sync; not under test here
+vi.mock('../../server/utils/config-capture', () => ({
+  captureConfigWrite: vi.fn(),
 }))
 
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
@@ -53,6 +61,7 @@ import {
   updateSalesProduct,
   deleteSalesProduct,
   reorderSiblingsSalesProducts,
+  assertSalesProductReferences,
 } from './server/database/queries'
 import getHandler from './server/api/teams/[id]/sales-products/index.get.ts'
 import postHandler from './server/api/teams/[id]/sales-products/index.post.ts'
@@ -114,7 +123,14 @@ describe('sales/products API handlers (generated)', () => {
       ;(createSalesProduct as any).mockResolvedValue({ id: 'rec_1' })
       const result = await postHandler({ __body: VALID_BODY } as any)
       expect(createSalesProduct).toHaveBeenCalledWith(expect.objectContaining({ teamId: TEAM.id, owner: USER.id }))
+      expect(assertSalesProductReferences).toHaveBeenCalledWith(TEAM.id, expect.anything())
       expect(result).toMatchObject({ id: 'rec_1' })
+    })
+
+    it('refuses a reference to another team\'s record before writing (#3378)', async () => {
+      ;(assertSalesProductReferences as any).mockRejectedValueOnce(Object.assign(new Error('bad reference'), { status: 400 }))
+      await expect(postHandler({ __body: VALID_BODY } as any)).rejects.toMatchObject({ status: 400 })
+      expect(createSalesProduct).not.toHaveBeenCalled()
     })
 
     it('rejects an invalid body before writing', async () => {
@@ -139,6 +155,13 @@ describe('sales/products API handlers (generated)', () => {
       ;(updateSalesProduct as any).mockResolvedValue({ id: 'rec_1' })
       await patchHandler({ __params: { productId: 'rec_1' }, __body: {} } as any)
       expect(updateSalesProduct).toHaveBeenCalledWith('rec_1', TEAM.id, USER.id, expect.anything(), expect.anything())
+      expect(assertSalesProductReferences).toHaveBeenCalledWith(TEAM.id, expect.anything())
+    })
+
+    it('refuses a reference to another team\'s record before writing (#3378)', async () => {
+      ;(assertSalesProductReferences as any).mockRejectedValueOnce(Object.assign(new Error('bad reference'), { status: 400 }))
+      await expect(patchHandler({ __params: { productId: 'rec_1' }, __body: {} } as any)).rejects.toMatchObject({ status: 400 })
+      expect(updateSalesProduct).not.toHaveBeenCalled()
     })
 
     it('propagates a not-found from the query as a 404', async () => {

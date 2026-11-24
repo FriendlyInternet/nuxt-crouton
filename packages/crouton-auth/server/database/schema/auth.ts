@@ -7,6 +7,9 @@
  * - Organization Plugin: organization, member, invitation, organizationRole
  * - Passkey Plugin: passkey
  * - Two-Factor Plugin: twoFactor
+ * - JWT + MCP OAuth provider (#4096): jwks, oauthClient, oauthResource,
+ *   oauthClientResource, oauthRefreshToken, oauthAccessToken, oauthConsent,
+ *   oauthClientAssertion
  * - Stripe Plugin: subscription
  *
  * @see https://www.better-auth.com/docs/concepts/database
@@ -259,6 +262,177 @@ export const twoFactor = sqliteTable('twoFactor', {
 }, table => [
   index('two_factor_user_idx').on(table.userId)
 ])
+
+// ============================================================================
+// JWT + MCP OAuth provider tables (#4096)
+// ============================================================================
+//
+// Used only when `croutonAuth.mcpOAuth` is on (sign-in for Claude and other
+// MCP apps). Columns copied from better-auth@1.7.7 `plugins/jwt/schema` and
+// @better-auth/oauth-provider@1.7.7's schema. string[] and json fields are
+// stored as text (the adapter encodes them on SQLite). Every `clientId`
+// reference points at the public `oauthClient.clientId`, not the row id.
+// Where the provider declares no onDelete we use `cascade` — what Better
+// Auth's own migration generator fills in — so a client or user delete
+// doesn't fail on D1, which enforces foreign keys.
+
+/** JWKS table - signing keys for the jwt() plugin (access tokens, /jwks) */
+export const jwks = sqliteTable('jwks', {
+  id: text('id').primaryKey(),
+  publicKey: text('publicKey').notNull(),
+  privateKey: text('privateKey').notNull(),
+  createdAt: integer('createdAt', { mode: 'timestamp' }).notNull(),
+  expiresAt: integer('expiresAt', { mode: 'timestamp' }),
+  alg: text('alg'),
+  crv: text('crv')
+})
+
+/** OAuth client - one row per registered MCP app (DCR) */
+export const oauthClient = sqliteTable('oauthClient', {
+  id: text('id').primaryKey(),
+  clientId: text('clientId').notNull().unique(),
+  clientSecret: text('clientSecret'),
+  clientDiscoveryId: text('clientDiscoveryId'),
+  disabled: integer('disabled', { mode: 'boolean' }).default(false),
+  skipConsent: integer('skipConsent', { mode: 'boolean' }),
+  enableEndSession: integer('enableEndSession', { mode: 'boolean' }),
+  subjectType: text('subjectType'),
+  scopes: text('scopes'),
+  clientCredentialsScopes: text('clientCredentialsScopes'),
+  userId: text('userId').references(() => user.id, { onDelete: 'cascade' }),
+  createdAt: integer('createdAt', { mode: 'timestamp' }),
+  updatedAt: integer('updatedAt', { mode: 'timestamp' }),
+  name: text('name'),
+  uri: text('uri'),
+  icon: text('icon'),
+  contacts: text('contacts'),
+  tos: text('tos'),
+  policy: text('policy'),
+  softwareId: text('softwareId'),
+  softwareVersion: text('softwareVersion'),
+  softwareStatement: text('softwareStatement'),
+  redirectUris: text('redirectUris').notNull(),
+  postLogoutRedirectUris: text('postLogoutRedirectUris'),
+  backchannelLogoutUri: text('backchannelLogoutUri'),
+  backchannelLogoutSessionRequired: integer('backchannelLogoutSessionRequired', { mode: 'boolean' }),
+  tokenEndpointAuthMethod: text('tokenEndpointAuthMethod'),
+  applicationType: text('applicationType'),
+  jwks: text('jwks'),
+  jwksUri: text('jwksUri'),
+  grantTypes: text('grantTypes'),
+  responseTypes: text('responseTypes'),
+  requirePKCE: integer('requirePKCE', { mode: 'boolean' }),
+  dpopBoundAccessTokens: integer('dpopBoundAccessTokens', { mode: 'boolean' }).default(false),
+  referenceId: text('referenceId'),
+  metadata: text('metadata')
+}, table => [
+  index('oauth_client_user_idx').on(table.userId)
+])
+
+/** OAuth resource - the protected resource tokens are bound to (`<baseURL>/mcp`) */
+export const oauthResource = sqliteTable('oauthResource', {
+  id: text('id').primaryKey(),
+  identifier: text('identifier').notNull().unique(),
+  name: text('name').notNull(),
+  accessTokenTtl: integer('accessTokenTtl'),
+  refreshTokenTtl: integer('refreshTokenTtl'),
+  signingAlgorithm: text('signingAlgorithm'),
+  signingKeyId: text('signingKeyId'),
+  allowedScopes: text('allowedScopes'),
+  customClaims: text('customClaims'),
+  dpopBoundAccessTokensRequired: integer('dpopBoundAccessTokensRequired', { mode: 'boolean' }).default(false),
+  disabled: integer('disabled', { mode: 'boolean' }).default(false),
+  createdAt: integer('createdAt', { mode: 'timestamp' }),
+  updatedAt: integer('updatedAt', { mode: 'timestamp' }),
+  policyVersion: integer('policyVersion').default(1),
+  metadata: text('metadata')
+})
+
+/** Client ↔ resource link (composite unique, as the provider requires) */
+export const oauthClientResource = sqliteTable('oauthClientResource', {
+  id: text('id').primaryKey(),
+  clientId: text('clientId').notNull().references(() => oauthClient.clientId, { onDelete: 'cascade' }),
+  resourceId: text('resourceId').notNull().references(() => oauthResource.identifier, { onDelete: 'cascade' }),
+  metadata: text('metadata'),
+  createdAt: integer('createdAt', { mode: 'timestamp' })
+}, table => [
+  uniqueIndex('oauth_client_resource_unique_idx').on(table.clientId, table.resourceId),
+  index('oauth_client_resource_resource_idx').on(table.resourceId)
+])
+
+/** Refresh tokens (issued only when the client asks for `offline_access`) */
+export const oauthRefreshToken = sqliteTable('oauthRefreshToken', {
+  id: text('id').primaryKey(),
+  token: text('token').notNull().unique(),
+  clientId: text('clientId').notNull().references(() => oauthClient.clientId, { onDelete: 'cascade' }),
+  sessionId: text('sessionId').references(() => session.id, { onDelete: 'set null' }),
+  userId: text('userId').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  referenceId: text('referenceId'),
+  authorizationCodeId: text('authorizationCodeId'),
+  resources: text('resources'),
+  requestedUserInfoClaims: text('requestedUserInfoClaims'),
+  expiresAt: integer('expiresAt', { mode: 'timestamp' }).notNull(),
+  createdAt: integer('createdAt', { mode: 'timestamp' }).notNull(),
+  revoked: integer('revoked', { mode: 'timestamp' }),
+  rotatedAt: integer('rotatedAt', { mode: 'timestamp' }),
+  rotationReplayResponse: text('rotationReplayResponse'),
+  rotationReplayExpiresAt: integer('rotationReplayExpiresAt', { mode: 'timestamp' }),
+  authTime: integer('authTime', { mode: 'timestamp' }),
+  confirmation: text('confirmation'),
+  scopes: text('scopes').notNull()
+}, table => [
+  index('oauth_refresh_token_client_idx').on(table.clientId),
+  index('oauth_refresh_token_session_idx').on(table.sessionId),
+  index('oauth_refresh_token_user_idx').on(table.userId),
+  index('oauth_refresh_token_code_idx').on(table.authorizationCodeId)
+])
+
+/** Access tokens (opaque ones; JWT access tokens are not stored) */
+export const oauthAccessToken = sqliteTable('oauthAccessToken', {
+  id: text('id').primaryKey(),
+  token: text('token').notNull().unique(),
+  clientId: text('clientId').notNull().references(() => oauthClient.clientId, { onDelete: 'cascade' }),
+  sessionId: text('sessionId').references(() => session.id, { onDelete: 'set null' }),
+  userId: text('userId').references(() => user.id, { onDelete: 'cascade' }),
+  referenceId: text('referenceId'),
+  authorizationCodeId: text('authorizationCodeId'),
+  resources: text('resources'),
+  requestedUserInfoClaims: text('requestedUserInfoClaims'),
+  refreshId: text('refreshId').references(() => oauthRefreshToken.id, { onDelete: 'cascade' }),
+  expiresAt: integer('expiresAt', { mode: 'timestamp' }).notNull(),
+  createdAt: integer('createdAt', { mode: 'timestamp' }).notNull(),
+  revoked: integer('revoked', { mode: 'timestamp' }),
+  confirmation: text('confirmation'),
+  scopes: text('scopes').notNull()
+}, table => [
+  index('oauth_access_token_client_idx').on(table.clientId),
+  index('oauth_access_token_session_idx').on(table.sessionId),
+  index('oauth_access_token_user_idx').on(table.userId),
+  index('oauth_access_token_code_idx').on(table.authorizationCodeId),
+  index('oauth_access_token_refresh_idx').on(table.refreshId)
+])
+
+/** Consent - one row per user + client after the user clicks Autoriser (no team) */
+export const oauthConsent = sqliteTable('oauthConsent', {
+  id: text('id').primaryKey(),
+  clientId: text('clientId').notNull().references(() => oauthClient.clientId, { onDelete: 'cascade' }),
+  userId: text('userId').references(() => user.id, { onDelete: 'cascade' }),
+  referenceId: text('referenceId'),
+  resources: text('resources'),
+  requestedUserInfoClaims: text('requestedUserInfoClaims'),
+  scopes: text('scopes').notNull(),
+  createdAt: integer('createdAt', { mode: 'timestamp' }).notNull(),
+  updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull()
+}, table => [
+  index('oauth_consent_client_idx').on(table.clientId),
+  index('oauth_consent_user_idx').on(table.userId)
+])
+
+/** Client assertions seen (replay protection for private_key_jwt) */
+export const oauthClientAssertion = sqliteTable('oauthClientAssertion', {
+  id: text('id').primaryKey(),
+  expiresAt: integer('expiresAt', { mode: 'timestamp' }).notNull()
+})
 
 // ============================================================================
 // Stripe Plugin Table

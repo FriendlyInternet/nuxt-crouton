@@ -10,6 +10,7 @@ AI hint: use when app has CMS pages or landing pages
 - `CroutonPagesBlockContent`: Block-based content display
 - `CroutonPagesEditorBlockEditor`: Block-based page editor
 - `CroutonPagesEditorBlockEditorWithPreview`: Block page editor with a live preview panel
+- `CroutonPagesPublicPage`: Public page view (fetch, SEO, render) shared by both public routes
 - `CroutonPagesRegularContent`: Rich text content display
 - `CroutonPagesRenderer`: Renders page based on type
 

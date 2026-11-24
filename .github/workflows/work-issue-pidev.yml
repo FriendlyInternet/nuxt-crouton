@@ -365,7 +365,10 @@ jobs:
           node-version: 22
           cache: pnpm
       - name: Install
-        run: pnpm install --frozen-lockfile
+        # --ignore-scripts: skip every workspace postinstall (nuxt prepare); the touched app's typecheck regenerates .nuxt itself (#3199)
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Rebuild native deps skipped by --ignore-scripts
+        run: pnpm rebuild better-sqlite3
 
       # GitHub-hosted runners (#2275) have no `claude` login. pi's `claude-bridge` provider
       # drives the Claude SUBSCRIPTION through Claude Code (Agent SDK). setup-pi installs pinned pi + CLI and
@@ -458,9 +461,9 @@ jobs:
           gh api "repos/${{ github.repository }}/issues/comments/${FEEDBACK_ID}" --jq .body > "$RUNNER_TEMP/feedback.txt"
           FROM="$(gh api "repos/${{ github.repository }}/issues/comments/${FEEDBACK_ID}" --jq .html_url)"
           git fetch origin "${REV_BRANCH}" --quiet
-          # The conflict helper (#2848) comes from the checked-out ref, copied aside BEFORE the PR
-          # branch replaces the tree — an old PR branch may not have it yet.
-          cp scripts/conflict-resolution.mjs "$RUNNER_TEMP/conflict-resolution.mjs"
+          # Conflict helper (#2848) + its log-tail lib copied aside BEFORE the PR branch replaces the tree; dist_ref = the tree packages/*/dist was built from (#4374).
+          cp scripts/conflict-resolution.mjs "$RUNNER_TEMP/conflict-resolution.mjs" && mkdir -p "$RUNNER_TEMP/lib" && cp scripts/lib/log-tail.mjs "$RUNNER_TEMP/lib/log-tail.mjs"
+          echo "dist_ref=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           git checkout -f -B "${REV_BRANCH}" "origin/${REV_BRANCH}" 2>&1 | tail -1
           echo "rev_start=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "from=${FROM}" >> "$GITHUB_OUTPUT"
@@ -620,6 +623,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           ISSUE: ${{ inputs.issue }}
+          PKG_DIST_REF: ${{ steps.revise.outputs.dist_ref }}
           EPIC_BRANCH: ${{ steps.ctx.outputs.epic_branch }}
           BASE: ${{ steps.ctx.outputs.base }}
           REV_BRANCH: ${{ steps.ctx.outputs.rev_branch }}
@@ -1134,7 +1138,7 @@ jobs:
               # (A scriptless fresh poc still can't be verified — no script to run prepare — but #1866
               # makes every scaffold emit the script, so that case is legacy-only.)
               if [ "$HAS_TC" = "1" ] && [ -n "$PKG" ]; then
-                # PREPARE THE ENV (#1872) — the job's `pnpm install --frozen-lockfile` (top of the job)
+                # PREPARE THE ENV (#1872) — the job's `pnpm install --frozen-lockfile --ignore-scripts` (top of the job)
                 # ran BEFORE pi scaffolded this poc, so the new workspace member was never linked: no
                 # `pocs/<name>/node_modules`, no `.nuxt`. `nuxt typecheck` then can't resolve Nuxt
                 # auto-imports and reports ~37 bogus `TS2304: Cannot find name` on fine code — which the
@@ -1523,7 +1527,12 @@ jobs:
           PI_MINUTES: ${{ steps.budget.outputs.pi_minutes }}
         with:
           script: |
-            const { artifactGate } = await import(require('url').pathToFileURL(require('path').join(process.env.RUNNER_TEMP, 'scripts/lib/artifact-gate.mjs')).href)
+            // #4078: only the `baseline` step makes the $RUNNER_TEMP copy. When setup fails before it,
+            // fall back to the checkout's scripts/lib so the gate names the cause instead of crashing.
+            const path = require('path'), fs = require('fs')
+            const tmp = path.join(process.env.RUNNER_TEMP, 'scripts/lib/artifact-gate.mjs')
+            const gate = fs.existsSync(tmp) ? tmp : path.join(process.env.GITHUB_WORKSPACE, 'scripts/lib/artifact-gate.mjs')
+            const { artifactGate } = await import(require('url').pathToFileURL(gate).href)
             await artifactGate({ github, context, core })
 
       # ── Telemetry convergence capture (#944) — REAL data from this pi run ──────────

@@ -45,6 +45,7 @@ export default defineEventHandler(async (event) => {
       date: bookingsBookings.date,
       slot: bookingsBookings.slot,
       quantity: bookingsBookings.quantity,
+      product: bookingsBookings.product,
       group: bookingsBookings.group,
       status: bookingsBookings.status,
       createdAt: bookingsBookings.createdAt,
@@ -60,8 +61,6 @@ export default defineEventHandler(async (event) => {
         city: bookingsLocations.city,
         location: bookingsLocations.location,
         slots: bookingsLocations.slots,
-        inventoryMode: bookingsLocations.inventoryMode,
-        quantity: bookingsLocations.quantity,
         translations: bookingsLocations.translations,
       },
       ownerUser: {

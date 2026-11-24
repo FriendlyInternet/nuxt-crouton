@@ -54,6 +54,19 @@ test('an id that is already set is left alone', () => {
   assert.equal(cfg.kv_namespaces[0].id, 'PINNED')
 })
 
+test('a second run before a retry leaves already-pinned ids alone and reports nothing (#4354)', () => {
+  const cfg = built()
+  cfg.d1_databases[0].database_id = 'D1-UUID'
+  cfg.kv_namespaces[0].id = 'KV-ID'
+  const r = reuseExisting(cfg, {
+    d1List: [{ name: 'booking-demo-pr2571-db', uuid: 'D1-UUID' }],
+    kvList: [{ title: 'booking-demo-pr2571-kv', id: 'KV-ID' }],
+  })
+  assert.deepEqual(r, { reused: [], fresh: [] })
+  assert.equal(cfg.d1_databases[0].database_id, 'D1-UUID')
+  assert.equal(cfg.kv_namespaces[0].id, 'KV-ID')
+})
+
 test('D1 lists using `id` instead of `uuid` are read too', () => {
   const cfg = built()
   reuseExisting(cfg, { d1List: [{ name: 'booking-demo-pr2571-db', id: 'D1-ID' }] })

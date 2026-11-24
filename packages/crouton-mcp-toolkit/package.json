@@ -21,6 +21,7 @@
     "lib",
     "server",
     "types",
+    "module.ts",
     "nuxt.config.ts",
     "CHANGELOG.md",
     "LICENSE",
@@ -31,16 +32,20 @@
     "dev:prepare": "nuxi prepare",
     "typecheck": "nuxt typecheck",
     "test": "vitest run",
-    "prepublishOnly": "pnpm run build",
+    "prepack": "pnpm run build",
     "release": "pnpm run build && npm publish --access public"
   },
   "dependencies": {
+    "@better-auth/oauth-provider": "1.7.7",
     "defu": "^6.1.4"
   },
   "devDependencies": {
+    "@fyit/crouton-auth": "workspace:*",
     "@nuxt/kit": "^3.14.0",
     "@nuxt/schema": "^3.14.0",
     "@nuxtjs/mcp-toolkit": "^0.24.2",
+    "better-auth": "^1.7.7",
+    "jose": "^6.2.12",
     "nuxt": "catalog:",
     "typescript": "catalog:",
     "unbuild": "^2.0.0",
@@ -49,10 +54,12 @@
     "zod": "^3.24.0"
   },
   "peerDependencies": {
-    "@fyit/crouton-collab": "workspace:*",
-    "@fyit/crouton-layout": "workspace:*",
-    "@fyit/crouton-pages": "workspace:*",
+    "@fyit/crouton-auth": "workspace:0.x",
+    "@fyit/crouton-collab": "workspace:0.x",
+    "@fyit/crouton-layout": "workspace:0.x",
+    "@fyit/crouton-pages": "workspace:0.x",
     "@nuxtjs/mcp-toolkit": "^0.24.2",
+    "better-auth": "^1.7.7",
     "nuxt": "^3.14.0 || ^4.0.0"
   },
   "peerDependenciesMeta": {

@@ -14,7 +14,8 @@ const bodySchema = z.object({
   slot: z.array(z.string()).min(1),
   group: z.string().nullish(),
   quantity: z.number().int(),
-  status: z.string().min(1)
+  status: z.string().min(1),
+  product: z.string().min(1).nullish()
 }).partial().strip()
 
 export default defineEventHandler(async (event) => {
@@ -43,6 +44,7 @@ export default defineEventHandler(async (event) => {
       group: body.group,
       quantity: body.quantity,
       status: body.status,
+      product: body.product,
     },
   })
 })

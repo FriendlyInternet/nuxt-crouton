@@ -7,7 +7,8 @@ import { requireCan, can } from '@fyit/crouton-auth/server/utils/team-auth'
 // Hand-added body validation (#3377)
 const bodySchema = z.object({
   statuses: z.array(z.any()).nullish(),
-  groups: z.array(z.any()).nullish()
+  groups: z.array(z.any()).nullish(),
+  sendEmails: z.boolean().optional()
 }).partial().strip()
 
 export default defineEventHandler(async (event) => {
@@ -21,6 +22,7 @@ export default defineEventHandler(async (event) => {
 
   return await updateBookingsSetting(settingId, team.id, user.id, {
     statuses: body.statuses,
-    groups: body.groups
+    groups: body.groups,
+    sendEmails: body.sendEmails
   } as Parameters<typeof updateBookingsSetting>[3], { seesAll: await can(team.id, user.id, 'bookings:manage', event) })
 })

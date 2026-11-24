@@ -268,3 +268,46 @@ const EDIT_ACTIONS: Record<FragmentEditOp['action'], (fragment: Y.XmlFragment, o
     fragment.delete(op.index, count)
   }
 }
+
+// ─── Caret for an edit ──────────────────────────────────────────────────────
+
+export interface FragmentEditCaret {
+  /** Yjs relative-position JSON (anchor === head), the awareness `caret` wire shape. */
+  caret: { anchor: unknown, head: unknown }
+  /** The top-level block the caret is in, or null (an emptied fragment). */
+  block: { index: number, type: string } | null
+}
+
+/** End of the last text inside `element`, or null when it holds no text (an atom). */
+function blockEndPosition(element: Y.XmlElement): Y.RelativePosition | null {
+  let node: Y.XmlElement = element
+  while (node.length > 0) {
+    const last = node.get(node.length - 1)
+    if (last instanceof Y.XmlText) return Y.createRelativePositionFromTypeIndex(last, last.length)
+    if (!(last instanceof Y.XmlElement)) return null
+    node = last
+  }
+  return null
+}
+
+/**
+ * Where a server editor's caret goes after `editYFragment(fragment, op)` ran (#4094):
+ * insert / replace → the end of the last block written; delete → the start of the
+ * block that now sits at `index`. A block with no text (e.g. a `paneBlock`) gets
+ * the gap just before it. Call on the post-edit fragment.
+ */
+export function caretForFragmentEdit(fragment: Y.XmlFragment, op: FragmentEditOp): FragmentEditCaret | null {
+  if (fragment.length === 0) {
+    const pos = Y.relativePositionToJSON(Y.createRelativePositionFromTypeIndex(fragment, 0))
+    return { caret: { anchor: pos, head: pos }, block: null }
+  }
+  const written = op.action === 'delete' ? 0 : (op.blocks?.length ?? 0)
+  const index = Math.min(Math.max(op.index + written - (written > 0 ? 1 : 0), 0), fragment.length - 1)
+  const element = fragment.get(index)
+  if (!(element instanceof Y.XmlElement)) return null
+  const rel = op.action === 'delete'
+    ? Y.createRelativePositionFromTypeIndex(fragment, index)
+    : (blockEndPosition(element) ?? Y.createRelativePositionFromTypeIndex(fragment, index))
+  const pos = Y.relativePositionToJSON(rel)
+  return { caret: { anchor: pos, head: pos }, block: { index, type: element.nodeName } }
+}

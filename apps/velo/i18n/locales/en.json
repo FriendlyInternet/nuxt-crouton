@@ -1,0 +1,16 @@
+{
+  "assistants": {
+    "title": "AI assistants",
+    "urlLabel": "The link to paste into your assistant",
+    "copy": "Copy",
+    "copied": "Link copied",
+    "helpClaude": "Claude: Settings → Connectors → Add custom connector → paste → Connect.",
+    "helpChatgpt": "ChatGPT: Plugins → + → Add custom MCP server → paste",
+    "connections": "Your connections",
+    "empty": "No connections",
+    "connectedOn": "Connected on {date}",
+    "revoke": "Revoke",
+    "revokeFailed": "Revoking failed",
+    "loadFailed": "Could not load your connections"
+  }
+}

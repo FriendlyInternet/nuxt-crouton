@@ -13,6 +13,7 @@ import { createAuthClient } from 'better-auth/vue'
 import type { BetterAuthClientPlugin } from 'better-auth/client'
 import { organizationClient, twoFactorClient, adminClient } from 'better-auth/client/plugins'
 import { passkeyClient } from '@better-auth/passkey/client'
+import { oauthProviderClient } from '@better-auth/oauth-provider/client'
 import type { CroutonAuthConfig } from '../../types/config'
 
 // Helper to get auth config with proper typing (used in plugins where composables may not be available)
@@ -55,6 +56,8 @@ export default defineNuxtPlugin(() => {
 /**
  * Build array of Better Auth client plugins based on configuration
  */
+// Complexity: a flat list of flag-gated plugins; client plugin with no unit coverage inflates CRAP
+// fallow-ignore-next-line complexity
 function buildClientPlugins(config?: CroutonAuthConfig) {
   const plugins: BetterAuthClientPlugin[] = [
     // Organization client is always enabled
@@ -72,6 +75,14 @@ function buildClientPlugins(config?: CroutonAuthConfig) {
   // Conditionally add 2FA client
   if (isTwoFactorEnabled(config)) {
     plugins.push(twoFactorClient())
+  }
+
+  // Sign-in for Claude / MCP apps (#4096): on /auth/login?…&sig=… this copies
+  // the signed query into the sign-in request as `oauth_query`, so the server
+  // resumes the OAuth flow and answers { redirect: true, url } (consent page
+  // or the client's callback), which better-auth's redirect plugin follows.
+  if (config?.mcpOAuth) {
+    plugins.push(oauthProviderClient() as BetterAuthClientPlugin)
   }
 
   return plugins

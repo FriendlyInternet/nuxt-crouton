@@ -8,6 +8,7 @@
 import type { PageBlockContent, PageBlock, BlockSize, BlockAudienceContext, BlockAudienceRole } from '../types/blocks'
 import { parseBlockContent } from '../utils/content-detector'
 import { hasAudienceGate, matchesAudience, viewportClasses } from '../utils/block-visibility'
+import { hasBlockHtmlRenderer, blockToHtml } from '../utils/block-html'
 
 // Addon blocks from croutonBlocks registry
 const { getBlock: getAddonBlock } = useCroutonBlocks()
@@ -132,40 +133,6 @@ function isHeading(type: string): boolean {
   return type === 'heading'
 }
 
-// Check if block is a list (native TipTap node)
-function isList(type: string): boolean {
-  return type === 'bulletList' || type === 'orderedList'
-}
-
-/**
- * Convert a list block (bulletList/orderedList) to HTML.
- * Handles nested listItem > paragraph structure from TipTap.
- */
-function listToHtml(block: PageBlock): string {
-  const tag = block.type === 'orderedList' ? 'ol' : 'ul'
-  const content = (block as any).content
-  if (!content || !Array.isArray(content)) return `<${tag}></${tag}>`
-
-  const items = content.map((listItem: any) => {
-    if (listItem.type !== 'listItem' || !listItem.content) return '<li></li>'
-
-    // Each listItem can contain paragraphs (and nested lists)
-    const innerHtml = listItem.content.map((child: any) => {
-      if (child.type === 'paragraph') {
-        return inlineContentToHtml(child.content)
-      }
-      if (child.type === 'bulletList' || child.type === 'orderedList') {
-        return listToHtml(child as PageBlock)
-      }
-      return ''
-    }).join('')
-
-    return `<li>${innerHtml}</li>`
-  }).join('')
-
-  return sanitizeHtml(`<${tag}>${items}</${tag}>`)
-}
-
 /**
  * Convert heading block to HTML for rendering
  */
@@ -194,8 +161,9 @@ function getBlockSizeClass(block: PageBlock): string | undefined {
 // ---------------------------------------------------------------------------
 // Block visibility
 //
-// The public page route is `swr: 3600` cached, so its HTML is shared between
-// visitors. Auth state must therefore never be read while rendering on the
+// The public page route's SSR HTML must be identical for every visitor (any
+// shared cache — a CDN or a future route rule — would serve one render to
+// everyone). Auth state must therefore never be read while rendering on the
 // server, or one visitor's session gets baked into the page everyone receives.
 //
 // So the two axes resolve differently:
@@ -351,11 +319,11 @@ const headingClasses: Record<number, string> = {
             v-html="paragraphToHtml(block)"
           />
 
-          <!-- List blocks (native TipTap bulletList/orderedList) -->
+          <!-- Native TipTap nodes rendered via utils/block-html (lists, quote, code block, divider) -->
           <div
-            v-else-if="isList(block.type)"
+            v-else-if="hasBlockHtmlRenderer(block.type)"
             class="block-content-list prose prose-lg dark:prose-invert max-w-none"
-            v-html="listToHtml(block)"
+            v-html="blockToHtml(block as any)"
           />
 
           <!-- Unknown block type warning -->
