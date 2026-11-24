@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { OLD, fetchSpy, gh, resetGh } from './helpers/gh-routes'
+import { OLD, boardMock, boardQueries, fetchSpy, gh, resetGh } from './helpers/gh-routes'
 
 // T2 (#4234): runCardsSync — the sync with no request, as the clock calls it — reads GitHub with the
 // token it is given and writes the same cards as POST /api/cards/sync. It drives the REAL GitHub
@@ -16,6 +16,8 @@ vi.mock('../layers/inbox/collections/cards/server/database/queries', () => ({
   createInboxCard: (...a: unknown[]) => (createInboxCard as any)(...a),
   updateInboxCard: (...a: unknown[]) => (updateInboxCard as any)(...a)
 }))
+// The Pipeline board's rows (#4349): an in-memory table (no D1 in vitest).
+vi.mock('../layers/pipeline/collections/items/server/database/queries', () => boardMock())
 
 async function runCardsSync() {
   vi.resetModules()
@@ -80,5 +82,76 @@ describe('runCardsSync (no request)', () => {
     expect(out.error).toBeUndefined()
     expect(out.stale).toBe(1)
     expect(updateInboxCard).toHaveBeenCalledWith('c1', 'team1', 'u1', { state: 'stale' }, { role: 'owner' })
+  })
+})
+
+// T5 (#4349): the same sync writes the Pipeline board from the lists it already read.
+const issue = (n: number, labels: string[]) => ({ number: n, title: `Issue ${n}`, body: '', html_url: `https://github.com/o/r/issues/${n}`, labels: labels.map(name => ({ name })), updated_at: new Date().toISOString() }) // recent: no "quiet" stuck card
+const HOUR = 3_600_000
+
+describe('runCardsSync writes the Pipeline board (#4349)', () => {
+  // covers: T5
+  it('makes exactly as many GitHub reads as before the board (20 for the default fixture)', async () => {
+    await sync()
+    expect(fetchSpy).toHaveBeenCalledTimes(20) // recorded on main a7ac050 before this change
+  })
+
+  // covers: T5
+  it('upserts one row per pipeline issue, PRs folded into the issue they close, still with 20 reads', async () => {
+    gh.labelled['work-this'] = [issue(11, ['work-this', 'poc:status']), issue(50, ['work-this'])]
+    const out = await sync()
+    expect(out.error).toBeUndefined()
+    expect(fetchSpy).toHaveBeenCalledTimes(20)
+    const byNumber = Object.fromEntries(gh.board.map(r => [r.number, r]))
+    expect(Object.keys(byNumber).sort()).toEqual(['11', '50']) // #13 (PR 12's issue) has no pipeline label and no row
+    expect(byNumber[11]).toMatchObject({ teamId: 'team1', owner: 'u1', title: 'Issue 11', labels: 'work-this,poc:status', prNumber: 10, prHeadSha: 'sha10', prBase: 'main', stage: 'you' })
+    expect(byNumber[50]).toMatchObject({ stage: 'working' })
+    expect(byNumber[50].prNumber ?? null).toBeNull()
+    expect(boardQueries.deletePipelineItem).not.toHaveBeenCalled()
+  })
+
+  // covers: T5
+  it('all lists read: a row missing from them gets closedAt, a row whose PR closed loses its PR fields, a row closed > 24 h ago is deleted', async () => {
+    gh.labelled['work-this'] = [issue(50, ['work-this'])]
+    const since = new Date(Date.now() - 5 * HOUR)
+    gh.board = [
+      { id: 'r50', number: 50, labels: 'work-this', prNumber: 77, prHeadSha: 'x', prBase: 'main', prLabels: 'a', verdict: 'go', verdictSha: 'x', stage: 'review', stageSince: since, order: since.getTime() },
+      { id: 'r99', number: 99, labels: 'work-this', stage: 'working', stageSince: since, order: since.getTime() },
+      { id: 'r98', number: 98, labels: 'work-this', stage: 'done', closedAt: new Date(Date.now() - 30 * HOUR) }
+    ]
+    const out = await sync()
+    expect(out.error).toBeUndefined()
+    const r50 = gh.board.find(r => r.id === 'r50')
+    expect(r50).toMatchObject({ prNumber: null, prHeadSha: null, prBase: null, prLabels: null, verdict: null, verdictSha: null, stage: 'working' })
+    const r99 = gh.board.find(r => r.id === 'r99')
+    expect(r99.closedAt).toBeInstanceOf(Date)
+    expect(r99.stage).toBe('done')
+    expect(gh.board.find(r => r.id === 'r98')).toBeUndefined()
+  })
+
+  // covers: T5
+  it('one list failed: nothing is closed, cleared or deleted', async () => {
+    gh.labelled['work-this'] = [issue(50, ['work-this'])]
+    gh.failList = 'delegate'
+    gh.board = [
+      { id: 'r50', number: 50, labels: 'work-this', prNumber: 77, prHeadSha: 'x', stage: 'review', stageSince: new Date(), order: 1 },
+      { id: 'r99', number: 99, labels: 'work-this', stage: 'working', stageSince: new Date(), order: 1 },
+      { id: 'r98', number: 98, labels: 'work-this', stage: 'done', closedAt: new Date(Date.now() - 30 * HOUR) }
+    ]
+    const out = await sync()
+    expect(out.error).toContain('GitHub 500')
+    expect(gh.board.find(r => r.id === 'r50')).toMatchObject({ prNumber: 77, prHeadSha: 'x' })
+    expect(gh.board.find(r => r.id === 'r99')!.closedAt).toBeUndefined()
+    expect(gh.board.find(r => r.id === 'r98')).toBeDefined()
+    expect(boardQueries.deletePipelineItem).not.toHaveBeenCalled()
+  })
+
+  // covers: T5
+  it('a failed board write is logged in error, and the card counts stay as they were', async () => {
+    gh.labelled['work-this'] = [issue(50, ['work-this'])]
+    boardQueries.createPipelineItem.mockRejectedValueOnce(new Error('D1 down'))
+    const out = await sync()
+    expect(out.created).toBe(2)
+    expect(out.error).toContain('1 board write(s) failed: D1 down')
   })
 })

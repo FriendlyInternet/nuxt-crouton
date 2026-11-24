@@ -1,12 +1,13 @@
 // scaffold-app.ts — Generate a complete crouton app scaffold
 import { randomBytes } from 'node:crypto'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readFileSync } from 'node:fs'
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
 import consola from 'consola'
 import { findModuleKey, loadModules } from './module-registry.ts'
 import { findPackagesDir } from './utils/manifest-loader.ts'
+import { inspectPreservedConfig } from './utils/preserved-config.ts'
 
 // crouton-cli version, stamped into each scaffolded app's .crouton.json (provenance, #1233).
 const CROUTON_CLI_VERSION = (() => {
@@ -119,6 +120,8 @@ interface ScaffoldVars {
   blob: boolean
   /** `--site` (#4263): one team (`test1`), one locale (`en`) with plain addresses. */
   site: boolean
+  /** A preserved config's collection sets `seed` — the generated seed.ts imports drizzle-seed (#4377). */
+  needsDrizzleSeed?: boolean
   modules: Record<string, any>
 }
 
@@ -141,6 +144,10 @@ function tmplPackageJson(vars: ScaffoldVars): string {
   }
   if (vars.cf) {
     devDeps['wrangler'] = '^4.64.0'
+  }
+  if (vars.needsDrizzleSeed) {
+    // Same range as the other seeding apps (pocs/sintlukas, pocs/alexdeforce) (#4377).
+    devDeps['drizzle-seed'] = '^0.3.1'
   }
 
   const scripts = {
@@ -178,6 +185,9 @@ function tmplPackageJson(vars: ScaffoldVars): string {
     scripts['db:migrate'] = `npx wrangler d1 migrations apply ${vars.name}-db --local`
     scripts['db:migrate:prod'] = `npx wrangler d1 migrations apply ${vars.name}-db --remote`
     scripts['db:migrate:staging'] = `npx wrangler d1 migrations apply ${vars.name}-staging-db --env staging --remote`
+    // Load every collection's seed.json (`pnpm preview` runs `db:seed`, #4377).
+    scripts['db:seed'] = `crouton-seed --db ${vars.name}-db`
+    scripts['db:seed:staging'] = `crouton-seed --db ${vars.name}-staging-db --remote`
   }
 
   return JSON.stringify({
@@ -268,7 +278,7 @@ ${extendsArr}
   ],
   hub: {
     db: '${vars.dialect}',
-    kv: true
+    kv: true${vars.blob ? ',\n    blob: true' : ''}
   },
 ${emailBlock}
   // Disable OG Image to reduce bundle size for Cloudflare (saves ~4MB)
@@ -635,9 +645,9 @@ export async function scaffoldApp(
   const standalone = !(await isCroutonMonorepo(cwd))
   const cf = options.cf ?? !standalone
   const depVersion = standalone ? `^${CROUTON_CLI_VERSION}` : 'workspace:*'
-  const ctx = await resolveScaffoldContext(name, { ...options, cf, depVersion, outDir })
-  const files = await buildScaffoldFiles(ctx, outDir, cf)
   const appDir = outDir || (standalone ? name : join('apps', name))
+  const ctx = await resolveScaffoldContext(name, { ...options, cf, depVersion, outDir, appDir: resolve(cwd, appDir) })
+  const files = await buildScaffoldFiles(ctx, outDir, cf)
 
   if (dryRun) {
     printScaffoldDryRun(name, appDir, ctx, files)
@@ -655,13 +665,22 @@ interface ScaffoldContext { vars: ScaffoldVars, frameworkPackages: string[], fea
 // fallow-ignore-next-line complexity — linear setup (features/extends/theme/i18n); untested helper inflates CRAP
 async function resolveScaffoldContext(
   name: string,
-  options: { features?: string[], theme?: string, dialect?: string, cf: boolean, depVersion: string, domain?: string, site?: boolean, outDir?: string }
+  options: { features?: string[], theme?: string, dialect?: string, cf: boolean, depVersion: string, domain?: string, site?: boolean, outDir?: string, appDir?: string }
 ): Promise<ScaffoldContext> {
-  const { features: featureNames = [], theme, dialect = 'sqlite', cf, depVersion, domain, site, outDir } = options
+  const { features: requested = [], theme, dialect = 'sqlite', cf, depVersion, domain, site, outDir, appDir } = options
   if (!/^[a-z][a-z0-9-]*$/.test(name)) {
     throw new Error(`Invalid app name "${name}". Use lowercase letters, numbers, and hyphens.`)
   }
   const modules = await loadModules()
+  // A preserved, reviewed crouton.config.js (#1233) can call for packages by its field
+  // types (image/file → assets) and for drizzle-seed by `seed` collections (#4377).
+  const preserved = appDir ? await inspectPreservedConfig(appDir) : { detectedFeatures: [], needsDrizzleSeed: false }
+  const featureNames = [...requested]
+  for (const f of preserved.detectedFeatures) {
+    if (featureNames.includes(f)) continue
+    consola.info(`  • crouton.config.js uses fields that need ${modules[f]?.package ?? f} — adding ${f}`)
+    featureNames.push(f)
+  }
   // --site needs crouton-pages (#4263); without it the feature list is untouched.
   const names = site && !featureNames.includes('pages') ? [...featureNames, 'pages'] : featureNames
   const features = resolveFeatures(names, modules)
@@ -679,7 +698,7 @@ async function resolveScaffoldContext(
   }
   const poc = (outDir || '').startsWith('pocs/')
   const blob = features.includes('assets')
-  const vars: ScaffoldVars = { name, features, extends: frameworkPackages, theme, dialect, cf, depVersion, domain, poc, blob, site: !!site, modules }
+  const vars: ScaffoldVars = { name, features, extends: frameworkPackages, theme, dialect, cf, depVersion, domain, poc, blob, site: !!site, needsDrizzleSeed: preserved.needsDrizzleSeed, modules }
   return { vars, frameworkPackages, features, authSecret: randomBytes(32).toString('hex') }
 }
 

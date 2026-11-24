@@ -11,9 +11,11 @@
  *
  * ## Registered Collections
  * - inboxCards: InboxCard
+ * - pipelineItems: PipelineItem
  */
 
 import type { InboxCard, InboxCardFormData, NewInboxCard } from './layers/inbox/collections/cards/types'
+import type { PipelineItem, PipelineItemFormData, NewPipelineItem } from './layers/pipeline/collections/items/types'
 
 declare module '#crouton/types' {
   interface CollectionTypeMap {
@@ -21,6 +23,11 @@ declare module '#crouton/types' {
       Item: InboxCard
       FormData: InboxCardFormData
       NewItem: NewInboxCard
+    }
+    pipelineItems: {
+      Item: PipelineItem
+      FormData: PipelineItemFormData
+      NewItem: NewPipelineItem
     }
   }
 }

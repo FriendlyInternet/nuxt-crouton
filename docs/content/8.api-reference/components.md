@@ -376,6 +376,7 @@ Icon Picker Searchable icon picker using the Iconify public API. Supports collec
 | `updateLoading` | `boolean` | no |  |
 | `deleteLoading` | `boolean` | no |  |
 | `disabledTooltip` | `string` | no |  |
+| `itemName` | `string` | no |  |
 
 ## CroutonItemCardMini
 

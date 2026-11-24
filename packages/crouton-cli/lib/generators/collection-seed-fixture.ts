@@ -30,7 +30,7 @@ function deriveValue(field: Record<string, any>, i: number): unknown {
   // A select/enum → cycle options, biased so the newest row leads with the
   // "last" option (e.g. `published` for [draft, published]) for a livelier demo.
   if (Array.isArray(options) && options.length > 0) {
-    return options[(i + 1) % options.length]
+    return optionValue(options[(i + 1) % options.length])
   }
 
   // Name heuristics (more specific first)
@@ -43,6 +43,11 @@ function deriveValue(field: Record<string, any>, i: number): unknown {
   // Only a type the manifest doesn't know falls back to a string sample.
   if (field.seed?.fixture) return evalFixture(field.seed.fixture, field.name, i)
   return `Sample ${field.name} ${i + 1}`
+}
+
+/** A `{ value, label }` option seeds its plain value — the column is a string (#4377). */
+function optionValue(opt: unknown): unknown {
+  return opt && typeof opt === 'object' && 'value' in opt ? (opt as { value: unknown }).value : opt
 }
 
 /** Evaluate a manifest `seed.fixture` expression with `i`, `name` and `now` in scope. */

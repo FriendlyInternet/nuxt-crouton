@@ -26,7 +26,7 @@ CMS-like page management system for Nuxt Crouton. Provides:
 | `app/components/Renderer.vue` | `CroutonPagesRenderer` - Renders page based on type |
 | `app/components/CollectionPageRenderer.vue` | `CroutonPagesCollectionPageRenderer` - Bridge for publishable collection pages |
 | `app/components/RegularContent.vue` | `CroutonPagesRegularContent` - Rich text content display |
-| `app/components/BlockContent.vue` | `CroutonPagesBlockContent` - Block-based content display. **Lazy-resolves every block renderer** (`getLazyBlockComponent` → `Lazy{Name}`) so each renderer is a per-block code-split chunk, loaded only when a page contains that block type; SSR markup is preserved (async components resolve server-side, so first paint/LCP is unaffected). |
+| `app/components/BlockContent.vue` | `CroutonPagesBlockContent` - Block-based content display. **Lazy-resolves every block renderer** (`getLazyBlockComponent` → `Lazy{Name}`) so each renderer is a per-block code-split chunk, loaded only when a page contains that block type; SSR markup is preserved (async components resolve server-side, so first paint/LCP is unaffected). Native TipTap nodes other than heading/paragraph (lists, quote, code block, divider) render via `app/utils/block-html.ts` (`blockHtmlRenderers`, sanitized); `test/editor-toolbar-coverage.test.ts` fails if a kind in crouton-editor's `blockTypesGroup` has no public renderer (#4437). |
 | `app/components/Footer.vue` | `CroutonPagesFooter` - Self-contained footer for layouts (uses UFooter) |
 | `app/components/FooterRenderer.vue` | `CroutonPagesFooterRenderer` - Footer page renderer (used by Renderer.vue) |
 | `app/components/Workspace/Editor.vue` | `CroutonPagesWorkspaceEditor` — the page editor. **Mobile-first tabbed layout (#307):** one consolidated toolbar (`CroutonPagesEditorToolbar`), then a **language bar** (`CroutonSubBar`: locale dropdown + Preview) whose **shared editing locale drives every tab's translatable fields**, then **Content / SEO / Settings** tabs (Settings first — carries title/slug + page setup). Title/slug + block content use `CroutonI18nInput` in **tabs layout with `active-locale` + `hide-locale-switcher`** (the language bar is the single switcher). SEO is translatable (follows the bar); SEO-title placeholder = the live page title; an AI "Generate" button (gated on `hasApp('ai')`) drafts the description via `/api/ai/generate-seo`. Emits `back` (mobile slideover dismiss). |
@@ -597,7 +597,7 @@ tokens** — the accountless tokens volunteers/guests get by redeeming a PIN
   members and for anonymous visitors presenting a valid scoped token, so nav
   shows them exactly when they're reachable.
 - **Transport**: the token arrives via the canonical `x-scoped-token` header
-  or the `scoped-access-token` cookie (set by `useScopedAccess`/redeem/mint —
+  or the `scoped-access-token` cookie (set by `useScopedAccess`/redeem —
   the cookie is what makes SSR work).
 - **PIN-protect a single page**: create a grant on `('page', pageId)` via
   crouton-auth's `upsertScopedGrant`, set the page's `requiredScope` to match,

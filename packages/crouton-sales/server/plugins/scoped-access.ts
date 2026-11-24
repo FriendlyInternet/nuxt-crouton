@@ -15,7 +15,9 @@
  *    overwritten on every login attempt) — never hand-edit it.
  *
  * 2. `crouton:pages:derive-scope` — read-time scope derivation. When a
- *    `scoped` page's content contains an `eventWorkspaceBlock`, the page
+ *    `scoped` page's content contains an `eventWorkspaceBlock` or a
+ *    `kitchenDisplayBlock` (the first with a non-empty `eventSlug` wins,
+ *    `scopedEventSlug`), the page
  *    gate must redeem the event's helper PIN instead of a page code. The
  *    handler resolves the block's `eventSlug` to the event id (tokens are
  *    id-scoped; blocks deliberately store only the slug) and answers
@@ -26,6 +28,7 @@
 import { eq, and } from 'drizzle-orm'
 import { upsertScopedGrant, verifyScopedGrantByResource } from '@fyit/crouton-auth/server/utils/scoped-access'
 import { salesEvents } from '../../collections/events/server/database/schema'
+import { scopedEventSlug } from '../utils/scoped-event-block'
 
 interface BeforeRedeemContext {
   organizationId: string
@@ -81,8 +84,7 @@ export default defineNitroPlugin((nitroApp) => {
     // already have answered.
     if (payload.result) return
 
-    const block = payload.blocks.find(b => b?.type === 'eventWorkspaceBlock')
-    const eventSlug = typeof block?.attrs?.eventSlug === 'string' ? block.attrs.eventSlug.trim() : ''
+    const eventSlug = scopedEventSlug(payload.blocks)
     if (!eventSlug) return
 
     const db = useDB()

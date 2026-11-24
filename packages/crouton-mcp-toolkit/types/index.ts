@@ -13,14 +13,17 @@ export interface CroutonMcpToolkitConfig {
 
   /**
    * Serve the generic collection CRUD + token tools at `/mcp`.
-   * `false` answers 404 on `/mcp` (and `/mcp/deeplink`, `/mcp/badge.svg`, any
-   * other `/mcp/<name>`) and keeps only the named `/mcp/pages` handler.
+   * `false` answers 404 on `/mcp/*` (`/mcp/deeplink`, `/mcp/badge.svg`, any
+   * `/mcp/<name>`); `/mcp` itself serves the page tools only when `pages` and
+   * `croutonAuth.mcpOAuth` are both on. `true` cannot be combined with
+   * `croutonAuth.mcpOAuth` (build error).
    * @default true
    */
   genericTools?: boolean
 
   /**
-   * Serve the live page tools at `/mcp/pages` (#3982). Needs
+   * Serve the live page tools at `/mcp` when `croutonAuth.mcpOAuth` is on
+   * (#3982, #4097) — else a build warning and no page tools. Needs
    * `@fyit/crouton-pages` and `@fyit/crouton-collab` extended — the build fails
    * otherwise.
    * @default false

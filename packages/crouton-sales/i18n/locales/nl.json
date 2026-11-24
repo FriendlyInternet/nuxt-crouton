@@ -130,7 +130,9 @@
           "eventNotFound": "Evenement niet gevonden",
           "stale": "Wordt niet bijgewerkt",
           "staleHint": "Dit scherm heeft geen verbinding meer met de server — de getoonde bestellingen kunnen verouderd zijn. Controleer de verbinding.",
-          "connecting": "verbinden"
+          "connecting": "verbinden",
+          "signedOut": "Afgemeld — log opnieuw in",
+          "signInAgain": "Opnieuw inloggen"
         }
       },
       "salesOrders": {
