@@ -13,9 +13,9 @@
  * order lifecycle is separate from what a screen shows.
  *
  * Query: `?locations=locA,locB` scopes to the block's configured locations
- * (empty = every location in the event). Auth: none — an unattended screen on
- * the trusted venue LAN (the page gate guards access); a helper-scoped token is
- * a follow-up.
+ * (empty = every location in the event). Auth: a helper token for this
+ * event's team, through `requireScopedEvent` (#4480) — 401 without a token,
+ * 404 when the event is not the token's team's.
  *
  * ## One query, bounded parameters (#1766)
  *
@@ -44,12 +44,10 @@ import {
   shapeDisplayTickets,
   type TicketRow
 } from '../../../../../utils/kds-tickets'
+import { requireScopedEvent } from '../../../../../utils/require-scoped-event'
 
 export default defineEventHandler(async (event) => {
-  const eventId = getRouterParam(event, 'eventId')
-  if (!eventId) {
-    throw createError({ status: 400, statusText: 'eventId is required' })
-  }
+  const { eventId, db } = await requireScopedEvent(event)
 
   const requested = (getQuery(event).locations as string | undefined)
     ?.split(',').map(s => s.trim()).filter(Boolean) ?? []
@@ -63,8 +61,6 @@ export default defineEventHandler(async (event) => {
     // opaque 500 from D1 that the board would silently swallow (#1766).
     throw createError({ status: 400, statusText: error?.message ?? 'Invalid display query' })
   }
-
-  const db = useDB()
 
   // Item-driven, so location routing is a column rather than a second pass. The
   // bump LEFT JOIN is what keeps this to open tickets only; the products join is

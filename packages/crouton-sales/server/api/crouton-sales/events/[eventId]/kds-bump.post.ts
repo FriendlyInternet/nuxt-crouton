@@ -15,18 +15,17 @@
  * not match a second path param under `/events/:eventId/.../:param`, so the
  * ticket id rides the body rather than the path.
  *
- * Auth: none, matching the read endpoint (unattended screen on the trusted
- * venue LAN; a helper-scoped token is a follow-up).
+ * Auth: a helper token for this event's team, through `requireScopedEvent`
+ * (#4480) — 401 without a token, 404 when the event is not the token's team's.
+ * The tenant comes from the token's event; the order must belong to it.
  */
 import { and, eq } from 'drizzle-orm'
 import { salesOrders } from '../../../../../collections/orders/server/database/schema'
 import { salesKdsbumps } from '../../../../../collections/kdsbumps/server/database/schema'
+import { requireScopedEvent } from '../../../../utils/require-scoped-event'
 
 export default defineEventHandler(async (event) => {
-  const eventId = getRouterParam(event, 'eventId')
-  if (!eventId) {
-    throw createError({ status: 400, statusText: 'eventId is required' })
-  }
+  const { eventId, salesEvent, db } = await requireScopedEvent(event)
 
   const body = await readBody(event)
   const orderId = typeof body?.orderId === 'string' ? body.orderId : ''
@@ -35,11 +34,9 @@ export default defineEventHandler(async (event) => {
     throw createError({ status: 400, statusText: 'orderId and locationId are required' })
   }
 
-  const db = useDB()
-
-  // The order anchors the bump's tenant + confirms it belongs to this event.
+  // The order must belong to this event (404 otherwise).
   const [order] = await db
-    .select({ teamId: salesOrders.teamId, owner: salesOrders.owner })
+    .select({ owner: salesOrders.owner })
     .from(salesOrders)
     .where(and(eq(salesOrders.id, orderId), eq(salesOrders.eventId, eventId)))
     .limit(1)
@@ -59,7 +56,7 @@ export default defineEventHandler(async (event) => {
 
   if (!existing) {
     await db.insert(salesKdsbumps).values({
-      teamId: order.teamId,
+      teamId: salesEvent.teamId,
       owner: order.owner,
       eventId,
       orderId,

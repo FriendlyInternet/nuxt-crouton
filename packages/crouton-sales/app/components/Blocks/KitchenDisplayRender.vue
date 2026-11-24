@@ -40,7 +40,27 @@ const eventSlug = computed(() => props.attrs.eventSlug || '')
 const teamParam = computed(() => String(route.params.team || ''))
 
 const eventId = ref<string | null>(null)
+const eventTeamId = ref<string | null>(null)
 const eventNotFound = ref(false)
+// A 401/403 from the feed or a bump: the helper token is missing, expired (8h)
+// or revoked. Polling stops and the screen says so — never reloads by itself.
+const signedOut = ref(false)
+
+const { loggedIn } = useAuth()
+const { loadSession, adoptScopedSession, loginAsAdmin, eventId: sessionEventId } = useHelperAuth()
+const { helperHeaders } = useHelperHeaders()
+
+function isAuthError(e: any) {
+  return [401, 403].includes(e?.statusCode ?? e?.response?.status)
+}
+
+function markSignedOut() {
+  signedOut.value = true
+  if (timer) {
+    clearInterval(timer)
+    timer = null
+  }
+}
 const jobs = ref<KdsJob[]>([])
 
 // Optimistically hide a job the moment it's bumped, so the tile leaves
@@ -90,14 +110,26 @@ onUnmounted(() => clearDisarmTimer())
 async function resolveEvent() {
   if (!eventSlug.value || !teamParam.value) return
   try {
-    const ev = await $fetch<{ id: string }>(
+    const ev = await $fetch<{ id: string, teamId: string }>(
       `/api/crouton-sales/events/${teamParam.value}/by-slug/${eventSlug.value}`
     )
     eventId.value = ev.id
+    eventTeamId.value = ev.teamId
   }
   catch {
     eventNotFound.value = true
   }
+}
+
+// Log in like the till (Pos/Panel.vue): adopt the page gate's event session (a
+// scoped page already redeemed the helper PIN), else a signed-in team member
+// mints an admin helper token. No match → the feed 401s → "Signed out".
+async function ensureSession() {
+  if (!eventId.value || !eventTeamId.value) return
+  const ids = { teamId: eventTeamId.value, eventId: eventId.value }
+  loadSession()
+  if (sessionEventId.value !== eventId.value) adoptScopedSession(ids)
+  if (sessionEventId.value !== eventId.value && loggedIn.value) await loginAsAdmin(ids)
 }
 
 // Locations this screen shows, as a query param; empty = the whole event.
@@ -107,16 +139,23 @@ const locationsParam = computed(() => (props.attrs.locations || []).filter(Boole
 const lastOkAt = ref<number | null>(null)
 
 async function refresh() {
-  if (!eventId.value) return
+  if (!eventId.value || signedOut.value) return
   try {
     const res = await $fetch<{ jobs: KdsJob[] }>(
       `/api/crouton-sales/events/${eventId.value}/display-jobs`,
-      { query: locationsParam.value ? { locations: locationsParam.value } : undefined }
+      {
+        query: locationsParam.value ? { locations: locationsParam.value } : undefined,
+        headers: helperHeaders()
+      }
     )
     jobs.value = res.jobs
     lastOkAt.value = Date.now()
   }
-  catch {
+  catch (e) {
+    if (isAuthError(e)) {
+      markSignedOut()
+      return
+    }
     // Keep the last board — a single dropped poll is genuinely transient. But
     // `lastOkAt` deliberately does NOT advance, so a feed that stays broken
     // stops presenting itself as live (#1766).
@@ -129,11 +168,13 @@ async function bump(job: KdsJob) {
   try {
     await $fetch(`/api/crouton-sales/events/${eventId.value}/kds-bump`, {
       method: 'POST',
-      body: { orderId: job.orderId, locationId: job.locationId }
+      body: { orderId: job.orderId, locationId: job.locationId },
+      headers: helperHeaders()
     })
     await refresh()
   }
-  catch {
+  catch (e) {
+    if (isAuthError(e)) markSignedOut()
     // Bump failed — show the tile again so it can be retried.
     const next = new Set(bumping.value)
     next.delete(job.id)
@@ -150,8 +191,9 @@ function tick() { if (document.visibilityState !== 'hidden') refresh() }
 
 onMounted(async () => {
   await resolveEvent()
+  if (eventId.value) await ensureSession()
   await refresh()
-  timer = setInterval(tick, POLL_MS)
+  if (!signedOut.value) timer = setInterval(tick, POLL_MS)
   document.addEventListener('visibilitychange', tick)
 })
 onUnmounted(() => {
@@ -173,6 +215,36 @@ const health = computed(() => boardHealth({
   pollMs: POLL_MS
 }))
 
+// Header live-dot look + label per board health (#1766).
+const HEALTH_UI = {
+  live: { text: 'text-muted', dot: 'bg-success animate-pulse', label: 'sales.blocks.kitchenDisplay.ui.live' },
+  stale: { text: 'text-warning', dot: 'bg-warning', label: 'sales.blocks.kitchenDisplay.ui.stale' },
+  connecting: { text: 'text-muted', dot: 'bg-muted animate-pulse', label: 'sales.blocks.kitchenDisplay.ui.connecting' }
+} as const
+const healthUi = computed(() => HEALTH_UI[health.value])
+
+// What to show instead of the board, if anything: the editor picked no event,
+// the picked event no longer resolves, or the helper token is gone (#4480 —
+// reload only on tap).
+const notice = computed(() => {
+  if (!eventSlug.value) {
+    return { color: 'neutral' as const, variant: 'soft' as const, icon: 'i-lucide-monitor', title: t('sales.block.noEventPicked') }
+  }
+  if (eventNotFound.value) {
+    return { color: 'neutral' as const, variant: 'soft' as const, icon: 'i-lucide-monitor-x', title: t('sales.blocks.kitchenDisplay.ui.eventNotFound') }
+  }
+  if (signedOut.value) {
+    return {
+      color: 'warning' as const,
+      variant: 'subtle' as const,
+      icon: 'i-lucide-log-out',
+      title: t('sales.blocks.kitchenDisplay.ui.signedOut'),
+      actions: [{ label: t('sales.blocks.kitchenDisplay.ui.signInAgain'), onClick: () => reloadNuxtApp() }]
+    }
+  }
+  return null
+})
+
 function ago(iso: string) {
   const s = Math.max(0, Math.floor((now.value - new Date(iso).getTime()) / 1000))
   if (s < 60) return `${s}s`
@@ -183,43 +255,19 @@ function ago(iso: string) {
 
 <template>
   <div class="kitchen-display-block">
-    <!-- Editor didn't pick an event -->
-    <UAlert
-      v-if="!eventSlug"
-      color="neutral"
-      variant="soft"
-      icon="i-lucide-monitor"
-      :title="t('sales.block.noEventPicked')"
-    />
-
-    <!-- Picked event no longer resolves (deleted / stale slug) -->
-    <UAlert
-      v-else-if="eventNotFound"
-      color="neutral"
-      variant="soft"
-      icon="i-lucide-monitor-x"
-      :title="t('sales.blocks.kitchenDisplay.ui.eventNotFound')"
-    />
+    <!-- No event picked / event gone / signed out — one notice instead of the board -->
+    <UAlert v-if="notice" v-bind="notice" />
 
     <!-- The board — theme-driven via Nuxt UI semantic tokens (follows dark mode) -->
-    <UCard>
+    <UCard v-else>
       <header class="flex items-center justify-between mb-5">
         <div class="flex items-center gap-3">
           <UIcon name="i-lucide-chef-hat" class="size-6 text-primary" />
           <h2 class="text-xl font-bold tracking-tight text-highlighted">{{ t('sales.blocks.kitchenDisplay.ui.title') }}</h2>
         </div>
-        <div class="flex items-center gap-2 text-sm" :class="health === 'stale' ? 'text-warning' : 'text-muted'">
-          <span
-            class="inline-block size-2 rounded-full"
-            :class="{
-              'bg-success animate-pulse': health === 'live',
-              'bg-warning': health === 'stale',
-              'bg-muted animate-pulse': health === 'connecting'
-            }"
-          />
-          <template v-if="health === 'stale'">{{ t('sales.blocks.kitchenDisplay.ui.stale') }}</template>
-          <template v-else-if="health === 'connecting'">{{ t('sales.blocks.kitchenDisplay.ui.connecting') }}</template>
-          <template v-else>{{ t('sales.blocks.kitchenDisplay.ui.live') }}</template>
+        <div class="flex items-center gap-2 text-sm" :class="healthUi.text">
+          <span class="inline-block size-2 rounded-full" :class="healthUi.dot" />
+          {{ t(healthUi.label) }}
           · {{ t('sales.blocks.kitchenDisplay.ui.active', { count: active.length }) }}
         </div>
       </header>
@@ -249,62 +297,16 @@ function ago(iso: string) {
         tag="div"
         class="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(260px,1fr))]"
       >
-        <div
+        <SalesBlocksKitchenDisplayTile
           v-for="o in active"
           :key="o.id"
-          class="relative rounded-2xl bg-muted ring ring-default shadow-sm overflow-hidden flex flex-col"
-          :class="o.isPersonnel ? 'ring-warning/60' : ''"
-          @click="armedId !== o.id && arm(o)"
-        >
-          <div
-            class="flex items-center justify-between px-4 py-3 border-b border-default"
-            :class="o.isPersonnel ? 'bg-warning/10' : 'bg-elevated/60'"
-          >
-            <div class="flex items-baseline gap-2">
-              <span class="text-2xl font-extrabold text-highlighted">#{{ o.orderNumber }}</span>
-              <UBadge v-if="o.isPersonnel" color="warning" variant="subtle" size="sm" class="font-bold uppercase">{{ t('sales.blocks.kitchenDisplay.ui.staff') }}</UBadge>
-            </div>
-            <span class="text-xs text-muted tabular-nums">{{ ago(o.createdAt) }}</span>
-          </div>
-
-          <div class="px-4 py-3 flex-1">
-            <p v-if="o.clientName" class="text-sm text-muted mb-2">{{ o.clientName }}</p>
-            <ul class="space-y-1.5">
-              <li v-for="(it, i) in o.items" :key="i" class="flex gap-2 text-[15px] text-default">
-                <span class="font-bold text-primary tabular-nums min-w-[1.5rem]">{{ it.quantity }}×</span>
-                <span class="flex-1">
-                  {{ it.title }}
-                  <span v-if="it.remarks" class="block text-xs text-warning">↳ {{ it.remarks }}</span>
-                </span>
-              </li>
-            </ul>
-          </div>
-
-          <UButton
-            color="neutral"
-            variant="soft"
-            size="lg"
-            block
-            icon="i-lucide-check"
-            :label="t('sales.blocks.kitchenDisplay.ui.bump')"
-            class="rounded-none font-bold uppercase tracking-wide"
-            @click.stop="armedId !== o.id && arm(o)"
-          />
-
-          <!-- Armed state: full-card confirm overlay (#2115) -->
-          <Transition name="confirm-overlay">
-            <button
-              v-if="armedId === o.id"
-              type="button"
-              class="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-success text-inverted font-bold uppercase tracking-wide cursor-pointer"
-              @click.stop="confirmBump(o)"
-            >
-              <UIcon :name="justConfirmed === o.id ? 'i-lucide-check-circle-2' : 'i-lucide-check'" class="size-10" />
-              <span class="text-lg">{{ t('sales.blocks.kitchenDisplay.ui.bump') }}</span>
-              <span class="text-xs font-normal normal-case opacity-80">{{ t('sales.blocks.kitchenDisplay.ui.tapToConfirm') }}</span>
-            </button>
-          </Transition>
-        </div>
+          :job="o"
+          :age="ago(o.createdAt)"
+          :armed="armedId === o.id"
+          :confirmed="justConfirmed === o.id"
+          @arm="arm(o)"
+          @confirm="confirmBump(o)"
+        />
       </TransitionGroup>
     </UCard>
   </div>
@@ -315,6 +317,4 @@ function ago(iso: string) {
 .order-enter-from { opacity: 0; transform: translateY(-10px) scale(.97); }
 .order-leave-to { opacity: 0; transform: scale(.92); }
 
-.confirm-overlay-enter-active, .confirm-overlay-leave-active { transition: opacity .15s ease; }
-.confirm-overlay-enter-from, .confirm-overlay-leave-to { opacity: 0; }
 </style>
