@@ -36,22 +36,76 @@ useSortable(containerRef, items, {
   handle: '.drag-handle',
   ghostClass: 'opacity-50',
   disabled: !props.sortable,
-  onUpdate: (event: SortableEvent) => {
-    isEmitting.value = true
-
-    // Get the reordered array from the event
-    const reordered = [...items.value]
-    const movedItem = reordered.splice(event.oldIndex!, 1)[0]
-    reordered.splice(event.newIndex!, 0, movedItem)
-
-    items.value = reordered
-    emit('update:modelValue', reordered)
-
-    nextTick(() => {
-      isEmitting.value = false
-    })
-  }
+  onUpdate: (event: SortableEvent) => moveItem(event.oldIndex!, event.newIndex!)
 })
+
+// One reorder path for drag and the row menu. The isEmitting guard stops the
+// parent's echo of our own emit from resetting items mid-reorder.
+function moveItem(from: number, to: number) {
+  if (from === to || to < 0 || to >= items.value.length) return
+  isEmitting.value = true
+
+  const reordered = [...items.value]
+  const movedItem = reordered.splice(from, 1)[0]
+  reordered.splice(to, 0, movedItem)
+
+  items.value = reordered
+  emit('update:modelValue', reordered)
+
+  nextTick(() => {
+    isEmitting.value = false
+  })
+}
+
+// Keyboard/touch reorder: announced to screen readers, focus follows the row
+const announcement = ref('')
+const focusAfterClose = ref<number | null>(null)
+
+function moveByMenu(index: number, to: number) {
+  moveItem(index, to)
+  announcement.value = t('repeater.moved', { position: to + 1, total: items.value.length })
+  focusAfterClose.value = to
+}
+
+function rowMenuItems(index: number) {
+  const remove = {
+    label: t('common.remove'),
+    icon: 'i-lucide-trash-2',
+    color: 'error' as const,
+    onSelect: () => removeItem(index)
+  }
+  if (!props.sortable || items.value.length < 2) return [[remove]]
+  return [
+    [
+      {
+        label: t('repeater.moveUp'),
+        icon: 'i-lucide-arrow-up',
+        disabled: index === 0,
+        onSelect: () => moveByMenu(index, index - 1)
+      },
+      {
+        label: t('repeater.moveDown'),
+        icon: 'i-lucide-arrow-down',
+        disabled: index === items.value.length - 1,
+        onSelect: () => moveByMenu(index, index + 1)
+      }
+    ],
+    [remove]
+  ]
+}
+
+// Rows are keyed `item.id || index`, so look the row up by its new index.
+// Escape returns focus to the same row; after Remove, to the row that took its place.
+function onMenuCloseAutoFocus(event: Event, index: number) {
+  event.preventDefault()
+  const target = Math.min(focusAfterClose.value ?? index, items.value.length - 1)
+  focusAfterClose.value = null
+  nextTick(() => {
+    containerRef.value?.children[target]
+      ?.querySelector<HTMLElement>('[data-testid="repeater-row-menu"]')
+      ?.focus()
+  })
+}
 
 // Watch for external changes to props.modelValue and sync to items ref
 // BUT don't break useSortable by creating new array references during our own emissions
@@ -110,9 +164,9 @@ onMounted(() => {
       :key="item.id || index"
       :ui="{ body: 'sm:p-2 p-2' }"
     >
-      <!-- One row: handle · item · remove. Controls stay top-aligned and the
+      <!-- One row: handle · item · menu. Controls stay top-aligned and the
            item grows (flex-1 min-w-0), so multi-field items still fit and a
-           long value can't push the remove button off a narrow screen. -->
+           long value can't push the menu button off a narrow screen. -->
       <div class="flex items-start gap-2">
         <!-- Drag handle (only if sortable) -->
         <UButton
@@ -144,19 +198,33 @@ onMounted(() => {
           />
         </div>
 
-        <!-- Remove button -->
-        <UButton
-          type="button"
-          color="error"
-          variant="ghost"
-          size="sm"
-          icon="i-lucide-x"
-          class="shrink-0"
-          :aria-label="t('form.removeItem')"
-          @click="removeItem(index)"
-        />
+        <!-- Row menu: Move up / Move down / Remove -->
+        <UDropdownMenu
+          :items="rowMenuItems(index)"
+          :content="{ align: 'end', onCloseAutoFocus: (e: Event) => onMenuCloseAutoFocus(e, index) }"
+        >
+          <UButton
+            type="button"
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            icon="i-lucide-ellipsis-vertical"
+            class="shrink-0"
+            data-testid="repeater-row-menu"
+            :aria-label="t('repeater.actions', { position: index + 1, total: items.length })"
+          />
+        </UDropdownMenu>
       </div>
     </UCard>
+  </div>
+
+  <!-- Outside containerRef: Sortable treats every child there as a row -->
+  <div
+    class="sr-only"
+    aria-live="polite"
+    data-testid="repeater-live"
+  >
+    {{ announcement }}
   </div>
 
   <!-- Add button -->
