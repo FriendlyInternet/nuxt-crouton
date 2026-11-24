@@ -36,11 +36,14 @@ test('#4183 T5: job-start is the first step of work-pi', () => {
   assert.match(step('job-start'), /echo "ts=\$\(date \+%s\)" >> "\$GITHUB_OUTPUT"/)
 })
 
-test('#4183 T5: budget runs pi-time-budget.mjs minutes, outside plan mode, from the job start', () => {
+// covers: T1
+test('#4183 T5 / #4503 T1: budget runs pi-time-budget.mjs minutes from the $RUNNER_TEMP copy, outside plan mode, from the job start', () => {
   const b = step('budget')
   assert.match(b, /if: \$\{\{ inputs\.mode != 'plan' \}\}/)
   assert.match(b, /JOB_START: \$\{\{ steps\.job-start\.outputs\.ts \}\}/)
-  assert.match(b, /node scripts\/lib\/pi-time-budget\.mjs minutes --start "\$JOB_START" >> "\$GITHUB_OUTPUT"/)
+  assert.match(b, /node "\$RUNNER_TEMP\/scripts\/lib\/pi-time-budget\.mjs" minutes --start "\$JOB_START" >> "\$GITHUB_OUTPUT"/)
+  // revise has already checked out the PR branch, which may predate the script (#4503)
+  assert.doesNotMatch(b, /node scripts\/lib\/pi-time-budget\.mjs/)
   assert.ok(src.indexOf('      - id: budget') < src.indexOf('      - id: pi\n'), 'budget runs before pi')
 })
 
