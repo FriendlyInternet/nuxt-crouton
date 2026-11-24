@@ -9,8 +9,13 @@ exact word they reply.
 ## The story
 
 1. **Start.** The owner adds the `work-this` label — the only label a human applies.
-   `label-router.yml` (its `work-this` branch) sends the issue down one of four roads, checked in
+   `label-router.yml` (its `work-this` branch) sends the issue down one of five roads, checked in
    this order:
+   - 0. A ticket a chat wrote (not made by the pipeline's split) under an epic, with no ticket-review
+     go for itself → `scripts/ticket-review-gate.mjs` takes `work-this` off and starts
+     `ticket-review.yml -f subject=<n>` for that ticket alone (#4456); on go it puts `work-this`
+     back, or, if a `Blocked-by:` ticket is still open, notes "waits for #N" and the blocker's close
+     starts it.
    - a. The issue already has `plan:approved` → straight to the build (step 4).
    - b. The issue is an epic (`scripts/epic-route.mjs` says `splitter`) **or** its text asks for a
      design sign-off ("Hold for design sign-off", `scripts/lib/signoff-route.mjs`, #3238) → the
