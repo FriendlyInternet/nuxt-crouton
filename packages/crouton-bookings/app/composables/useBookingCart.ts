@@ -274,6 +274,8 @@ export function useBookingCart() {
   // Keep the picked product valid: drop it when it is no longer listed, and
   // pick it automatically when the location lists exactly one.
   function syncProduct() {
+    // Locations not loaded yet: don't drop a booking's real product before the list arrives (#4331)
+    if (!selectedLocation.value) return
     const listed = locationProducts.value
     if (formState.productId && !listed.some(p => p.product === formState.productId)) {
       formState.productId = null
@@ -283,15 +285,20 @@ export function useBookingCart() {
     }
   }
 
-  // A location change resets the product. Sync, so a caller that sets the
-  // location and then the product in the same tick keeps its product.
+  // A location change resets product, slots, group and amount (#4331). Sync, so a
+  // caller that sets the location and then the rest in the same tick keeps them.
+  // Not resetForm(): that also clears the location and the date.
   watch(() => formState.locationId, () => {
     formState.productId = null
+    formState.slotIds = []
+    formState.groupId = null
+    formState.quantity = 1
     syncProduct()
   }, { flush: 'sync' })
 
-  // The location's product list changed (fetched, edited) — re-check the pick
-  watch(() => locationProducts.value.map(p => p.product).join(','), () => {
+  // The location's product list or the picked product changed (fetched, edited,
+  // set from a booking) — re-check the pick, so an unlisted product is dropped (#4331)
+  watch(() => [locationProducts.value.map(p => p.product).join(','), formState.productId], () => {
     syncProduct()
   }, { immediate: true })
 
