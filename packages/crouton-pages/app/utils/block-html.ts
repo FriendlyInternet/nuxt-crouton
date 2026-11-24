@@ -6,9 +6,9 @@
  * crouton-editor's toolbarPresets.ts) must have a public renderer — either a
  * template branch (heading, paragraph) or an entry in `blockHtmlRenderers`.
  * `test/editor-toolbar-coverage.test.ts` enforces that rule against the real
- * toolbar list. All output goes through crouton-pages' DOM-free `sanitizeHtml`.
+ * toolbar list. All output goes through crouton-editor's DOM-free `sanitizeHtml`.
  */
-import { sanitizeHtml, inlineContentToHtml, escapeHtml } from './sanitize-html'
+import { sanitizeHtml, inlineContentToHtml, escapeHtml } from '@fyit/crouton-editor/app/utils/sanitize-html'
 
 type TipTapNode = { type?: string, text?: string, content?: TipTapNode[], attrs?: Record<string, unknown> }
 
