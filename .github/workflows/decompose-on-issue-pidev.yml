@@ -266,7 +266,11 @@ jobs:
           cache: pnpm
       - name: Install
         if: ${{ steps.resume.outputs.resume != '1' }}
-        run: pnpm install --frozen-lockfile
+        # --ignore-scripts: skip every workspace postinstall (nuxt prepare); the touched app's typecheck regenerates .nuxt itself (#3199)
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Rebuild native deps skipped by --ignore-scripts
+        if: ${{ steps.resume.outputs.resume != '1' }}
+        run: pnpm rebuild better-sqlite3
 
       # A design sign-off hold renders its UI mockup / schema table to PNG with Playwright
       # (.claude/skills/ui-proposal/render.mjs). Without a browser every render failed with
