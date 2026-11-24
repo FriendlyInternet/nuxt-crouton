@@ -54,6 +54,7 @@
     "creationFailed": "Aanmaken mislukt",
     "updateFailed": "Bijwerken mislukt",
     "deleteFailed": "Verwijderen mislukt",
+    "deletePartial": "{done} van {total} verwijderd. {failed} kon niet worden verwijderd: {error}",
     "moveFailed": "Verplaatsen mislukt",
     "reorderFailed": "Herordenen mislukt"
   },

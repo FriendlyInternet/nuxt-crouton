@@ -54,6 +54,7 @@
     "creationFailed": "Échec de la création",
     "updateFailed": "Échec de la mise à jour",
     "deleteFailed": "Échec de la suppression",
+    "deletePartial": "{done} sur {total} supprimés. {failed} n'a pas pu être supprimé : {error}",
     "moveFailed": "Échec du déplacement",
     "reorderFailed": "Échec de la réorganisation"
   },

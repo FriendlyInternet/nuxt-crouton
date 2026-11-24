@@ -240,38 +240,61 @@ export function useCollectionMutation(collection: string): CollectionMutationRet
     const correlationId = generateCorrelationId()
     const timestamp = Date.now()
 
-    try {
-      // Delete each item individually (treat 404 as success — item already gone)
-      await Promise.all(
-        ids.map(id =>
-          $fetch(`${baseUrl}/${id}`, {
-            method: 'DELETE',
-            credentials: 'include'
-          }).catch((err: any) => {
-            if (err?.response?.status === 404 || err?.status === 404 || err?.statusCode === 404) return
-            throw err
-          })
-        )
+    // Delete each item individually (treat 404 as success — item already gone).
+    // allSettled: one refused row must not hide the rows the server did delete.
+    const results = await Promise.allSettled(
+      ids.map(id =>
+        $fetch(`${baseUrl}/${id}`, {
+          method: 'DELETE',
+          credentials: 'include'
+        }).catch((err: any) => {
+          if (err?.response?.status === 404 || err?.status === 404 || err?.statusCode === 404) return
+          throw err
+        })
       )
+    )
 
-      // Emit hook for event tracking (zero overhead if no listeners)
-      const nuxtApp = useNuxtApp()
-      await nuxtApp.hooks.callHook('crouton:mutation', {
-        operation: 'delete',
-        collection,
-        itemIds: ids,
-        correlationId,
-        timestamp
-      })
+    const doneIds = ids.filter((_, i) => results[i]?.status === 'fulfilled')
+    const failures = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
 
-      // Invalidate cache to trigger refetch (includes individual item caches)
-      await invalidateCache(ids)
-    } catch (error: any) {
-      const errorMessage = errorText(error, t('mutations.deleteFailed'))
+    if (doneIds.length > 0) {
+      try {
+        // Emit hook for event tracking (zero overhead if no listeners)
+        const nuxtApp = useNuxtApp()
+        await nuxtApp.hooks.callHook('crouton:mutation', {
+          operation: 'delete',
+          collection,
+          itemIds: doneIds,
+          correlationId,
+          timestamp
+        })
 
-      notify.error(t('mutations.deleteFailed'), { description: errorMessage })
+        // Invalidate cache to trigger refetch (includes individual item caches)
+        await invalidateCache(doneIds)
+      } catch (error: any) {
+        const errorMessage = errorText(error, t('mutations.deleteFailed'))
 
-      throw error
+        notify.error(t('mutations.deleteFailed'), { description: errorMessage })
+
+        throw error
+      }
+    }
+
+    if (failures.length > 0) {
+      const firstError = failures[0]!.reason
+      const message = errorText(firstError, t('mutations.deleteFailed'))
+      const description = doneIds.length === 0
+        ? message
+        : t('mutations.deletePartial', {
+            done: doneIds.length,
+            total: ids.length,
+            failed: failures.length,
+            error: message
+          })
+
+      notify.error(t('mutations.deleteFailed'), { description })
+
+      throw firstError
     }
   }
 

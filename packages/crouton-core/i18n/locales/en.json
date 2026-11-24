@@ -54,6 +54,7 @@
     "creationFailed": "Creation failed",
     "updateFailed": "Update failed",
     "deleteFailed": "Delete failed",
+    "deletePartial": "{done} of {total} deleted. {failed} could not be deleted: {error}",
     "moveFailed": "Move failed",
     "reorderFailed": "Reorder failed"
   },
