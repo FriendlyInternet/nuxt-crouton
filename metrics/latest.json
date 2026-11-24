@@ -1,6 +1,6 @@
 {
   "as_of": "2026-11-24T07:20:27Z",
-  "data_commit": "56557d4f566f24a14bf63f9a113e7b55780ebfbc",
+  "data_commit": "1e51eafa0a9e11c2a5cf0b908388aa210f92b9e4",
   "weeks": {
     "2026-W46": {
       "jobs": {
@@ -5613,15 +5613,15 @@
           "runs": 1
         },
         "preview-screenshot.yml/Capture": {
-          "failed": 15,
+          "failed": 14,
           "failed_alone": 0,
-          "failed_no_pr": 15,
+          "failed_no_pr": 14,
           "failed_with_others": 0,
           "green_new_sha": 0,
-          "green_on_rerun": 2,
+          "green_on_rerun": 3,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.2206,
+          "rate": 0.2059,
           "runs": 68
         },
         "qodo-second-opinion.yml/ask": {
@@ -5991,10 +5991,10 @@
       },
       "lines": {
         "building": {
-          "failed": 57,
+          "failed": 56,
           "runs": 759,
           "schedule_total": 0,
-          "workflow_rate": 0.0751
+          "workflow_rate": 0.0738
         },
         "deploys": {
           "failed": 5,
@@ -6182,8 +6182,8 @@
           "runs": 1
         },
         "preview-screenshot.yml": {
-          "failed": 15,
-          "rate": 0.2206,
+          "failed": 14,
+          "rate": 0.2059,
           "runs": 68
         },
         "qodo-second-opinion.yml": {
