@@ -316,7 +316,8 @@ defineExpose({
         </div>
 
         <!-- Calendar -->
-        <div v-if="showCalendar" class="px-2 pb-2">
+        <!-- No bottom padding when the tab row follows: the gap already separates them, and the list keeps its room on a phone -->
+        <div v-if="showCalendar" class="px-2" :class="{ 'pb-2': resolvedLocations.length === 0 }">
           <CroutonBookingsCalendar
             v-model:filters="filterState"
             v-model:date="shownDate"
