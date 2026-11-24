@@ -91,7 +91,21 @@ test.describe('bookings panel location tabs (#4471)', () => {
     const loc2 = locs.find(l => l.title === 'e2e loc 2')
     expect(loc1 && loc2, 'e2e loc 1 and 2 exist').toBeTruthy()
     const today = new Date().toISOString().slice(0, 10)
+    // Re-runnable: the fixture DB persists across runs/retries and a slot holds one
+    // booking, so a second POST gets 409 "No room left". Create only what is missing.
+    // The server stores the day in the bookings timezone (default Europe/Brussels).
+    const listRes = await page.request.get(`${base}/api/teams/${teamId}/bookings-bookings`, { headers })
+    expect(listRes.ok(), `list bookings failed: ${listRes.status()}`).toBeTruthy()
+    const listData = await listRes.json()
+    const existing: any[] = Array.isArray(listData) ? listData : (listData?.items ?? [])
+    const dayOf = (d: unknown) => new Date(d as string).toLocaleDateString('en-CA', { timeZone: 'Europe/Brussels' })
+    const slotsOf = (s: unknown): string[] => {
+      if (Array.isArray(s)) return s.map(String)
+      try { const p = JSON.parse(String(s)); return Array.isArray(p) ? p.map(String) : [String(s)] } catch { return [String(s)] }
+    }
     for (const [loc, slot] of [[loc1, 's1-0'], [loc2, 's1-1']] as const) {
+      const booked = existing.some(b => b.location === loc.id && dayOf(b.date) === today && slotsOf(b.slot).includes(slot))
+      if (booked) continue
       const res = await page.request.post(`${base}/api/teams/${teamId}/bookings-bookings`, {
         headers,
         data: { location: loc.id, date: today, slot: [slot], quantity: 1, status: 'confirmed' }
