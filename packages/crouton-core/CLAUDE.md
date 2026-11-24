@@ -237,14 +237,16 @@ export default defineAppConfig({
 ## Cache Keys
 
 ```
-collection:{name}:{queryJSON}     # List queries
+collection:{name}:{teamId|super-admin}:{queryJSON}     # List queries
 collection-item:{name}:{teamId|super-admin}:{id}   # Single items (reactive getter key: changing id or team changes the key)
 ```
+
+Both are built only by `useCollectionCacheKeys(collection)` (`itemKey`, `listKey`, `refreshLists`, `refreshItems`); never build a key by hand (a test fails if another file does).
 
 The list key is a reactive `computed`, so changing a query on one instance changes
 that instance's key (two lists with different filters never share data).
 
-Mutations invalidate ALL cache keys for the collection. Item caches are found by `collection-item:{name}:` prefix + `:{id}` suffix in `payload.data`.
+Mutations, reorders, imports and Table page changes refresh only the current team's list keys of the collection (`collection:{name}:{team}:` prefix) and the exact item keys `collection-item:{name}:{team}:{id}`. Another team's slots are never refreshed.
 
 ## Server Pagination
 

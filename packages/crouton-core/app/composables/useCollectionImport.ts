@@ -119,6 +119,8 @@ export function useCollectionImport(collection: string): UseCollectionImportRetu
   const { t } = useT()
   const collections = useCollections()
   const { getTeamId } = useTeamContext()
+  // The one cache-key builder (#4506), resolved at setup
+  const { refreshLists } = useCollectionCacheKeys(collection)
 
   const config = collections.getConfig(collection)
   const apiPath = config?.apiPath || collection
@@ -314,12 +316,8 @@ export function useCollectionImport(collection: string): UseCollectionImportRetu
         progress.value = Math.round(((i + batch.length) / totalRows) * 100)
       }
 
-      // Invalidate collection cache (same pattern as useCollectionMutation)
-      const nuxtApp = useNuxtApp()
-      const prefix = `collection:${collection}:`
-      const allKeys = Object.keys(nuxtApp.payload.data)
-      const matchingKeys = allKeys.filter(key => key.startsWith(prefix))
-      await Promise.all(matchingKeys.map(key => refreshNuxtData(key)))
+      // Refresh the current team's cached lists (same builder as useCollectionMutation)
+      await refreshLists()
 
       result.success = result.failed === 0
 

@@ -138,8 +138,10 @@ vi.stubGlobal('console', {
 // Import composables after mocking
 import useCollections from '../useCollections'
 import { useTeamContext } from '../useTeamContext'
+import { useCollectionCacheKeys } from '../useCollectionCacheKeys'
 
 vi.stubGlobal('useCollections', useCollections)
+vi.stubGlobal('useCollectionCacheKeys', useCollectionCacheKeys)
 vi.stubGlobal('useTeamContext', useTeamContext)
 
 // Import the composable under test
@@ -248,15 +250,19 @@ describe('useCollectionMutation', () => {
 
     it('invalidates collection cache after success', async () => {
       mockPayloadData = {
-        'collection:products:{}': [{ id: '1' }],
-        'collection:products:{"page":2}': [{ id: '2' }]
+        'collection:products:test-team:{}': [{ id: '1' }],
+        'collection:products:test-team:{"page":2}': [{ id: '2' }]
       }
 
       const { create } = useCollectionMutation('products')
       await create({ name: 'Product' })
 
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection:products:{}')
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection:products:{"page":2}')
+      // covers: T5
+      const calls = mockRefreshNuxtData.mock.calls.map(c => c[0]).sort()
+      expect(calls).toEqual([
+        'collection:products:test-team:{"page":2}',
+        'collection:products:test-team:{}'
+      ].sort())
     })
 
     it('shows error toast on failure', async () => {
@@ -303,14 +309,19 @@ describe('useCollectionMutation', () => {
 
     it('refreshes referenced collection caches', async () => {
       mockPayloadData = {
-        'collection:posts:{}': [],
-        'collection-item:users:team-a:author-1': { id: 'author-1' }
+        'collection:posts:test-team:{}': [],
+        'collection-item:users:test-team:author-1': { id: 'author-1' }
       }
 
       const { create } = useCollectionMutation('posts')
       await create({ title: 'Post', authorId: 'author-1' })
 
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:users:team-a:author-1')
+      // covers: T5
+      const calls = mockRefreshNuxtData.mock.calls.map(c => c[0]).sort()
+      expect(calls).toEqual([
+        'collection-item:users:test-team:author-1',
+        'collection:posts:test-team:{}'
+      ].sort())
     })
   })
 
@@ -367,30 +378,34 @@ describe('useCollectionMutation', () => {
 
     it('invalidates both item and collection cache', async () => {
       mockPayloadData = {
-        'collection:products:{}': [{ id: 'prod-1' }],
-        'collection-item:products:team-a:prod-1': { id: 'prod-1' }
+        'collection:products:test-team:{}': [{ id: 'prod-1' }],
+        'collection-item:products:test-team:prod-1': { id: 'prod-1' }
       }
 
       const { update } = useCollectionMutation('products')
       await update('prod-1', { name: 'Updated' })
 
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection:products:{}')
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:products:team-a:prod-1')
+      // covers: T5
+      const calls = mockRefreshNuxtData.mock.calls.map(c => c[0]).sort()
+      expect(calls).toEqual([
+        'collection-item:products:test-team:prod-1',
+        'collection:products:test-team:{}'
+      ].sort())
     })
 
     it('refreshes only the exact id, not an id that merely starts with it (#4489)', async () => {
       mockPayloadData = {
-        'collection:products:{}': [],
-        'collection-item:products:team-a:id1': { id: 'id1' },
-        'collection-item:products:team-a:id10': { id: 'id10' }
+        'collection:products:test-team:{}': [],
+        'collection-item:products:test-team:id1': { id: 'id1' },
+        'collection-item:products:test-team:id10': { id: 'id10' }
       }
 
       const { update } = useCollectionMutation('products')
       await update('id1', { name: 'Updated' })
 
       const refreshCalls = mockRefreshNuxtData.mock.calls.map(c => c[0])
-      expect(refreshCalls).toContain('collection-item:products:team-a:id1')
-      expect(refreshCalls).not.toContain('collection-item:products:team-a:id10')
+      expect(refreshCalls).toContain('collection-item:products:test-team:id1')
+      expect(refreshCalls).not.toContain('collection-item:products:test-team:id10')
     })
 
     it('shows error toast on failure', async () => {
@@ -411,14 +426,14 @@ describe('useCollectionMutation', () => {
 
     it('refreshes referenced collection caches on update', async () => {
       mockPayloadData = {
-        'collection:posts:{}': [],
-        'collection-item:categories:team-a:cat-1': { id: 'cat-1' }
+        'collection:posts:test-team:{}': [],
+        'collection-item:categories:test-team:cat-1': { id: 'cat-1' }
       }
 
       const { update } = useCollectionMutation('posts')
       await update('post-1', { categoryId: 'cat-1' })
 
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:categories:team-a:cat-1')
+      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:categories:test-team:cat-1')
     })
   })
 
@@ -500,17 +515,21 @@ describe('useCollectionMutation', () => {
 
     it('invalidates item caches for deleted ids', async () => {
       mockPayloadData = {
-        'collection:products:{}': [{ id: 'id1' }, { id: 'id2' }],
-        'collection-item:products:team-a:id1': { id: 'id1' },
-        'collection-item:products:team-a:id2': { id: 'id2' }
+        'collection:products:test-team:{}': [{ id: 'id1' }, { id: 'id2' }],
+        'collection-item:products:test-team:id1': { id: 'id1' },
+        'collection-item:products:test-team:id2': { id: 'id2' }
       }
 
       const { deleteItems } = useCollectionMutation('products')
       await deleteItems(['id1', 'id2'])
 
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection:products:{}')
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:products:team-a:id1')
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:products:team-a:id2')
+      // covers: T5
+      const calls = mockRefreshNuxtData.mock.calls.map(c => c[0]).sort()
+      expect(calls).toEqual([
+        'collection-item:products:test-team:id1',
+        'collection-item:products:test-team:id2',
+        'collection:products:test-team:{}'
+      ].sort())
     })
 
     it('shows error toast on failure', async () => {
@@ -556,9 +575,9 @@ describe('useCollectionMutation', () => {
 
     it('still invalidates caches after partial failure', async () => {
       mockPayloadData = {
-        'collection:products:{}': [{ id: 'id1' }, { id: 'id2' }],
-        'collection-item:products:id1': { id: 'id1' },
-        'collection-item:products:id2': { id: 'id2' }
+        'collection:products:test-team:{}': [{ id: 'id1' }, { id: 'id2' }],
+        'collection-item:products:test-team:id1': { id: 'id1' },
+        'collection-item:products:test-team:id2': { id: 'id2' }
       }
 
       // id1 succeeds, id2 fails
@@ -593,32 +612,36 @@ describe('useCollectionMutation', () => {
   describe('cache invalidation', () => {
     it('finds all cache keys with collection prefix', async () => {
       mockPayloadData = {
-        'collection:products:{}': [],
-        'collection:products:{"page":1}': [],
-        'collection:products:{"status":"active"}': [],
-        'collection:posts:{}': [], // Different collection
+        'collection:products:test-team:{}': [],
+        'collection:products:test-team:{"page":1}': [],
+        'collection:products:test-team:{"status":"active"}': [],
+        'collection:posts:test-team:{}': [], // Different collection
         'other-key': {} // Not a collection key
       }
 
       const { create } = useCollectionMutation('products')
       await create({ name: 'Product' })
 
-      // Should refresh all products collection keys
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection:products:{}')
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection:products:{"page":1}')
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection:products:{"status":"active"}')
+      // covers: T5
+      // Should refresh exactly the current team's products collection keys
+      const calls = mockRefreshNuxtData.mock.calls.map(c => c[0]).sort()
+      expect(calls).toEqual([
+        'collection:products:test-team:{"page":1}',
+        'collection:products:test-team:{"status":"active"}',
+        'collection:products:test-team:{}'
+      ].sort())
 
       // Should NOT refresh posts or other keys
       const refreshCalls = mockRefreshNuxtData.mock.calls.map(c => c[0])
-      expect(refreshCalls).not.toContain('collection:posts:{}')
+      expect(refreshCalls).not.toContain('collection:posts:test-team:{}')
       expect(refreshCalls).not.toContain('other-key')
     })
 
     it('handles array references', async () => {
       mockPayloadData = {
-        'collection:posts:{}': [],
-        'collection-item:users:team-a:user-1': {},
-        'collection-item:users:team-a:user-2': {}
+        'collection:posts:test-team:{}': [],
+        'collection-item:users:test-team:user-1': {},
+        'collection-item:users:test-team:user-2': {}
       }
 
       // Add a collection with array reference
@@ -629,13 +652,13 @@ describe('useCollectionMutation', () => {
       const { create } = useCollectionMutation('comments')
       await create({ text: 'Hello', mentionedUserIds: ['user-1', 'user-2'] })
 
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:users:team-a:user-1')
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:users:team-a:user-2')
+      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:users:test-team:user-1')
+      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:users:test-team:user-2')
     })
 
     it('skips refresh when no matching keys', async () => {
       mockPayloadData = {
-        'collection:posts:{}': [] // Only posts, no products
+        'collection:posts:test-team:{}': [] // Only posts, no products
       }
 
       const { create } = useCollectionMutation('products')
@@ -643,7 +666,46 @@ describe('useCollectionMutation', () => {
 
       // Should only call once for collection key refresh attempt (no matching keys)
       // The specific behavior depends on implementation
-      expect(mockRefreshNuxtData).not.toHaveBeenCalledWith('collection:posts:{}')
+      expect(mockRefreshNuxtData).not.toHaveBeenCalledWith('collection:posts:test-team:{}')
+    })
+  })
+
+  // covers: T4
+  describe('refreshes only the current team (#4506)', () => {
+    const twoTeamPayload = () => ({
+      'collection:products:team-a:{}': [],
+      'collection:products:team-a:{"eventId":"e1"}': [],
+      'collection:products:team-b:{}': [],
+      'collection:productsArchive:team-a:{}': [],
+      'collection-item:products:team-a:p1': {},
+      'collection-item:products:team-b:p1': {}
+    })
+
+    beforeEach(() => {
+      mockRoute = { path: '/admin/team-a/products', params: { team: 'team-a' } }
+      mockUseTeam = () => ({ currentTeam: ref({ id: 'team-a' }) })
+      mockPayloadData = twoTeamPayload()
+    })
+
+    it('create refreshes exactly the two team-a list keys, nothing else', async () => {
+      const { create } = useCollectionMutation('products')
+      await create({ name: 'Product' })
+
+      const calls = mockRefreshNuxtData.mock.calls.map(c => c[0]).sort()
+      expect(calls).toEqual([
+        'collection:products:team-a:{"eventId":"e1"}',
+        'collection:products:team-a:{}'
+      ].sort())
+    })
+
+    it('update refreshes the team-a record and never a team-b or other-collection key', async () => {
+      const { update } = useCollectionMutation('products')
+      await update('p1', { name: 'Renamed' })
+
+      const calls = mockRefreshNuxtData.mock.calls.map(c => c[0])
+      expect(calls).toContain('collection-item:products:team-a:p1')
+      expect(calls.filter(k => k.includes('team-b'))).toEqual([])
+      expect(calls.filter(k => k.includes('productsArchive'))).toEqual([])
     })
   })
 
@@ -723,7 +785,7 @@ describe('useCollectionMutation', () => {
 
     it.skip('logs cache invalidation details', async () => {
       mockPayloadData = {
-        'collection:products:{}': []
+        'collection:products:test-team:{}': []
       }
 
       const { create } = useCollectionMutation('products')

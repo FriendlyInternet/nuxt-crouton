@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 
 // Mock dependencies
 const mockToastAdd = vi.fn()
@@ -13,11 +13,16 @@ const mockFetch = vi.fn()
 
 // Set up global mocks
 vi.stubGlobal('ref', ref)
+vi.stubGlobal('computed', computed)
 vi.stubGlobal('readonly', (val: any) => val)
 
 vi.stubGlobal('useRoute', () => ({
-  path: '/teams/test-team/pages'
+  path: '/teams/team-a/pages',
+  params: { team: 'team-a' }
 }))
+
+// Current team (team-a); a save here must never refresh team-b's slots
+vi.stubGlobal('useTeam', () => ({ currentTeam: ref({ id: 'team-a' }) }))
 
 vi.stubGlobal('useToast', () => ({
   add: mockToastAdd
@@ -59,7 +64,9 @@ vi.stubGlobal('useTreeItemState', () => ({
   triggerCountFlash: mockTriggerCountFlash
 }))
 
+let mockPayloadData: Record<string, any> = {}
 vi.stubGlobal('useNuxtApp', () => ({
+  payload: { data: mockPayloadData },
   hooks: { callHook: mockCallHook }
 }))
 
@@ -76,8 +83,11 @@ vi.stubGlobal('console', {
   groupEnd: vi.fn()
 })
 
-// Import after mocking
+// Import after mocking — the real key builder (#4506), resolving to this file's stubs
+import { useCollectionCacheKeys } from '../useCollectionCacheKeys'
 import { useTreeMutation } from '../useTreeMutation'
+
+vi.stubGlobal('useCollectionCacheKeys', useCollectionCacheKeys)
 
 describe('useTreeMutation', () => {
   beforeEach(() => {
@@ -85,6 +95,7 @@ describe('useTreeMutation', () => {
     mockFetch.mockResolvedValue(undefined)
     mockRefreshNuxtData.mockResolvedValue(undefined)
     mockCallHook.mockResolvedValue(undefined)
+    mockPayloadData = {}
     mockCollectionConfig = {
       apiPath: 'pages',
       sortable: { enabled: false },
@@ -188,7 +199,7 @@ describe('useTreeMutation', () => {
 
       await moveNode('page-1', 'parent-1', 0)
 
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection:pages:{}')
+      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection:pages:team-a:{}')
     })
 
     it('marks error on failure', async () => {
@@ -310,7 +321,7 @@ describe('useTreeMutation', () => {
 
       await reorderSiblings([{ id: 'page-1', order: 0 }])
 
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection:pages:{}')
+      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection:pages:team-a:{}')
     })
 
     it('marks all items as saved', async () => {
@@ -459,6 +470,43 @@ describe('useTreeMutation', () => {
         '/api/teams/team-123/custom-pages-path/page-1/move',
         expect.any(Object)
       )
+    })
+  })
+  // covers: T6
+  describe('refreshes only the current team (#4506)', () => {
+    const twoTeamPayload = () => ({
+      'collection:pages:team-a:{}': [],
+      'collection:pages:team-a:{"eventId":"e1"}': [],
+      'collection:pages:team-b:{}': [],
+      'collection:pagesArchive:team-a:{}': [],
+      'collection-item:pages:team-a:p1': {},
+      'collection-item:pages:team-b:p1': {}
+    })
+
+    it('moveNode refreshes exactly the team-a list keys', async () => {
+      mockPayloadData = twoTeamPayload()
+      const { moveNode } = useTreeMutation('pages')
+
+      await moveNode('p1', null, 0)
+
+      const calls = mockRefreshNuxtData.mock.calls.map(c => c[0]).sort()
+      expect(calls).toEqual([
+        'collection:pages:team-a:{"eventId":"e1"}',
+        'collection:pages:team-a:{}'
+      ].sort())
+    })
+
+    it('reorderSiblings refreshes exactly the team-a list keys', async () => {
+      mockPayloadData = twoTeamPayload()
+      const { reorderSiblings } = useTreeMutation('pages')
+
+      await reorderSiblings([{ id: 'p1', order: 0 }])
+
+      const calls = mockRefreshNuxtData.mock.calls.map(c => c[0]).sort()
+      expect(calls).toEqual([
+        'collection:pages:team-a:{"eventId":"e1"}',
+        'collection:pages:team-a:{}'
+      ].sort())
     })
   })
 })
