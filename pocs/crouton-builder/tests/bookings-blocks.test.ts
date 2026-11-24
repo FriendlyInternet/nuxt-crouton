@@ -61,12 +61,13 @@ describe('bookings blocks in the Builder block row (#2559)', () => {
     }
   })
 
-  it('keeps the package\'s scope option on every package block (team bookings by default)', () => {
-    for (const id of Object.keys(PACKAGE_BLOCKS)) {
-      const fields = registry[id]!.configSchema ?? []
-      expect(fields.map(f => f.name), id).toEqual(['scope'])
-      expect(fields[0]!.default).toBe('team')
-    }
+  // covers: T9
+  it('keeps the scope option only on the calendar block, the others are fed by the `bookings` source', () => {
+    const fields = registry['bookings-calendar-only']!.configSchema ?? []
+    expect(fields.map(f => f.name)).toEqual(['scope'])
+    expect(fields[0]!.default).toBe('team')
+    expect(registry['bookings-locations']!.configSchema).toBeUndefined()
+    expect(registry['bookings-package-list']!.configSchema).toBeUndefined()
   })
 
   it('hides the all-in-one compound calendar from the block row but keeps it renderable', () => {

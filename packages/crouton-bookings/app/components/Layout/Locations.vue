@@ -1,8 +1,11 @@
 <script setup lang="ts">
 /**
  * CroutonBookingsLayoutLocations — the locations picker as an atomic layout block
- * (#924). Self-fetches locations and toggles selection into the shared filter
- * store, so picking a location here filters the sibling list/calendar blocks.
+ * (#924), fed by the `bookings` layout store (#3651).
+ *
+ * Props in, events out: it shows `locations`, marks `selectedLocations`, and a
+ * click emits `toggle-location` with the id — the store turns that into the
+ * shared location filter the list follows.
  *
  * Deliberately a lightweight selectable LIST rather than the native
  * `CroutonBookingsPanelMap` (#924 gap-report note): the map needs per-location
@@ -11,13 +14,21 @@
  * survives as a standalone pane. The list is the robust atomic equivalent; a
  * map-backed variant is a follow-up once cross-pane focus is expressible.
  */
+import type { LocationData } from '../../types/booking'
+
 const props = withDefaults(defineProps<{
-  scope?: 'personal' | 'team'
-}>(), { scope: 'team' })
+  locations?: LocationData[]
+  selectedLocations?: string[]
+}>(), {
+  locations: () => [],
+  selectedLocations: () => [],
+})
+
+const emit = defineEmits<{
+  'toggle-location': [id: string]
+}>()
 
 const { t } = useT()
-const { locations } = useBookingsList({ scope: props.scope })
-const { filters, toggleLocation } = useBookingsLayoutFilters()
 
 /** Location titles may be a plain string or an i18n object ({ en, nl, ... }). */
 function locName(loc: { title?: unknown }): string {
@@ -31,20 +42,20 @@ function locName(loc: { title?: unknown }): string {
 }
 
 function isSelected(id: string): boolean {
-  return filters.value.locations.includes(id)
+  return props.selectedLocations.includes(id)
 }
 </script>
 
 <template>
   <div class="@container h-full overflow-auto p-2 @md:p-3 space-y-1.5">
     <p
-      v-if="!(locations && locations.length)"
+      v-if="!locations.length"
       class="text-sm text-muted text-center p-4"
     >
       {{ t('bookings.panel.noLocations') }}
     </p>
     <button
-      v-for="loc in locations ?? []"
+      v-for="loc in locations"
       :key="loc.id"
       type="button"
       :aria-pressed="isSelected(loc.id)"
@@ -52,7 +63,7 @@ function isSelected(id: string): boolean {
       :class="isSelected(loc.id)
         ? 'bg-primary/10 border-primary text-highlighted'
         : 'border-default hover:bg-elevated/60'"
-      @click="toggleLocation(loc.id)"
+      @click="emit('toggle-location', loc.id)"
     >
       <UIcon name="i-lucide-map-pin" class="size-4 shrink-0 text-muted" />
       <span class="text-sm font-medium truncate">{{ locName(loc) }}</span>
