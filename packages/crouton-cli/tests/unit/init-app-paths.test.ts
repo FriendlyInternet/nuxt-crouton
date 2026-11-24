@@ -30,6 +30,8 @@ vi.mock('../../lib/utils/generate-migrations.ts', () => ({
   manualMigrationSteps: () => []
 }))
 vi.mock('../../lib/doctor.ts', () => ({
+  // init reads the collection count for its step-2 wording (#4377)
+  loadCroutonConfig: vi.fn(async () => ({ collections: [] })),
   doctor: vi.fn(async (dir: string) => {
     calls.doctorDir = resolve(dir)
     return {}

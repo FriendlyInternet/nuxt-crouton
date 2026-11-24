@@ -10,7 +10,7 @@
  * a code exists.
  *
  * Also sets the canonical scoped-access cookie so an SSR-rendered till page is
- * authenticated on first paint, matching the redeem/mint endpoints.
+ * authenticated on first paint, matching the redeem endpoint.
  */
 import { claimDevice } from '../../../utils/device-pairing'
 

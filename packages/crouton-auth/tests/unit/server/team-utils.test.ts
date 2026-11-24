@@ -12,7 +12,9 @@ import {
   canUserCreateTeam,
   requireTeamRole,
   requireTeamAdmin,
-  requireTeamOwner
+  requireTeamOwner,
+  canEditPages,
+  getUserTeamsDirect
 } from '../../../server/utils/team'
 
 // Mock H3Event
@@ -616,6 +618,70 @@ describe('server/utils/team', () => {
     it('should fail for member role', async () => {
       const event = createMockEvent()
       await expect(requireTeamOwner(event)).rejects.toThrow('Requires owner role or higher')
+    })
+  })
+
+  // covers: T14
+  describe('canEditPages', () => {
+    const withRole = (role: string | null) => {
+      mockMemberRows = role
+        ? [{ id: 'member-1', organizationId: 'team-1', userId: 'user-1', role, createdAt: '2024-01-01T00:00:00.000Z' }]
+        : []
+    }
+
+    it('is true for admin and owner', async () => {
+      withRole('admin')
+      expect(await canEditPages('team-1', 'user-1')).toBe(true)
+      withRole('owner')
+      expect(await canEditPages('team-1', 'user-1')).toBe(true)
+    })
+
+    it('is false for a plain member and for a non-member', async () => {
+      withRole('member')
+      expect(await canEditPages('team-1', 'user-1')).toBe(false)
+      withRole(null)
+      expect(await canEditPages('team-1', 'user-1')).toBe(false)
+    })
+  })
+
+  // covers: T14
+  describe('getUserTeamsDirect', () => {
+    it('reads member joined to organization by user id, no session', async () => {
+      const calls: { from?: unknown, join?: unknown, where?: unknown } = {}
+      const origUseDB = globalThis.useDB
+      vi.stubGlobal('useDB', () => ({
+        select: () => ({
+          from: (table: unknown) => {
+            calls.from = table
+            return {
+              innerJoin: (joined: unknown) => {
+                calls.join = joined
+                return {
+                  where: (cond: unknown) => {
+                    calls.where = cond
+                    return Promise.resolve([
+                      { id: 'team-1', slug: 'team-one', name: 'Team One', role: 'admin' },
+                      { id: 'team-2', slug: 'team-two', name: 'Team Two', role: 'member' }
+                    ])
+                  }
+                }
+              }
+            }
+          }
+        })
+      }))
+
+      const teams = await getUserTeamsDirect('user-1')
+
+      expect(teams).toEqual([
+        { id: 'team-1', slug: 'team-one', name: 'Team One', role: 'admin' },
+        { id: 'team-2', slug: 'team-two', name: 'Team Two', role: 'member' }
+      ])
+      expect(calls.from).toBe(memberTableSchema)
+      expect(calls.join).toBe(organization)
+      expect(calls.where).toBeDefined()
+      expect(mockRequireServerSession).not.toHaveBeenCalled()
+      vi.stubGlobal('useDB', origUseDB)
     })
   })
 })

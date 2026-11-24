@@ -13,4 +13,6 @@ export const reviewSamples: Record<string, Record<string, unknown>> = {
   SalesSyncDetails: { devices: [{ deviceId: 'device:a1b2c3d4e5', lastContactAt: 1_700_000_000_000, lastPullAt: 1_699_999_900_000 }], lostEdits: [], now: 1_700_000_060_000, showEmpty: true },
   SalesSyncDeviceList: { devices: [{ deviceId: 'device:a1b2c3d4e5', type: 'till', claimedAt: 1_699_000_000_000 }, { deviceId: 'f6e5d4c3b2', type: 'print-device', claimedAt: 1_699_000_000_000 }], syncDevices: [{ deviceId: 'device:a1b2c3d4e5', lastContactAt: 1_700_000_000_000, lastPullAt: 1_699_999_900_000 }], now: 1_700_000_060_000 },
   SalesSyncStatus: { teamParam: 'review' },
+  // Kitchen display ticket (#4480): one (order × location) card; `armed: true` shows the confirm overlay.
+  SalesBlocksKitchenDisplayTile: { job: { id: 'o1:loc1', orderNumber: '42', clientName: 'Ada', isPersonnel: false, items: [{ title: 'Fries', quantity: 2, remarks: 'no salt' }, { title: 'Burger', quantity: 1 }] }, age: '1m 20s', armed: false, confirmed: false },
 }

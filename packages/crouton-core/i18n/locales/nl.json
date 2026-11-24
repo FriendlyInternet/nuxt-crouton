@@ -4,7 +4,6 @@
     "expand": "Uitbreiden naar volledig scherm",
     "close": "Sluiten",
     "dragToReorder": "Slepen om te herordenen",
-    "removeItem": "Item verwijderen",
     "metaSettings": "Meta-instellingen",
     "sendingUpdate": "Wijziging versturen...",
     "maxDepthTitle": "Maximale diepte bereikt",
@@ -28,6 +27,7 @@
     "create": "Aanmaken",
     "edit": "Bewerken",
     "delete": "Verwijderen",
+    "view": "Bekijken",
     "cancel": "Annuleren",
     "save": "Opslaan",
     "yes": "Ja",
@@ -140,18 +140,32 @@
     "moveDown": "Omlaag verplaatsen",
     "moveToRoot": "Naar hoofdniveau verplaatsen",
     "add": "Toevoegen",
-    "createFirstItem": "Maak je eerste item aan om de boomstructuur te zien."
+    "createFirstItem": "Maak je eerste item aan om de boomstructuur te zien.",
+    "toggleChildren": "Onderliggende items van {name} ({count})"
   },
   "image": {
     "cropImage": "Afbeelding bijsnijden",
     "cropApply": "Bijsnijden en toepassen",
     "cropPreview": "Voorbeeld bijsnijden",
-    "preview": "Voorbeeld van de afbeelding"
+    "preview": "Voorbeeld van de afbeelding",
+    "upload": "Afbeelding uploaden",
+    "change": "Afbeelding wijzigen",
+    "remove": "Afbeelding verwijderen",
+    "rotateLeft": "Links draaien",
+    "rotateRight": "Rechts draaien",
+    "zoomOut": "Uitzoomen",
+    "zoomIn": "Inzoomen",
+    "reset": "Bijsnijden herstellen",
+    "aspectRatio": "Vorm"
   },
   "repeater": {
     "componentMissing": "Dit item kan niet worden getoond: component \"{name}\" is niet gevonden.",
     "emptyState": "Nog geen items. Klik op \"{label}\" om te beginnen.",
-    "addItem": "Item toevoegen"
+    "addItem": "Item toevoegen",
+    "moveUp": "Omhoog",
+    "moveDown": "Omlaag",
+    "actions": "Acties voor item {position} van {total}",
+    "moved": "Verplaatst naar positie {position} van {total}"
   },
   "validation": {
     "fixErrors": "Corrigeer {count} validatiefout | Corrigeer {count} validatiefouten",
@@ -199,6 +213,7 @@
   },
   "table": {
     "previewOnly": "Alleen voorbeeld",
+    "actionWithName": "{action} {name}",
     "search": "Zoeken",
     "display": "Weergave",
     "selectAll": "Alles selecteren",

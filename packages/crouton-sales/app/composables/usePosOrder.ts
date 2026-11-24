@@ -4,6 +4,8 @@
  * @requires Generated sales layer with products, orders, orderItems collections
  */
 
+import { itemUnitPrice } from '../../shared/utils/item-price'
+
 // Product option structure (stored in product.options JSON field)
 export interface ProductOption {
   id: string
@@ -84,19 +86,7 @@ export interface UsePosOrderOptions {
  * Calculate item price including option modifiers
  */
 export function calculateItemPrice(item: CartItem): number {
-  let price = Number(item.product.price)
-  if (item.selectedOptions && item.product.options) {
-    const optionIds = Array.isArray(item.selectedOptions)
-      ? item.selectedOptions
-      : [item.selectedOptions]
-    for (const id of optionIds) {
-      const option = item.product.options.find(o => o.id === id)
-      if (option?.priceModifier) {
-        price += option.priceModifier
-      }
-    }
-  }
-  return price
+  return itemUnitPrice(item.product, item.selectedOptions)
 }
 
 /**

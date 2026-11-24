@@ -4,7 +4,6 @@
     "expand": "Agrandir en plein écran",
     "close": "Fermer",
     "dragToReorder": "Glisser pour réorganiser",
-    "removeItem": "Supprimer l'élément",
     "metaSettings": "Paramètres méta",
     "sendingUpdate": "Envoi de la mise à jour...",
     "maxDepthTitle": "Profondeur maximale atteinte",
@@ -28,6 +27,7 @@
     "create": "Créer",
     "edit": "Modifier",
     "delete": "Supprimer",
+    "view": "Voir",
     "cancel": "Annuler",
     "save": "Enregistrer",
     "yes": "Oui",
@@ -140,18 +140,32 @@
     "moveDown": "Déplacer vers le bas",
     "moveToRoot": "Déplacer à la racine",
     "add": "Ajouter",
-    "createFirstItem": "Créez votre premier élément pour voir l'arborescence."
+    "createFirstItem": "Créez votre premier élément pour voir l'arborescence.",
+    "toggleChildren": "Éléments enfants de {name} ({count})"
   },
   "image": {
     "cropImage": "Recadrer l'image",
     "cropApply": "Recadrer et appliquer",
     "cropPreview": "Aperçu du recadrage",
-    "preview": "Aperçu de l'image"
+    "preview": "Aperçu de l'image",
+    "upload": "Téléverser une image",
+    "change": "Changer l'image",
+    "remove": "Supprimer l'image",
+    "rotateLeft": "Pivoter à gauche",
+    "rotateRight": "Pivoter à droite",
+    "zoomOut": "Dézoomer",
+    "zoomIn": "Zoomer",
+    "reset": "Réinitialiser le recadrage",
+    "aspectRatio": "Forme"
   },
   "repeater": {
     "componentMissing": "Impossible d'afficher cet élément : le composant « {name} » est introuvable.",
     "emptyState": "Aucun élément pour le moment. Cliquez sur \"{label}\" pour commencer.",
-    "addItem": "Ajouter un élément"
+    "addItem": "Ajouter un élément",
+    "moveUp": "Monter",
+    "moveDown": "Descendre",
+    "actions": "Actions pour l'élément {position} sur {total}",
+    "moved": "Déplacé en position {position} sur {total}"
   },
   "validation": {
     "fixErrors": "Veuillez corriger {count} erreur de validation | Veuillez corriger {count} erreurs de validation",
@@ -199,6 +213,7 @@
   },
   "table": {
     "previewOnly": "Aperçu uniquement",
+    "actionWithName": "{action} {name}",
     "search": "Rechercher",
     "display": "Affichage",
     "selectAll": "Tout sélectionner",
