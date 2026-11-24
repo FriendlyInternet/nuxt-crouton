@@ -1,0 +1,16 @@
+{
+  "assistants": {
+    "title": "AI-assistenten",
+    "urlLabel": "De link om in je assistent te plakken",
+    "copy": "Kopiëren",
+    "copied": "Link gekopieerd",
+    "helpClaude": "Claude: Instellingen → Connectoren → Aangepaste connector toevoegen → plakken → Verbinden.",
+    "helpChatgpt": "ChatGPT: Plug-ins → + → Aangepaste MCP-server toevoegen → plakken",
+    "connections": "Je verbindingen",
+    "empty": "Geen verbindingen",
+    "connectedOn": "Verbonden op {date}",
+    "revoke": "Intrekken",
+    "revokeFailed": "Intrekken mislukt",
+    "loadFailed": "Kon je verbindingen niet laden"
+  }
+}

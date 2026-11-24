@@ -47,7 +47,7 @@ describe('BookingCreateCard.vue (#4112)', () => {
     const tabs = find('UTabs')
     expect(tabs).toHaveLength(1)
     const ui = bound(tabs[0]!.node, 'ui') ?? ''
-    expect(ui).toContain('overflow-x-auto')
+    expect(ui).toContain('SCROLL_ROW_X') // shared sideways-only scroll row classes (#4330)
     expect(ui).toContain('min-w-fit')
     expect(template).not.toContain('w-52')
   })
@@ -97,5 +97,47 @@ describe('BookingCreateCard.vue draws at once (#4314)', () => {
     const destructure = script.match(/const\s*\{([^}]*)\}\s*=\s*useBookingCart\(\)/)
     expect(destructure).not.toBeNull()
     expect(destructure![1]).toMatch(/\bteamProducts\b/)
+  })
+})
+
+// #4331: the first location switch in an edit kept the old slot (the setup guard was never
+// spent), the group survived a switch, and with nothing free the amount box drew "1/0".
+const isElement = (n: Node) => n.type === ELEMENT
+
+/** The expression of a directive on a node ('' for one without), or undefined when absent */
+function directive(node: Node, name: string): string | undefined {
+  const p = node.props.find((p: Node) => p.type === DIRECTIVE && p.name === name)
+  return p && (p.exp?.content ?? '')
+}
+
+describe('BookingCreateCard.vue (#4331)', () => {
+  // covers: T3
+  it('ends the edit guard on mount and the location watcher clears the group', () => {
+    const compiled = compileScript(descriptor, { id: 'booking-create-card' }).content
+    expect(compiled).toMatch(/onMounted\(\s*\(\)\s*=>\s*\{\s*isInitialEditSetup\.value\s*=\s*false/)
+    const watcher = script.match(/watch\(localLocationId,[\s\S]*?\n\}\)/)
+    expect(watcher).not.toBeNull()
+    expect(watcher![0]).toContain('localGroupId.value = null')
+  })
+
+  // covers: T4
+  it('with nothing free the amount area shows "Fully booked" instead of a number', () => {
+    const inputs = find('UInputNumber')
+    expect(inputs).toHaveLength(1)
+    const { anc } = inputs[0]!
+    const wrapper = anc.at(-1)
+    const vIf = directive(wrapper, 'if')
+    expect(vIf).toContain('maxQuantity >= 1')
+    expect(vIf).toContain('availabilityLoading')
+    // the /N label lives inside that same branch
+    expect(wrapper.loc.source).toContain('/{{ maxQuantity }}')
+    // its v-else sibling is the full badge
+    const siblings = anc.at(-2).children.filter(isElement)
+    const next = siblings[siblings.indexOf(wrapper) + 1]
+    expect(next.tag).toBe('UBadge')
+    expect(directive(next, 'else')).toBeDefined()
+    expect(next.loc.source).toContain('bookings.calendar.fullyBooked')
+    // Save stays off when it doesn't fit
+    expect(template).toMatch(/:disabled="!canSubmit/)
   })
 })

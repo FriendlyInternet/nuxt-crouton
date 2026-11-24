@@ -1,36 +1,17 @@
-import { eq } from 'drizzle-orm'
-import { requireScopedAccessToResource } from '@fyit/crouton-auth/server/utils/scoped-access'
+import { requireScopedEvent } from '../../../../utils/require-scoped-event'
 import { salesClients } from '../../../../../collections/clients/server/database/schema'
-import { salesEvents } from '../../../../../collections/events/server/database/schema'
 import { nanoid } from 'nanoid'
 
 // Helper-authenticated endpoint: create a new client for the event's team
 export default defineEventHandler(async (event) => {
-  const eventId = getRouterParam(event, 'eventId')
-
-  if (!eventId) {
-    throw createError({ status: 400, statusText: 'Event ID is required' })
-  }
-
-  await requireScopedAccessToResource(event, 'event', eventId)
+  // The helper loads the event scoped to the token's team (404 otherwise).
+  const { db, salesEvent } = await requireScopedEvent(event)
 
   const body = await readBody(event)
   const title = body?.title?.trim()
 
   if (!title) {
     throw createError({ status: 400, statusText: 'Client title is required' })
-  }
-
-  const db = useDB()
-
-  const [salesEvent] = await db
-    .select()
-    .from(salesEvents)
-    .where(eq(salesEvents.id, eventId))
-    .limit(1)
-
-  if (!salesEvent) {
-    throw createError({ status: 404, statusText: 'Event not found' })
   }
 
   const [newClient] = await (db as any)

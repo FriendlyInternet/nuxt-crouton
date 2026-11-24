@@ -13,7 +13,7 @@
  * the real wrangler calls.
  */
 import { previewDbName } from './pr-preview-wrangler.mjs'
-import { LIST_TABLES_SQL, dropTablesSql, isUserTable } from './wrangler-d1.mjs'
+import { LIST_TABLES_SQL, LIST_FKS_SQL, dropTablesSql, isUserTable, orderForDrop } from './wrangler-d1.mjs'
 
 /** Leading integer of a migration name, or null. */
 function leadingNumber(name) {
@@ -74,7 +74,7 @@ export async function migrate({ app, pr, config, listFiles, query, exec, apply, 
   if (decision.action === 'rebuild') {
     log(`::warning::preview database ${name}: recorded migration ${decision.mismatch} no longer matches the migration files — emptying it`)
     const tables = (await query(name, LIST_TABLES_SQL)).map(r => r.name).filter(isUserTable)
-    if (tables.length) await exec(name, dropTablesSql(tables))
+    if (tables.length) await exec(name, dropTablesSql(orderForDrop(tables, await query(name, LIST_FKS_SQL))))
     log(`dropped ${tables.length} table(s) — preview database rebuilt`)
   }
   return await apply(name)

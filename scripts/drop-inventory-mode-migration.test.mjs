@@ -94,6 +94,8 @@ for (const folder of FOLDERS) {
     const { entry, journal } = dropEntry(folder)
     const prevEntry = journal.entries.find(e => e.idx === entry.idx - 1)
     assert.ok(prevEntry, `${folder}: there must be a migration before it`)
+    // Not "the newest": later migrations (e.g. #4096's OAuth tables) land after it. What must hold
+    // is that nothing after it brings the dropped columns back.
     assert.equal(journal.entries.filter(e => e.tag === entry.tag).length, 1, `${folder}: it must be in the journal exactly once`)
     const sorted = [...journal.entries].sort((a, b) => a.idx - b.idx)
     assert.equal(sorted[sorted.indexOf(entry) - 1], prevEntry, `${folder}: it must come right after its predecessor`)
@@ -113,6 +115,13 @@ for (const folder of FOLDERS) {
     delete expected.tables.bookings_locations.columns.quantity
     // deepEqual, not a string compare: drizzle-kit may write keys in another order.
     assert.deepEqual({ ...snap, id: 0, prevId: 0 }, { ...expected, id: 0, prevId: 0 })
+
+    const newest = journal.entries.reduce((a, e) => (e.idx > a.idx ? e : a))
+    if (newest.idx !== entry.idx) {
+      const latest = readJson(path.join(dir, `meta/${String(newest.idx).padStart(4, '0')}_snapshot.json`))
+      const cols = latest.tables.bookings_locations.columns
+      assert.ok(!cols.inventoryMode && !cols.quantity, `${folder}: a later migration must not bring the columns back`)
+    }
   })
 
   // covers: T2

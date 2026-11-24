@@ -7,11 +7,13 @@
         color="error"
         variant="solid"
         size="xs"
+        :aria-label="t('image.remove')"
         @click="removeImage"
       />
     </div>
     <button
       type="button"
+      :aria-label="model ? t('image.change') : t('image.upload')"
       class="relative z-20 flex h-40 w-full cursor-pointer flex-col items-center justify-center gap-2 overflow-hidden rounded-lg bg-neutral-50 hover:bg-neutral-100 dark:bg-neutral-800 dark:hover:bg-neutral-900"
       @click="open()"
     >
@@ -30,7 +32,10 @@
     </button>
 
     <!-- Crop Modal -->
-    <UModal v-model:open="showCropper">
+    <UModal
+      v-model:open="showCropper"
+      :title="t('image.cropImage')"
+    >
       <template #content="{ close }">
         <div class="p-6">
           <h3 class="text-lg font-semibold mb-4">

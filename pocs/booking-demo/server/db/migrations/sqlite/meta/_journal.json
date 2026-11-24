@@ -85,6 +85,13 @@
       "when": 1795157789214,
       "tag": "0011_certain_falcon",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1795511788796,
+      "tag": "0012_smooth_logan",
+      "breakpoints": true
     }
   ]
 }

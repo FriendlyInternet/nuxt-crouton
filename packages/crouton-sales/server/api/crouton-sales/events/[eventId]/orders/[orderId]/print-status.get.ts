@@ -9,20 +9,18 @@
  * An empty array is a real answer (the order generated no tickets), not an error.
  */
 import { eq, and } from 'drizzle-orm'
-import { requireScopedAccessToResource } from '@fyit/crouton-auth/server/utils/scoped-access'
+import { requireScopedEvent } from '../../../../../../utils/require-scoped-event'
 import { salesOrders } from '../../../../../../../collections/orders/server/database/schema'
 import { printJobs } from '@fyit/crouton-printing/server/database/schema'
 
 export default defineEventHandler(async (event) => {
-  const eventId = getRouterParam(event, 'eventId')
+  // The helper checks the token AND that the event is the token's team's.
+  const { eventId, db } = await requireScopedEvent(event)
   const orderId = getRouterParam(event, 'orderId')
 
-  if (!eventId || !orderId) {
-    throw createError({ status: 400, statusText: 'Event ID and Order ID are required' })
+  if (!orderId) {
+    throw createError({ status: 400, statusText: 'Order ID is required' })
   }
-
-  await requireScopedAccessToResource(event, 'event', eventId)
-  const db = useDB()
 
   const [order] = await db
     .select({ id: salesOrders.id, eventId: salesOrders.eventId })
