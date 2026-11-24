@@ -7,7 +7,7 @@
  *
  * Target: fixtures/minimal (pkg "e2e-fixture-minimal").
  */
-import { test as base, type Page } from '@playwright/test'
+import { test as base, expect, type Page } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -378,6 +378,43 @@ export async function ensureAuthed(page: Page, base: string): Promise<void> {
   if (await isAuthenticated(page, base)) return
   await loginOrRegister(page, base)
   await ensureTeam(page, base)
+}
+
+/**
+ * Make sure the fixture team (slug from TEAM_FILE) has at least `count` bookings
+ * locations, titled `e2e loc N` (idempotent across retries and specs).
+ */
+export async function ensureBookingLocations(page: Page, baseURL: string | undefined, count: number) {
+  const base = baseURL || 'http://localhost:3000'
+  const slug = JSON.parse(readFileSync(TEAM_FILE, 'utf8')).slug
+  await ensureAuthed(page, base)
+  const headers = { Origin: base, Referer: `${base}/` }
+  const orgsRes = await page.request.get(`${base}/api/auth/organization/list`, { headers })
+  const orgs = orgsRes.ok() ? await orgsRes.json().catch(() => []) : []
+  const teamId = (Array.isArray(orgs) ? orgs : []).find((o: any) => o.slug === slug)?.id
+  expect(teamId, `team id for slug ${slug}`).toBeTruthy()
+
+  const url = `${base}/api/teams/${teamId}/bookings-locations`
+  const listRes = await page.request.get(url, { headers })
+  expect(listRes.ok(), `list locations failed: ${listRes.status()}`).toBeTruthy()
+  const existing = await listRes.json()
+  const have = Array.isArray(existing) ? existing.length : (existing?.items?.length ?? 0)
+  const colors = ['#3b82f6', '#22c55e', '#f97316', '#a855f7']
+  for (let n = have; n < count; n++) {
+    const res = await page.request.post(url, {
+      headers,
+      data: {
+        title: `e2e loc ${n + 1}`,
+        color: colors[n % colors.length],
+        slots: [
+          { id: `s1-${n}`, label: 'Morning' },
+          { id: `s2-${n}`, label: 'Afternoon' },
+          { id: `s3-${n}`, label: 'Evening' }
+        ]
+      }
+    })
+    expect(res.ok(), `create location failed: ${res.status()} ${await res.text()}`).toBeTruthy()
+  }
 }
 
 /** Build the admin URL for a generated collection (key, e.g. "mainItems"). */
