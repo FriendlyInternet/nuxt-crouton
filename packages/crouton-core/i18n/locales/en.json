@@ -141,7 +141,8 @@
     "moveDown": "Move down",
     "moveToRoot": "Move to root",
     "add": "Add",
-    "createFirstItem": "Create your first item to see the tree structure."
+    "createFirstItem": "Create your first item to see the tree structure.",
+    "toggleChildren": "Children of {name} ({count})"
   },
   "image": {
     "cropImage": "Crop Image",
