@@ -147,7 +147,16 @@
     "cropImage": "Crop Image",
     "cropApply": "Crop & Apply",
     "cropPreview": "Crop preview",
-    "preview": "Image preview"
+    "preview": "Image preview",
+    "upload": "Upload image",
+    "change": "Change image",
+    "remove": "Remove image",
+    "rotateLeft": "Rotate left",
+    "rotateRight": "Rotate right",
+    "zoomOut": "Zoom out",
+    "zoomIn": "Zoom in",
+    "reset": "Reset crop",
+    "aspectRatio": "Shape"
   },
   "repeater": {
     "componentMissing": "Can't show this item: component \"{name}\" was not found.",

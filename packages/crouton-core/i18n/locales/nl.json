@@ -147,7 +147,16 @@
     "cropImage": "Afbeelding bijsnijden",
     "cropApply": "Bijsnijden en toepassen",
     "cropPreview": "Voorbeeld bijsnijden",
-    "preview": "Voorbeeld van de afbeelding"
+    "preview": "Voorbeeld van de afbeelding",
+    "upload": "Afbeelding uploaden",
+    "change": "Afbeelding wijzigen",
+    "remove": "Afbeelding verwijderen",
+    "rotateLeft": "Links draaien",
+    "rotateRight": "Rechts draaien",
+    "zoomOut": "Uitzoomen",
+    "zoomIn": "Inzoomen",
+    "reset": "Bijsnijden herstellen",
+    "aspectRatio": "Vorm"
   },
   "repeater": {
     "componentMissing": "Dit item kan niet worden getoond: component \"{name}\" is niet gevonden.",
