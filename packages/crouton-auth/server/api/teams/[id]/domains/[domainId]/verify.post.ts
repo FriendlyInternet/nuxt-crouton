@@ -6,34 +6,12 @@
  * Requires the `team:domains` action (owner/admin by default).
  */
 import { requireCan } from '../../../../../utils/permissions'
-import { useDB, tables, eq, and } from '../../../../../utils/database'
+import { tables, eq, and } from '../../../../../utils/database'
+import { requireTeamDomain } from '../../../../../utils/team-domain'
 
 export default defineEventHandler(async (event) => {
-  const domainId = getRouterParam(event, 'domainId')
-  if (!domainId) {
-    throw createError({
-      status: 400,
-      statusText: 'Domain ID is required'
-    })
-  }
-
-  const { team } = await requireCan(event, 'team:domains')
-
-  const db = useDB()
-
-  // Get the domain record
-  const domain = await db
-    .select()
-    .from(tables.domain)
-    .where(and(eq(tables.domain.id, domainId), eq(tables.domain.organizationId, team.id)))
-    .get()
-
-  if (!domain) {
-    throw createError({
-      status: 404,
-      statusText: 'Domain not found'
-    })
-  }
+  // Get the domain record (404 unless it belongs to the team)
+  const { db, domain, domainId } = await requireTeamDomain(event, () => requireCan(event, 'team:domains'))
 
   // Check DNS TXT record
   const txtRecordName = `_crouton-verification.${domain.domain}`

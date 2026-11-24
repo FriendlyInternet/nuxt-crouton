@@ -73,6 +73,13 @@ function fakeDb(seed: { orgs?: Org[], members?: Member[] } = {}, opts: { failMem
   const roles: Array<{ organizationId: string, permission: string }> = []
   const inserts: Array<{ table: 'organization' | 'organizationRole' | 'member', params: unknown[] }> = []
 
+  function insertMember(params: unknown[]) {
+    if (opts.failMemberInsert) throw new Error('D1_ERROR: database is locked')
+    inserts.push({ table: 'member', params })
+    const [id, organizationId, userId, role, createdAt] = params as string[]
+    members.push({ id: id!, organizationId: organizationId!, userId: userId!, role: role!, createdAt: createdAt! })
+  }
+
   const db = {
     async all(query: unknown) {
       const { text, params } = flatten(query)
@@ -110,12 +117,7 @@ function fakeDb(seed: { orgs?: Org[], members?: Member[] } = {}, opts: { failMem
         orgs.push({ id: id!, name: name!, slug: slug! })
         return
       }
-      if (text.includes('INSERT INTO member')) {
-        if (opts.failMemberInsert) throw new Error('D1_ERROR: database is locked')
-        inserts.push({ table: 'member', params })
-        const [id, organizationId, userId, role, createdAt] = params as string[]
-        members.push({ id: id!, organizationId: organizationId!, userId: userId!, role: role!, createdAt: createdAt! })
-      }
+      if (text.includes('INSERT INTO member')) insertMember(params)
     }
   }
 

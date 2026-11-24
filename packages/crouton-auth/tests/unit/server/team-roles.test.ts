@@ -60,15 +60,20 @@ async function signUp(auth: Auth, email: string): Promise<User> {
   return { userId: res.response.user.id, headers: new Headers({ cookie, origin: ORIGIN }) }
 }
 
-/** 'ok', or Better Auth's error code (falls back to the HTTP status name). */
+/** Better Auth's error code (falls back to the HTTP status name). */
+function errorCode(e: unknown): string {
+  const err = e as { status?: string, body?: { code?: string } }
+  return err.body?.code ?? err.status ?? String(e)
+}
+
+/** 'ok', or Better Auth's error code. */
 async function outcome(p: Promise<unknown>): Promise<string> {
   try {
     await p
     return 'ok'
   }
   catch (e) {
-    const err = e as { status?: string, body?: { code?: string } }
-    return err.body?.code ?? err.status ?? String(e)
+    return errorCode(e)
   }
 }
 

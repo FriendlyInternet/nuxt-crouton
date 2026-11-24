@@ -77,14 +77,19 @@ let currentUser: { id: string, superAdmin?: boolean } | null
 const navigateTo = vi.fn((to: unknown) => ({ redirectedTo: to }))
 const plainFetch = vi.fn()
 const switchTeamBySlug = vi.fn()
-const requestFetch = vi.fn(async (url: string, opts: { query: { actions: string } }) => {
+/** The team a `/api/teams/<id>/can` request asks about, and who asks; 401 if either is missing. */
+function canCaller(url: string): { teamId: string, userId: string } {
   const teamId = url.match(/^\/api\/teams\/([^/]+)\/can$/)?.[1]
   if (!teamId || !currentUser) throw Object.assign(new Error('Unauthorized'), { statusCode: 401 })
+  return { teamId, userId: currentUser.id }
+}
+const requestFetch = vi.fn(async (url: string, opts: { query: { actions: string } }) => {
+  const { teamId, userId } = canCaller(url)
   // resolveTeamAndCheckMembership: a non-member gets a 403
-  if (!await getOrganizationMembershipDirect(teamId, currentUser.id)) {
+  if (!await getOrganizationMembershipDirect(teamId, userId)) {
     throw Object.assign(new Error('Forbidden'), { statusCode: 403 })
   }
-  return await canMany(teamId, currentUser.id, opts.query.actions.split(','))
+  return await canMany(teamId, userId, opts.query.actions.split(','))
 })
 
 /**

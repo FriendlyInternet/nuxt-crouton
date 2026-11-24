@@ -59,11 +59,13 @@ const T = (pkg: string, rows: Row[]) => rows.map(([f, a]) => [`${pkg}/${f}`, a] 
 /** Every `[<x>Id].patch.ts` / `[<x>Id].delete.ts` a package's generated collections ship. */
 function collectionWrites(pkg: string, action: string): Row[] {
   const out: Row[] = []
+  const isWrite = (name: string, p: string) =>
+    /^\[\w+Id\]\.(patch|delete)\.ts$/.test(name) && p.includes(`${join('server', 'api', 'teams')}`)
   const walk = (dir: string) => {
     for (const name of readdirSync(dir)) {
       const p = join(dir, name)
       if (statSync(p).isDirectory()) walk(p)
-      else if (/^\[\w+Id\]\.(patch|delete)\.ts$/.test(name) && p.includes(`${join('server', 'api', 'teams')}`)) out.push([relative(PACKAGES, p), action])
+      else if (isWrite(name, p)) out.push([relative(PACKAGES, p), action])
     }
   }
   walk(join(PACKAGES, pkg, 'collections'))

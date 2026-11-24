@@ -6,34 +6,12 @@
  * Requires the `team:domains` action (owner/admin by default).
  */
 import { requireCan } from '../../../../utils/permissions'
-import { useDB, tables, eq, and } from '../../../../utils/database'
+import { tables, eq } from '../../../../utils/database'
+import { requireTeamDomain } from '../../../../utils/team-domain'
 
 export default defineEventHandler(async (event) => {
-  const domainId = getRouterParam(event, 'domainId')
-  if (!domainId) {
-    throw createError({
-      status: 400,
-      statusText: 'Domain ID is required'
-    })
-  }
-
-  const { team } = await requireCan(event, 'team:domains')
-
-  const db = useDB()
-
-  // Get the domain to verify it belongs to the team
-  const domain = await db
-    .select()
-    .from(tables.domain)
-    .where(and(eq(tables.domain.id, domainId), eq(tables.domain.organizationId, team.id)))
-    .get()
-
-  if (!domain) {
-    throw createError({
-      status: 404,
-      statusText: 'Domain not found'
-    })
-  }
+  // Get the domain to verify it belongs to the team (404 otherwise)
+  const { db, team, domain, domainId } = await requireTeamDomain(event, () => requireCan(event, 'team:domains'))
 
   // Delete the domain
   await db.delete(tables.domain).where(eq(tables.domain.id, domainId))
