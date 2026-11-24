@@ -29,9 +29,10 @@ export const DESIGN_HOLD_MARKER = '<!-- design-signoff-hold -->'
 export const HOLD_HEADING = '## 🎨 Design sign-off needed before building'
 export const PIPELINE_NOTE = '<!-- pipeline-note -->'
 export const BUILD_REVIEW_FINAL = '<!-- build-review-final -->'
-const BUILD_REVIEW_SHA_RE = /<!-- build-review-sha:([0-9a-f]+) -->/
-const BUILD_REVIEW_FAILED_RE = /<!-- build-review-failed-sha:([0-9a-f]+) -->/
-const BUILD_REVIEW_VERDICT_RE = /<!-- build-review-verdict:([a-z-]+) -->/
+// Exported for the Pipeline board's verdict (board-core.ts `latestVerdict`, #4349).
+export const BUILD_REVIEW_SHA_RE = /<!-- build-review-sha:([0-9a-f]+) -->/
+export const BUILD_REVIEW_FAILED_RE = /<!-- build-review-failed-sha:([0-9a-f]+) -->/
+export const BUILD_REVIEW_VERDICT_RE = /<!-- build-review-verdict:([a-z-]+) -->/
 const PLAN_VERDICT_RE = /<!--\s*plan-review-verdict:(go|no-go|needs-owner)\s*-->/
 export const QUIZ_RE = /<!-- owner-quiz:v1 pr=(\d+) sha=([0-9a-f]*) key=([A-Za-z0-9_-]+) -->/
 export const CI_FIX_MARKER = 'CI-Fix: true'

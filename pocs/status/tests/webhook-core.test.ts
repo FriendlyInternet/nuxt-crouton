@@ -71,7 +71,7 @@ describe('T1 — signature', () => {
   // covers: T1
   it('parseWebhook reads event, action, number, isPr and repo', () => {
     const raw = body({ issue: { number: 9, pull_request: {} } })
-    expect(parseWebhook(headers(raw, 'issue_comment'), raw, SECRET)).toEqual({ ok: true, event: 'issue_comment', action: 'opened', number: 9, isPr: true, repo: REPO })
+    expect(parseWebhook(headers(raw, 'issue_comment'), raw, SECRET)).toEqual({ ok: true, event: 'issue_comment', action: 'opened', number: 9, isPr: true, repo: REPO, board: null })
   })
 })
 

@@ -47,8 +47,35 @@ The delivery card (`app/components/cards/Delivery.vue`, rules in `app/utils/deli
 signed in via `loginHrefFor` → `/api/status/login/<payload.app>`; no `payload.app` → only the epic link.
 
 Pages: `/` is the inbox (Waiting for you: waiting cards, newest first; list/answer rules in `app/utils/inbox-core.ts`);
-`/apps` is the five-tab page (Apps, To test, Decisions, Changelog, Clock).
+`/apps` is the six-tab page (Apps, To test, Decisions, Changelog, Clock, Pipeline).
 The Changelog tags each merged PR from its linked issue's `app:`/`poc:`/`pkg:` label (one cached issue search in `changelog.get.ts`, rules in `server/utils/changelog-core.ts`; bookkeeping labels never decide a tag), groups rows by Brussels day and hides chores behind "Show chores".
+
+## Pipeline board
+
+The **Pipeline** tab (#4349, `components/dashboard/PipelineTab.vue` + `PipelineCard.vue`) shows every open pipeline
+ticket as a card in one of six columns: Queued · Working · In review · Waits on you · To test · Done today. It is a
+read-only `CroutonKanban` (`readonly`, cards can't be dragged); tapping a card opens the ticket on GitHub. The page
+re-reads `GET /api/status/board` every 30 s while visible (D1 only, never GitHub).
+Rows live in the `items` collection, layer `pipeline` (table `pipeline_items`, one row per issue; a PR folds into the
+issue its body closes). The column is worked out at READ time by `stageOf` in `server/utils/board-core.ts` from the row
+and the current waiting inbox cards (a PR card counts for the row whose `prNumber` it is), first rule wins: closed
+≤ 24 h → done (older: hidden) · `traffic:waiting` → queued · `status:to-test` → test · `epic` → hidden · a waiting
+card → you · an open PR with no `no-go` on its head → review · `work-this`/`delegate`/`delegate-pi`/`plan:approved`
+(or a `no-go` head) → working · else hidden. Planning and building are one Working column.
+Writer: the inbox card sync (`writeBoard` in `cards-sync-run.ts`, rules in `boardFromLists`) at the end of every run,
+from the lists it already read — no extra GitHub reads. It writes a new row only when `stageOf` gives a column;
+`stageSince`/`order` move only when the stage changes. Only when every list read succeeded: a row missing from the
+lists gets `closedAt`, a row whose PR is no longer open loses its PR fields, and rows closed > 24 h ago are deleted.
+A failed board write lands in the sync's `error` and never changes the card counts.
+Second writer: the GitHub webhook (#4350, `server/utils/board-webhook.ts` `writeBoardEvent`, rules in `boardFromEvent`)
+updates the one row an event describes, from the payload alone (never a GitHub read), after the dirty mark: an issue
+event (or a comment on a plain issue) sets title/url/labels/closedAt (a new row only when `stageOf` gives a column; a
+closed issue with no row adds none); a PR / PR-review event folds into the row of the issue its body closes (existing
+rows only), sets the PR fields but never the issue's `labels`, clears `checksRed` on a new head, and a closed PR clears
+the PR fields; a pipeline-bot build-review comment on the row's PR sets `verdict`/`verdictSha`. A failed write is
+logged and the webhook still answers 202. Red-check badge: a completed `workflow_run` of the `CI` workflow on a PR whose
+row's `prHeadSha` is the run's head sets `checksRed` (`failure` → true, `success` → false, anything else unchanged)
+and `checksSha`; it never marks dirty. The sync can't repair a missed `workflow_run` (it makes no extra reads).
 
 ## Clock
 
@@ -82,14 +109,17 @@ not the tab banner.
 ~10 min instead of up to 30. It checks `X-Hub-Signature-256` against the Worker secret `GITHUB_WEBHOOK_SECRET` (pushed
 by deploy-app.yml from the repo secret `STATUS_WEBHOOK_SECRET`; bad/missing → 401, nothing stored), answers `ping` 200,
 ignores any repo but `runtimeConfig.githubRepo` and any event but issues / issue_comment / pull_request /
-pull_request_review (204), never calls GitHub, and only writes KV `cards-sync:dirty-at` (at most every 5 min) → 202.
+pull_request_review / workflow_run (204), never calls GitHub, writes KV `cards-sync:dirty-at` (at most every 5 min) → 202,
+then updates the Pipeline board row (above; owner team from `NUXT_STATUS_OWNER_EMAIL`). `workflow_run` only updates the
+board's red-check badge and never writes the dirty mark (202).
 The next clock tick syncs when that mark is newer than `cards-sync:synced-from` − 6 min. Two never-cleared timestamps,
 not a flag the clock clears, because KV reads can be ~60 s stale: a cleared flag could make a webhook skip its write
 and lose the change. The inbox page (`/`) re-reads its stored cards (no GitHub sync) every 30 s while visible and when
 the tab becomes visible again (`rereadDue` / `relistInbox` in `app/utils/inbox-core.ts`).
 Owner step: set the repo secret `STATUS_WEBHOOK_SECRET`, redeploy, then add a repo webhook (Settings → Webhooks) at
 `https://status.pmcp.dev/api/github/webhook`, content type `application/json`, the same secret, events Issues,
-Issue comments, Pull requests, Pull request reviews.
+Issue comments, Pull requests, Pull request reviews, Workflow runs (until Workflow runs is ticked the red-check badge
+never shows; nothing else changes).
 
 ## Owner email
 

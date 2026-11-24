@@ -519,6 +519,8 @@
       "translations": "Traductions",
       "statuses": "Statuts",
       "groups": "Tranches d'âge",
+      "sendEmails": "Envoyer les e-mails",
+      "sendEmailsHint": "Désactivé : les e-mails de réservation ne sont pas envoyés et chacun est consigné comme ignoré",
       "name": "Nom",
       "subject": "Objet",
       "body": "Corps",
@@ -562,7 +564,8 @@
     "emailStatus": {
       "pending": "En attente",
       "sent": "Envoyé",
-      "failed": "Échoué"
+      "failed": "Échoué",
+      "skipped": "Ignoré"
     }
   }
 }

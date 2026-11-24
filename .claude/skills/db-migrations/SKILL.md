@@ -231,7 +231,7 @@ rm ./.check.mjs
   schema entry + local migrations). See root CLAUDE.md.
 - Migrations are **append-only and committed** — never edit an applied `NNNN_*.sql`;
   add a new one.
-- **Migrate-first deploys (pins, booking-demo, crate, crouton-builder, gallery, notes, snippets and status — #4319, #4367; velo and kassa still deploy first):** when the database already
+- **Migrate-first deploys (pins, booking-demo, crate, crouton-builder, gallery, notes, snippets, status, velo and kassa — #4319, #4367, #4389):** when the database already
   exists, migrations run before the new code goes live, so the old code briefly
   runs on the new schema; never drop a table or column the live code still reads —
   first ship code that stops reading it, then drop it in a later deploy.

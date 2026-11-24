@@ -59,10 +59,9 @@ Team-wide booking configuration.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `bookingWindow` | number | No | Days in advance bookings allowed |
-| `maxBookingsPerDay` | number | No | Max bookings per user per day |
-| `cancellationPolicy` | textarea | No | Cancellation policy text |
-| `requireApproval` | boolean | No | Whether bookings need admin approval |
+| `statuses` | repeater | No | Booking statuses (translatable options) |
+| `groups` | repeater | No | Age groups (translatable options) |
+| `sendEmails` | boolean | Yes (default `true`) | Team switch for booking emails. Off: booking emails are skipped and logged as `skipped` (#3929) |
 
 **Expected table name**: `bookingsSettings`
 

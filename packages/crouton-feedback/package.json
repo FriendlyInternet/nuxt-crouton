@@ -54,7 +54,13 @@
     "unbuild": "^3.6.1"
   },
   "peerDependencies": {
+    "@fyit/crouton-auth": "workspace:0.x",
     "@nuxt/ui": "^4.0.0",
     "nuxt": "^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@fyit/crouton-auth": {
+      "optional": true
+    }
   }
 }
