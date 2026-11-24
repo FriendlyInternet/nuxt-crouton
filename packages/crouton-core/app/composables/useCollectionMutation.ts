@@ -101,10 +101,21 @@ export function useCollectionMutation(collection: string): CollectionMutationRet
     refreshCollection: boolean = true,
     mutationData?: any
   ) => {
+    const nuxtApp = useNuxtApp()
+
+    // Item caches are keyed `collection-item:<collection>:<team>:<id>` (see
+    // useCollectionItem). Ids and team ids may contain colons, so find the
+    // keys by prefix + `:<id>` suffix rather than parsing them.
+    const refreshItemKeys = (coll: string, id: string) =>
+      Promise.all(
+        Object.keys(nuxtApp.payload.data)
+          .filter(k => k.startsWith(`collection-item:${coll}:`) && k.endsWith(`:${id}`))
+          .map(k => refreshNuxtData(k))
+      )
+
     // Refresh ALL cache keys for this collection (supports queries with parameters)
     // Queries Nuxt's payload.data to find all matching keys
     if (refreshCollection) {
-      const nuxtApp = useNuxtApp()
       const prefix = `collection:${collection}:`
 
       // Get all matching keys from Nuxt's async data
@@ -123,8 +134,7 @@ export function useCollectionMutation(collection: string): CollectionMutationRet
     if (itemIds) {
       const ids = Array.isArray(itemIds) ? itemIds : [itemIds]
       for (const id of ids) {
-        const itemCacheKey = `collection-item:${collection}:${id}`
-        await refreshNuxtData(itemCacheKey)
+        await refreshItemKeys(collection, id)
       }
     }
 
@@ -136,14 +146,12 @@ export function useCollectionMutation(collection: string): CollectionMutationRet
         const refId = mutationData[field]
 
         if (refId && typeof refId === 'string') {
-          const refCacheKey = `collection-item:${refCollection}:${refId}`
-          await refreshNuxtData(refCacheKey)
+          await refreshItemKeys(refCollection, refId)
         } else if (Array.isArray(refId)) {
           // Handle array references (e.g., multiple IDs)
           for (const id of refId) {
             if (id && typeof id === 'string') {
-              const refCacheKey = `collection-item:${refCollection}:${id}`
-              await refreshNuxtData(refCacheKey)
+              await refreshItemKeys(refCollection, id)
             }
           }
         }

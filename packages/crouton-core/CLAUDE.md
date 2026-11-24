@@ -238,13 +238,13 @@ export default defineAppConfig({
 
 ```
 collection:{name}:{queryJSON}     # List queries
-collection-item:{name}:{id}       # Single items
+collection-item:{name}:{teamId|super-admin}:{id}   # Single items (reactive getter key: changing id or team changes the key)
 ```
 
 The list key is a reactive `computed`, so changing a query on one instance changes
 that instance's key (two lists with different filters never share data).
 
-Mutations invalidate ALL cache keys for the collection.
+Mutations invalidate ALL cache keys for the collection. Item caches are found by `collection-item:{name}:` prefix + `:{id}` suffix in `payload.data`.
 
 ## Server Pagination
 
