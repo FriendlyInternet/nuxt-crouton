@@ -597,7 +597,7 @@ tokens** — the accountless tokens volunteers/guests get by redeeming a PIN
   members and for anonymous visitors presenting a valid scoped token, so nav
   shows them exactly when they're reachable.
 - **Transport**: the token arrives via the canonical `x-scoped-token` header
-  or the `scoped-access-token` cookie (set by `useScopedAccess`/redeem/mint —
+  or the `scoped-access-token` cookie (set by `useScopedAccess`/redeem —
   the cookie is what makes SSR work).
 - **PIN-protect a single page**: create a grant on `('page', pageId)` via
   crouton-auth's `upsertScopedGrant`, set the page's `requiredScope` to match,
