@@ -5,7 +5,11 @@
 // Rules: server/utils/cards-sync-core.ts. A failed GitHub read never changes a card: the item is
 // skipped (listed in `skipped`) and the next sync tries again. A card whose ticket a chat claimed
 // carries `payload.claim` (#4019, server/utils/claim-core.ts).
+// At the end it also writes the Pipeline board (`pipeline_items`, #4349) from the lists it already
+// read — no extra GitHub reads (rules: server/utils/board-core.ts `boardFromLists`).
 import { createInboxCard, getAllInboxCards, updateInboxCard } from '../../layers/inbox/collections/cards/server/database/queries'
+import { createPipelineItem, deletePipelineItem, getAllPipelineItems, updatePipelineItem } from '../../layers/pipeline/collections/items/server/database/queries'
+import { boardFromLists, closesIssue, type BoardItem, type BoardPlan } from './board-core'
 import { ghFetch, type GhSource } from './github'
 import { ghGetAll } from './gh-paged'
 import {
@@ -22,7 +26,7 @@ const QUIZ_DAYS = 14
 
 interface GhLabel { name?: string }
 interface GhIssue { number: number, title: string, body: string | null, html_url: string, state?: string, user?: GhUser, labels?: GhLabel[], pull_request?: unknown, updated_at?: string }
-interface GhPull extends GhIssue { head?: { sha?: string }, draft?: boolean }
+interface GhPull extends GhIssue { head?: { sha?: string }, base?: { ref?: string }, draft?: boolean }
 type Note = (e: string | null | undefined) => void
 
 export const NO_STUCK = { quiet: 0, draft: 0, epicSync: 0 }
@@ -32,10 +36,6 @@ export const cardsSyncThrottleKey = (teamId: string) => `cards-sync:last:${teamI
 const branchPath = (b: string) => b.split('/').map(encodeURIComponent).join('/')
 
 const labelNames = (l: GhLabel[] = []) => l.map(x => x.name ?? '').filter(Boolean)
-const closesIssue = (body: string | null) => {
-  const m = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)/i.exec(body ?? '')
-  return m ? Number(m[1]) : null
-}
 
 const comments = (gh: GhSource, n: number) => ghGetAll<GhComment>(gh, `/repos/${REPO}/issues/${n}/comments?per_page=100`)
 const events = (gh: GhSource, n: number) => ghGetAll<GhEvent>(gh, `/repos/${REPO}/issues/${n}/events?per_page=100`)
@@ -202,7 +202,10 @@ async function readClaims(gh: GhSource, note: Note): Promise<Record<number, Card
 }
 
 /** Read GitHub and collect every waiting ask. */
-async function collectFromGitHub(gh: GhSource, note: Note): Promise<{ asks: Ask[], unreadable: number[], complete: boolean, prTicket: Record<number, number | null | undefined> }> {
+async function collectFromGitHub(gh: GhSource, note: Note): Promise<{
+  asks: Ask[], unreadable: number[], complete: boolean, prTicket: Record<number, number | null | undefined>
+  lists: Awaited<ReturnType<typeof readLists>>, prItems: SyncItem[]
+}> {
   const lists = await readLists(gh, note)
   const prItems = await Promise.all(lists.pulls.map(p => readPr(gh, p, note)))
   const seen = new Set(prItems.map(i => i.number))
@@ -215,7 +218,72 @@ async function collectFromGitHub(gh: GhSource, note: Note): Promise<{ asks: Ask[
   ])
   const { asks, unreadable } = collectAsks({ items: [...prItems, ...issueItems, ...quietItems], quizItems, epicItems, now: Date.now() })
   const prTicket = Object.fromEntries(prItems.map(p => [p.number, p.closesIssue]))
-  return { asks, unreadable, complete: lists.complete, prTicket }
+  return { asks, unreadable, complete: lists.complete, prTicket, lists, prItems }
+}
+
+/**
+ * Write the Pipeline board from the lists this sync read (#4349). Never throws: a failed read or
+ * write is logged and lands in `errors`; the card counts are not touched.
+ */
+type Collected = Awaited<ReturnType<typeof collectFromGitHub>>
+
+/** "Waits on you" at write time: this sync's asks (a PR ask counts for the issue it closes). */
+function waitingIssues(asks: Ask[], prTicket: Collected['prTicket']): Set<number> {
+  const waiting = new Set<number>()
+  for (const a of asks) {
+    const n = a.sourceType === 'pr' ? prTicket[a.sourceNumber] : a.sourceNumber
+    if (n) waiting.add(n)
+  }
+  return waiting
+}
+
+/** The board plan from what this sync read, against the stored rows. */
+function planBoard(collected: Collected, asks: Ask[], existing: BoardItem[]): BoardPlan {
+  const { lists, prItems, prTicket, complete } = collected
+  const base = new Map(lists.pulls.map(p => [p.number, p.base?.ref]))
+  return boardFromLists({
+    issues: [...lists.blocked, ...lists.toTest, ...lists.pipeline].map(i => ({
+      number: i.number, title: i.title, html_url: i.html_url, labels: labelNames(i.labels), isPr: !!i.pull_request
+    })),
+    pulls: prItems.map(p => ({
+      number: p.number, body: p.body, labels: p.labels, headSha: p.headSha, base: base.get(p.number), comments: p.comments, readError: p.readError
+    })),
+    existing,
+    waiting: waitingIssues(asks, prTicket),
+    complete
+  })
+}
+
+/** Every write of `plan`, each tried on its own; returns the failures (what, error). */
+async function applyBoard(plan: BoardPlan, teamId: string, userId: string): Promise<unknown[]> {
+  const writes: Array<() => Promise<unknown>> = [
+    ...plan.create.map(c => () => createPipelineItem({ ...c, teamId, owner: userId, createdBy: userId, updatedBy: userId } as unknown as Parameters<typeof createPipelineItem>[0])),
+    ...plan.update.map(u => () => updatePipelineItem(u.id, teamId, userId, u.patch as unknown as Parameters<typeof updatePipelineItem>[3], { role: 'owner' })),
+    ...plan.remove.map(id => () => deletePipelineItem(id, teamId, userId, { role: 'owner' }))
+  ]
+  const failures: unknown[] = []
+  for (const w of writes) {
+    try { await w() } catch (e) {
+      console.error('[cards-sync] board write failed', e)
+      failures.push(e)
+    }
+  }
+  return failures
+}
+
+async function writeBoard({ teamId, userId, collected, asks, errors }: {
+  teamId: string, userId: string, collected: Collected, asks: Ask[], errors: string[]
+}) {
+  let existing: BoardItem[]
+  try {
+    existing = (await getAllPipelineItems(teamId)) as unknown as BoardItem[]
+  } catch (e) {
+    console.error('[cards-sync] board read failed', e)
+    errors.push(`board read failed: ${message(e)}`)
+    return
+  }
+  const failures = await applyBoard(planBoard(collected, asks, existing), teamId, userId)
+  if (failures.length) errors.push(`${failures.length} board write(s) failed: ${message(failures[0])}`)
 }
 
 export interface CardsSyncOut {
@@ -285,6 +353,8 @@ async function syncOnce({ token, teamId, userId }: { token: string | undefined, 
     }
   }
   if (failed) errors.push(`${failed} card save(s) failed: ${firstFailure}`)
+
+  await writeBoard({ teamId, userId, collected, asks, errors })
 
   const out: CardsSyncOut = { ...counts, stuck: stuckCounts(asks) } as CardsSyncOut
   if (errors.length) out.error = [...new Set(errors)].join('; ')

@@ -10,7 +10,7 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
-  extends: ['@fyit/crouton-core', '@fyit/crouton-i18n', '@fyit/crouton-email', './layers/inbox'],
+  extends: ['@fyit/crouton-core', '@fyit/crouton-i18n', '@fyit/crouton-email', './layers/inbox', './layers/pipeline'],
   hub: {
     db: 'sqlite',
     kv: true

@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'n
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { compileScript, parse } from '@vue/compiler-sfc'
-import { computed, createSSRApp, defineComponent, h, reactive, ref } from 'vue'
+import { computed, createSSRApp, defineComponent, h, onMounted, reactive, ref, resolveComponent, watch, type Component } from 'vue'
 import { renderToString } from 'vue/server-renderer'
 import { loginHrefFor } from '../app/utils/walk'
 
@@ -11,7 +11,8 @@ import { loginHrefFor } from '../app/utils/walk'
 // source) with one fixture per branch, so splitting the page into tab components (#3763) is held
 // to the same output. Stubbed: Nuxt auto-imports (useFetch returns the fixture for each endpoint),
 // the Nuxt UI components (plain tags that print their label/title and every slot), and
-// ReplyButtons (prints kind + number). UTabs renders all five tab slots at once.
+// ReplyButtons (prints kind + number), CroutonKanban (prints `readonly` and each column's cards
+// through the card component it was given). UTabs renders all six tab slots at once.
 
 const here = dirname(fileURLToPath(import.meta.url))
 const appDir = resolve(here, '../app')
@@ -60,6 +61,15 @@ const collapsibleStub = defineComponent({
   setup: (_, { slots, attrs }) => () => h('div', { 'data-open': String(!!attrs.open) }, [slots.default?.(), attrs.open ? slots.content?.() : null])
 })
 const replyButtons = defineComponent({ props: ['kind', 'number'], setup: p => () => h('reply', `${p.kind}:${p.number}`) })
+// The kanban prints whether it is read-only, then each static column with its cards, sorted by `order`.
+const kanbanStub = defineComponent({
+  props: ['rows', 'groupField', 'orderField', 'columns', 'cardComponent', 'readonly', 'collection'],
+  setup: p => () => h('kanban', { 'data-readonly': String(p.readonly === true || p.readonly === '') }, (p.columns as Array<{ value: string, label: string }>).map(c =>
+    h('column', { 'data-column': c.label }, (p.rows as Array<Record<string, unknown>>)
+      .filter(r => r[p.groupField as string] === c.value)
+      .sort((a, b) => Number(a[p.orderField as string]) - Number(b[p.orderField as string]))
+      .map(r => h(p.cardComponent as Component, { item: r, layout: 'kanban', collection: p.collection })))))
+})
 
 // Built from now so the changelog's "Today" header holds whenever the test runs.
 const TODAY_ISO = new Date().toISOString()
@@ -102,6 +112,13 @@ const FIXTURES: Record<string, unknown> = {
       { workflow: 'weekly.yml', schedule: 'Mondays 06:30 UTC', about: 'Monday chores in order.', lastDue: '2026-11-16T06:30:00Z', nextDue: '2026-11-23T06:30:00Z', lastRun: null, state: 'before-clock' }
     ],
     error: null
+  },
+  '/api/status/board': {
+    data: [
+      { id: 'b1', number: 501, title: 'Board working ticket', url: 'https://gh/501', column: 'working', since: null, checksRed: false, pkg: 'crouton-core', order: 2 },
+      { id: 'b2', number: 502, title: 'Board review ticket', url: 'https://gh/502', column: 'review', since: null, checksRed: true, pkg: null, order: 1 }
+    ],
+    error: null
   }
 }
 
@@ -111,7 +128,12 @@ async function renderPage(path = pagePath, fixtures = FIXTURES, status = 'succes
   vi.stubGlobal('reactive', reactive)
   vi.stubGlobal('loginHrefFor', loginHrefFor)
   vi.stubGlobal('definePageMeta', () => {})
-  vi.stubGlobal('useFetch', async (url: string) => ({ data: ref(fixtures[url] ?? null), status: ref(status) }))
+  vi.stubGlobal('watch', watch)
+  vi.stubGlobal('onMounted', onMounted)
+  vi.stubGlobal('resolveComponent', resolveComponent)
+  vi.stubGlobal('useIntervalFn', () => {})
+  vi.stubGlobal('useDocumentVisibility', () => ref('visible'))
+  vi.stubGlobal('useFetch', async (url: string) => ({ data: ref(fixtures[url] ?? null), status: ref(status), refresh: async () => {} }))
   const Page = await compile(path)
   const app = createSSRApp(defineComponent({ setup: () => () => h(Page) }))
   for (const n of ['UContainer', 'UAlert', 'UBadge', 'UCard', 'UInput', 'USwitch']) app.component(n, ui('div'))
@@ -119,6 +141,7 @@ async function renderPage(path = pagePath, fixtures = FIXTURES, status = 'succes
   app.component('UTabs', tabsStub)
   app.component('UCollapsible', collapsibleStub)
   app.component('ReplyButtons', replyButtons)
+  app.component('CroutonKanban', kanbanStub)
   for (const f of readdirSync(dashboardDir).filter(f => f.endsWith('.vue'))) {
     app.component(`Dashboard${basename(f, '.vue')}`, await compile(join(dashboardDir, f)))
   }
@@ -184,7 +207,7 @@ describe('apps dashboard page server render', () => {
 
   it('loading and empty states', async () => {
     const loading = visible(await renderPage(pagePath, {}, 'pending'))
-    expect(loading.match(/Loading…/g)?.length).toBe(5)
+    expect(loading.match(/Loading…/g)?.length).toBe(6)
     expect(loading).not.toContain('No apps found.')
     const empty = visible(await renderPage(pagePath, {}))
     expect(empty).toContain('No apps found.')
@@ -192,13 +215,14 @@ describe('apps dashboard page server render', () => {
     expect(empty).toContain('No decisions yet.')
     expect(empty).toContain('No changes yet.')
     expect(empty).toContain('No clock jobs.')
+    expect(empty).toContain('Nothing in the pipeline right now.')
     expect(empty).not.toContain('data-c="All"') // no filter buttons without options
   })
 
   // covers: T4
-  it('Clock tab: five tabs, a missed job listed before an ok one, badge words + run link', async () => {
+  it('Clock tab: six tabs ending in Pipeline, a missed job listed before an ok one, badge words + run link', async () => {
     const html = visible(await renderPage())
-    expect(html.match(/data-tab="[^"]+"/g)).toEqual(['Apps', 'To test', 'Decisions', 'Changelog', 'Clock'].map(t => `data-tab="${t}"`))
+    expect(html.match(/data-tab="[^"]+"/g)).toEqual(['Apps', 'To test', 'Decisions', 'Changelog', 'Clock', 'Pipeline'].map(t => `data-tab="${t}"`))
     expect(html.indexOf('>housekeeping<')).toBeGreaterThan(-1)
     expect(html.indexOf('>housekeeping<')).toBeLessThan(html.indexOf('>pipeline-metrics<'))
     expect(html).toContain('daily 06:00 UTC')
@@ -228,6 +252,19 @@ describe('apps dashboard page server render', () => {
   it('tabs: below sm only the selected tab (Apps, at first) shows its label; from sm all do', async () => {
     const html = visible(await renderPage())
     expect(html).toContain('data-tab="Apps" data-tab-label>') // empty class: label always shown
-    for (const t of ['To test', 'Decisions', 'Changelog', 'Clock']) expect(html).toContain(`data-tab="${t}" data-tab-label="hidden sm:inline"`)
+    for (const t of ['To test', 'Decisions', 'Changelog', 'Clock', 'Pipeline']) expect(html).toContain(`data-tab="${t}" data-tab-label="hidden sm:inline"`)
+  })
+
+  // covers: T6 (#4349)
+  it('Pipeline tab: a read-only kanban with the six columns in order; each card links to GitHub in a new tab', async () => {
+    const html = visible(await renderPage())
+    expect(html).toContain('<kanban data-readonly="true">')
+    expect(html.match(/data-column="[^"]+"/g)).toEqual(['Queued', 'Working', 'In review', 'Waits on you', 'To test', 'Done today'].map(c => `data-column="${c}"`))
+    expect(html).toMatch(/data-column="Working"><a href="https:\/\/gh\/501" target="_blank" rel="noopener"/)
+    expect(html).toContain('#501')
+    expect(html).toContain('Board working ticket')
+    expect(html).toContain('crouton-core') // package label without its prefix
+    expect(html).toMatch(/data-column="In review">.*Board review ticket.*red check/)
+    expect(html).toContain('2 tickets')
   })
 })
