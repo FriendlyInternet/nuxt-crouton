@@ -163,8 +163,8 @@ test('CLI: a review already running → skip and take work-this off, so the go r
 
 // ── Fail open (#4508): a fault in the gate never stops a ticket from starting ──
 // An injected `gh` (runGate is the CLI core) that answers like the fake world and throws on demand.
-function injected({ ticket: t = REST_TICKET, parent = EPIC, comments = [], runs = [], throwOn = [], handoffThrows = false } = {}) {
-  const calls = []; const logs = []; const outputs = []
+function injected({ ticket: t = REST_TICKET, parent = EPIC, comments = [], runs = [], throwOn = [], handoffThrows = false, restoreThrows = false } = {}) {
+  const calls = []; const logs = []; const outputs = []; const handoffs = []
   const gh = (args) => {
     const s = args.join(' '); calls.push(args)
     const hit = throwOn.find((f) => s.includes(f))
@@ -175,8 +175,12 @@ function injected({ ticket: t = REST_TICKET, parent = EPIC, comments = [], runs 
     return s.startsWith('api repos/o/r/issues/') && !s.includes('-X') ? JSON.stringify(t) : ''
   }
   const deps = { env: { GITHUB_REPOSITORY: 'o/r', ACTOR: 'pmcp' }, gh, log: (m) => logs.push(m), output: (l) => outputs.push(l),
-    handoff: () => { if (handoffThrows) throw new Error('dispatch failed (HTTP 500)') } }
-  return { deps, calls, logs, outputs }
+    handoff: (step) => {
+      handoffs.push(step)
+      if (step.kind === 'dispatch' && handoffThrows) throw new Error('dispatch failed (HTTP 500)')
+      if (step.kind === 'label' && restoreThrows) throw new Error('label failed (HTTP 422)')
+    } }
+  return { deps, calls, logs, outputs, handoffs }
 }
 const decisionLine = (logs) => logs.some((l) => /^ticket-review gate #21: \S+ \(\S+\)$/.test(l))
 
@@ -202,20 +206,32 @@ test('fail open: throw on the epic comments read → no held, exit 0, warning, d
   assert.ok(!w.calls.some((a) => a.includes('DELETE')))
 })
 // covers: T4
-test('fail open: claim succeeds then dispatch throws → work-this put back, no held, exit 0', async () => {
+test('fail open: claim succeeds then dispatch throws → one label hand-off restores work-this, held=true, exit 0, no direct --add-label', async () => {
   const w = injected({ handoffThrows: true })
   const r = await runGate('21', w.deps)
   assert.equal(r.exitCode, 0)
-  assert.deepEqual(w.outputs, [])
-  const del = w.calls.findIndex((a) => a.includes('DELETE'))
-  const back = w.calls.findIndex((a) => a[0] === 'issue' && a[1] === 'edit' && a.includes('--add-label') && a.includes('work-this') && a.includes('21'))
-  assert.ok(del >= 0 && back > del, 'the label is taken off, then put back')
+  assert.deepEqual(w.outputs, ['held=true'])
+  assert.ok(w.calls.some((a) => a.includes('DELETE')), 'the label was taken off')
+  const restores = w.handoffs.filter((s) => s.kind === 'label')
+  assert.deepEqual(restores, [{ kind: 'label', issue: 21, label: 'work-this' }])
+  assert.ok(!w.calls.some((a) => a.includes('--add-label')), 'no direct label add')
   assert.match(w.logs.find((l) => l.startsWith('::warning::')), /#21/)
   assert.ok(decisionLine(w.logs))
 })
 // covers: T4
-test('fail open: dispatch throws and putting work-this back throws too → non-zero, ::error:: names the ticket', async () => {
-  const w = injected({ handoffThrows: true, throwOn: ['--add-label'] })
+test('fail open: dispatch succeeds and the note throws → held=true, no restore, exit 0, warning printed', async () => {
+  const w = injected({ throwOn: ['issue comment'] })
+  const r = await runGate('21', w.deps)
+  assert.equal(r.exitCode, 0)
+  assert.deepEqual(w.outputs, ['held=true'])
+  assert.deepEqual(w.handoffs.map((s) => s.kind), ['dispatch'])
+  assert.ok(!w.calls.some((a) => a.includes('--add-label')))
+  assert.match(w.logs.find((l) => l.startsWith('::warning::')), /#21.*note/)
+  assert.ok(decisionLine(w.logs))
+})
+// covers: T4
+test('fail open: dispatch throws and the restore hand-off throws too → non-zero, ::error:: names the ticket', async () => {
+  const w = injected({ handoffThrows: true, restoreThrows: true })
   const r = await runGate('21', w.deps)
   assert.notEqual(r.exitCode, 0)
   assert.deepEqual(w.outputs, [])
@@ -224,19 +240,20 @@ test('fail open: dispatch throws and putting work-this back throws too → non-z
   assert.ok(decisionLine(w.logs))
 })
 // covers: T4
-test('fail open through the real CLI: a 502 on the issue read → exit 0, no held; lost label → exit non-zero', () => {
+test('fail open through the real CLI: a 502 on the issue read → exit 0, no held; the note fails after the dispatch → exit 0, held', () => {
   const w = fakeWorld({ ticket: REST_TICKET, parent: EPIC, fail: ['api repos/o/r/issues/21 --jq'] })
   const r = w.runRaw()
   assert.equal(r.code, 0)
   assert.match(r.stdout, /::warning::ticket-review gate #21/)
   assert.match(r.stdout, /ticket-review gate #21: proceed \(gate-error\)/)
   assert.equal(w.output(), '')
-  // the note after the claim fails, and so does putting the label back
-  const w2 = fakeWorld({ ticket: REST_TICKET, parent: EPIC, fail: ['issue comment', 'issue edit'] })
+  // the review is dispatched, only the note on the ticket fails: under review, no restore
+  const w2 = fakeWorld({ ticket: REST_TICKET, parent: EPIC, fail: ['issue comment'] })
   const r2 = w2.runRaw()
-  assert.notEqual(r2.code, 0)
-  assert.match(r2.stdout, /::error::.*#21 has lost work-this/)
-  assert.equal(w2.output(), '')
+  assert.equal(r2.code, 0)
+  assert.match(r2.stdout, /::warning::ticket-review gate #21: the review started/)
+  assert.equal(w2.output(), 'held=true\n')
+  assert.ok(!w2.calls().some((a) => a.join(' ').includes('labels[]=work-this')))
 })
 // covers: T2
 test('a pipeline-made ticket proceeds without reading the epic\'s comments', async () => {

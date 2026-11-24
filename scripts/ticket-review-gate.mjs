@@ -19,8 +19,10 @@
 //   9. otherwise → review
 //
 // Fail open: an error before the claim (work-this taken off) lets the ticket start as on main
-// (a ::warning::, no held, exit 0); an error after it puts work-this back (exit non-zero only when
-// that fails too, with an ::error:: naming the ticket).
+// (a ::warning::, no held, exit 0). After it: if the review was dispatched and only the note failed,
+// held=true + a ::warning::; if the dispatch failed, work-this goes back through the hand-off script
+// and held=true (the fresh label event starts the ticket, not this run) — exit non-zero only when
+// that hand-off fails too, with an ::error:: naming the ticket.
 //
 //   node scripts/ticket-review-gate.mjs <issue>
 //     env ACTOR, GH_TOKEN, HANDOFF_FALLBACK_TOKEN, GITHUB_REPOSITORY; writes held=true to $GITHUB_OUTPUT
@@ -112,21 +114,36 @@ function decide(n, repo, deps) {
 const firstLine = (e) => String(e?.stderr || e?.message || e).trim().split('\n')[0]
 
 // Fail open: a fault in the gate never stops a ticket from starting (no held → Dispatch runs).
-function failOpen(e, n, repo, claimed, deps) {
+// After the claim, `dispatched` tells the two faults apart: the review started and only the note
+// failed (the ticket is under review — hold, warn), or the dispatch itself failed (restore the label).
+function failOpen(e, n, claimed, dispatched, deps) {
   const msg = firstLine(e)
   if (!claimed) {
     deps.log(`::warning::ticket-review gate #${n}: error before the claim, the ticket starts as usual — ${msg}`)
     deps.log(`ticket-review gate #${n}: proceed (gate-error)`)
     return { action: 'proceed', reason: 'gate-error', exitCode: 0 }
   }
+  if (dispatched) {
+    deps.output('held=true')
+    deps.log(`::warning::ticket-review gate #${n}: the review started but the note on the ticket failed — ${msg}`)
+    deps.log(`ticket-review gate #${n}: review (note-error)`)
+    return { action: 'review', reason: 'note-error', exitCode: 0 }
+  }
+  return restoreLabel(n, msg, deps)
+}
+
+// The dispatch failed after the claim: put work-this back through the hand-off script (saved and
+// replayed by the sweep if the allowance ran out). held=true: the fresh label event starts it, not this run.
+function restoreLabel(n, msg, deps) {
   deps.log(`::warning::ticket-review gate #${n}: error after taking ${TRIGGER} off, putting it back — ${msg}`)
   try {
-    deps.gh(['issue', 'edit', String(n), '--repo', repo, '--add-label', TRIGGER])
+    deps.handoff({ kind: 'label', issue: n, label: TRIGGER })
   } catch (e2) {
     deps.log(`::error::ticket-review gate: ticket #${n} has lost ${TRIGGER} and has no review — put ${TRIGGER} back on #${n} by hand (${firstLine(e2)})`)
     deps.log(`ticket-review gate #${n}: lost-label (gate-error)`)
     return { action: 'lost-label', reason: 'gate-error', exitCode: 1 }
   }
+  deps.output('held=true')
   deps.log(`ticket-review gate #${n}: restored (gate-error)`)
   return { action: 'restored', reason: 'gate-error', exitCode: 0 }
 }
@@ -138,6 +155,7 @@ export async function runGate(issue, deps) {
   const repo = deps.env.GITHUB_REPOSITORY
   const n = Number(issue)
   let claimed = false
+  let dispatched = false
   const drop = () => {
     try { gh(['api', '-X', 'DELETE', `repos/${repo}/issues/${n}/labels/${TRIGGER}`]) } catch (e) { if (is404(e)) return false; throw e }
     claimed = true
@@ -152,11 +170,12 @@ export async function runGate(issue, deps) {
       if (!drop()) d = { action: 'skip', reason: 'claimed-by-another-run' }
       else {
         deps.handoff({ kind: 'dispatch', issue: n, workflow: 'ticket-review.yml', inputs: { epic: String(r.parent.number), subject: String(n) } })
+        dispatched = true
         gh(['issue', 'comment', String(n), '--repo', repo, '--body', note(`🔎 Ticket review first (epic #${r.parent.number}) — this ticket starts by itself when the review says go.`)])
       }
     } else if (d.reason === 'review-running') drop() // so the running review's go re-add fires a fresh event
   } catch (e) {
-    return failOpen(e, n, repo, claimed, deps)
+    return failOpen(e, n, claimed, dispatched, deps)
   }
   if (d.action !== 'proceed') deps.output('held=true')
   deps.log(`ticket-review gate #${n}: ${d.action} (${d.reason})`)
@@ -170,7 +189,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const r = await runGate(issue, {
     env: process.env,
     gh: (args) => execFileSync('gh', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 }),
-    handoff: (step) => execFileSync('node', [here('./handoff-exec.mjs'), 'dispatch', JSON.stringify(step)], { stdio: ['ignore', 'inherit', 'inherit'] }),
+    handoff: (step) => execFileSync('node', [here('./handoff-exec.mjs'), step.kind, JSON.stringify(step)], { stdio: ['ignore', 'inherit', 'inherit'] }),
     output: (line) => { if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `${line}\n`) },
     log: (m) => console.log(m),
   })

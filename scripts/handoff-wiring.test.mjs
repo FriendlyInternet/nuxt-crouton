@@ -44,7 +44,6 @@ export const ALLOW = [
   ['label-ready-epics.mjs', '/labels`', 'managed epic status labels, not a stage start'],
   ['claim.mjs', "'--add-label', 'claimed'", 'the descriptive `claimed` label (#3996); it starts no stage and a missed add only hides the ticket from a filter'],
   ['chat-claim.mjs', "flagHasLabel(rest, '--add-label', 'work-this')", 'parses a command the require-unclaimed hook is judging (#3996); it adds no label'],
-  ['ticket-review-gate.mjs', "'--add-label', TRIGGER", 'fail-open restore (#4456) of the work-this label this same run took off; a failed restore must go red with an ::error:: naming the ticket, not be saved green for a later sweep'],
   ['epic-version.mjs', '--add-label', 'stamps the pipeline:v1 version marker on an epic; it starts no stage and a missed stamp is re-derived from the default'],
 ]
 const allowed = (file, text) => ALLOW.some(([f, sub]) => file.endsWith(f) && text.includes(sub))
