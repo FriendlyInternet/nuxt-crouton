@@ -64,16 +64,7 @@ try { url = extractWorkerUrl(out, name) } catch (e) {
 }
 
 // 2. Shared token secret (set on every deploy; the workflow sets the same value on the app)
-// A just-uploaded Worker can answer its first secrets call with Cloudflare 10500 (internal error);
-// retry a few times with a short backoff before giving up.
-const putSecret = () => wrangler(['secret', 'put', 'COLLAB_TOKEN_SECRET', '--config', cfgPath], { input: tokenSecret })
-for (let attempt = 1; ; attempt++) {
-  try { putSecret(); break } catch (e) {
-    if (attempt >= 4) throw e
-    console.warn(`::warning::collab secret put failed (attempt ${attempt}/4) — retrying.`)
-    await new Promise(r => setTimeout(r, attempt * 5000))
-  }
-}
+wrangler(['secret', 'put', 'COLLAB_TOKEN_SECRET', '--config', cfgPath], { input: tokenSecret })
 console.log('Collab Worker COLLAB_TOKEN_SECRET set.')
 
 // 3. D1 migration (idempotent: CREATE ... IF NOT EXISTS). Needs the id the deploy just provisioned.
