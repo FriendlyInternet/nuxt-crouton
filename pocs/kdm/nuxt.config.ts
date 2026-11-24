@@ -40,11 +40,11 @@ export default defineNuxtConfig({
     methods: {
       passkeys: false
     },
-    // One site, one team. `test1` is the team every preview deploy seeds and
-    // attaches the review login to (scripts/seed-review-login.mjs), so the
-    // app's single team must be that same team. The slug never shows publicly.
+    // One site, one team: `kdm`. The review login lands in it because
+    // deploy.config.json says `"reviewTeam": "kdm"` (#4141) — the two must
+    // match, or scripts/review-team.mjs fails the deploy (#4488).
     teams: {
-      defaultTeamSlug: 'test1',
+      defaultTeamSlug: 'kdm',
       allowCreate: false,
       showSwitcher: false,
       showManagement: false

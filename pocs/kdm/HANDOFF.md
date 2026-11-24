@@ -4,8 +4,8 @@ Kasper Demeulemeester's site (kasperdemeulemeester.be), moving from Nuxt Content
 onto crouton so pages can be edited in the browser. Epic: https://github.com/FriendlyInternet/nuxt-crouton/issues/4125
 
 Status: Kasper's plain look on crouton's normal team pages (#4153, rewritten 19 Nov). Pages made in
-the editor show at `/test1/en/<slug>` (e.g. `/test1/en/welcome`); `/` is crouton's start page with
-the sign-in pop-up. No imported content yet. Staging preview: https://kdm.pmcp.dev.
+the editor show at `/kdm/en/<slug>` (e.g. `/kdm/en/welcome`); the site's one team is `kdm` (#4488).
+`/` is crouton's start page with the sign-in pop-up. No imported content yet. Staging preview: https://kdm.pmcp.dev.
 
 ## Decisions (from epic #4125)
 
@@ -17,6 +17,8 @@ the sign-in pop-up. No imported content yet. Staging preview: https://kdm.pmcp.d
 - [2026-11-19] **Reversed the line above.** Hand-written addresses broke signing in (`/auth/login` no longer reached the start page's sign-in pop-up) and editor links. Public routing is now crouton-pages' default `team` mode: `/[team]/[locale]/[...slug]`; the app adds only a look (`app/layouts/public.vue`, `main.css`) and settings (`crouton.config.js` locales). Plain addresses come later from connecting Kasper's domain (and #4154 for dropping `/en/`). Rule: `pocs/kdm` has no public page routes, no redirect middleware, nothing that changes sign-in or page links.
 - [2026-11-19] One language: `locales: ['en']`, `defaultLocale: 'en'` in `crouton.config.js` → content is mixed English/Dutch and not translated; without it the app got en/nl/fr.
 - [2026-11-18] On staging the site's one team is the demo team `test1`, not a team called `kdm` → every preview attaches the review login to `test1` only, so content and login must share that team; the name never shows in a public address.
+- [2026-11-24] Team renamed test1 → kdm (#4488, via reviewTeam #4141); supersedes the 18 Nov test1 line → `deploy.config.json` `"reviewTeam": "kdm"` makes every preview seed and sign in to `kdm`; `croutonAuth.teams.defaultTeamSlug` is `kdm` to match. Pages are at `/kdm/en/<slug>`; `/test1/en/welcome` is a 404.
+- [2026-11-24] .gitignore aligned with main so the epic branch takes main again (#4488); Claude's page tools follow in the split-off ticket → the epic's `pocs/kdm/.data` line conflicted with main's new lines at the end of the file, so the main sync gave up and workers ran on an old base without crouton-auth's `mcpOAuth`.
 
 ## What the scaffold learned (#4126)
 
@@ -28,7 +30,8 @@ the sign-in pop-up. No imported content yet. Staging preview: https://kdm.pmcp.d
   (`kdm-blob`, `kdm-staging-blob`, pattern from `pocs/crate`). Whether the deploy creates a missing
   bucket by itself is unverified; if the preview fails on the bucket, that's an owner action (report on the epic).
 - `@fyit/crouton-devtools` moved to `dependencies`; `vitest` set to `catalog:`.
-- Single-team auth: `croutonAuth.teams = { defaultTeamSlug: 'test1', allowCreate: false, showSwitcher: false, showManagement: false }`.
+- Single-team auth: `croutonAuth.teams = { defaultTeamSlug: 'kdm', allowCreate: false, showSwitcher: false, showManagement: false }`
+  (was `test1` until #4488). It must equal `reviewTeam` in `deploy.config.json` — `scripts/review-team.mjs` fails the deploy otherwise.
 - Colour mode pinned to light (`kdm-color-mode`).
 
 ## What the look learned (#4153)
@@ -52,6 +55,12 @@ the sign-in pop-up. No imported content yet. Staging preview: https://kdm.pmcp.d
   `REVIEW_SEED_SECRET=… node pocs/kdm/scripts/check-browser-cases.mjs <baseUrl> --key pr<N>`
   (Playwright, real browser, signed in as the review login; screenshots to `screenshots/4153-case<N>.png`).
   Local dev needs `BETTER_AUTH_SECRET` in the environment.
+- **Check cases after the team rename (#4488)** — both scripts default to team `kdm` (override with `TEAM=`):
+  case 1 (`/kdm/en/welcome` 200, `/test1/en/welcome` 404 as `4488-1`) and case 5 (the #4153 cases
+  still pass with `kdm`) → `node pocs/kdm/scripts/check-public-routes.mjs <baseUrl>`; case 2 (review
+  login reaches `/admin/kdm/workspace` with the Pages admin) → `check-browser-cases.mjs` case 6.
+  Config: `pnpm --filter kdm exec vitest run tests/team.test.ts`. The #4153 run log below is history
+  (it used `test1`).
 - **Run on the PR #4166 preview (2026-11-19):** 1 ✅, 2 ❌ (package gap below), 3 ✅, 4 ✅, 5 ✅
   (`/auth/login` ends on `/` with the sign-in form), 6 ✅ (the editor's "Open" goes to
   `/test1/en/welcome`, 200, `h1` "Welkom"), 7 partly: the pencil shows for the review login and opens

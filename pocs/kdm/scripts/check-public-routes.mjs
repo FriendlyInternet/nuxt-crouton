@@ -4,13 +4,13 @@
 //
 //   node pocs/kdm/scripts/check-public-routes.mjs http://localhost:3000
 //
-// Needs the crouton-pages demo page `welcome` (title "Welkom") in team `test1`
+// Needs the crouton-pages demo page `welcome` (title "Welkom") in team `kdm`
 // — `crouton-seed --db kdm-db` adds it. Cases 5–7 need a real browser and a
 // signed-in session; they are not covered here (see HANDOFF.md).
 // Prints one line per case; exits non-zero on any failure.
 
 const base = (process.argv[2] || 'http://localhost:3000').replace(/\/$/, '')
-const TEAM = process.env.TEAM || 'test1'
+const TEAM = process.env.TEAM || 'kdm'
 const TITLE = process.env.SEED_TITLE || 'Welkom'
 
 const get = (path, init = {}) => fetch(base + path, { redirect: 'manual', ...init })
@@ -25,6 +25,10 @@ const cases = [
     const n = titleH1s(html).length
     const ok = r.status === 200 && n === 1 && h1s(html).length === 1 && !hasTag(html, 'nav') && !hasTag(html, 'footer')
     return [ok, `status ${r.status}, title h1s ${n}, all h1s ${h1s(html).length}, nav ${hasTag(html, 'nav')}, footer ${hasTag(html, 'footer')}`]
+  }],
+  ['4488-1 GET /test1/en/welcome → 404 (the old demo team is gone)', async () => {
+    const r = await get('/test1/en/welcome')
+    return [r.status === 404, `status ${r.status}`]
   }],
   [`2 GET /${TEAM}/welcome → forwards to /${TEAM}/en/welcome`, async () => {
     const r = await get(`/${TEAM}/welcome`)

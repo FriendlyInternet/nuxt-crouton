@@ -2,7 +2,7 @@
 // review-team.mjs — the ONE rule for which seeded team a preview's review login lands in (#4141).
 //
 // An app may set `"reviewTeam": "<slug>"` in its deploy.config.json; absent → `test1` (every app
-// today). The deploy's demo seed (`crouton-seed --team`), the review login (`--seed-team`), the
+// but `pocs/kdm`). The deploy's demo seed (`crouton-seed --team`), the review login (`--seed-team`), the
 // screenshot's `{team}` / `[team]` routes and local `pnpm preview` all read it from here, so they
 // can never disagree.
 //

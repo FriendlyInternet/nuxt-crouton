@@ -22,7 +22,7 @@ import { signIn, jarToContextCookies } from '../../../scripts/lib/review-login.m
 const args = process.argv.slice(2)
 const flag = (name) => { const i = args.indexOf(name); return i === -1 ? undefined : args[i + 1] }
 const base = (args.find(a => /^https?:\/\//.test(a)) || 'http://localhost:3000').replace(/\/$/, '')
-const TEAM = process.env.TEAM || 'test1'
+const TEAM = process.env.TEAM || 'kdm'
 const TITLE = process.env.SEED_TITLE || 'Welkom'
 const key = flag('--key')
 const secret = process.env.REVIEW_SEED_SECRET
