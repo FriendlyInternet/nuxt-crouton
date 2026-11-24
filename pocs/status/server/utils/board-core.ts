@@ -222,6 +222,91 @@ function planRow(plan: BoardPlan, prev: BoardItem | undefined, next: BoardItem, 
   if (prev || stage) record(plan, prev, withStage(next, prev, stage, now))
 }
 
+// ---------------------------------------------------------------- the webhook's writer (#4350)
+
+/**
+ * One webhook event, as the board needs it (built by `boardEventOf` in webhook-core.ts from the
+ * payload alone — the webhook never calls GitHub):
+ * - `issue`: an `issues` event, or an `issue_comment` on a plain issue (its payload carries the issue);
+ * - `pr`: a `pull_request` or `pull_request_review` event (the payload's PR: body, labels, head, base);
+ * - `comment`: an `issue_comment` on a PR (may carry a build-review verdict);
+ * - `checks`: a completed `workflow_run` of the `CI` workflow.
+ */
+export type BoardEvent =
+  | { kind: 'issue', number: number, title: string, url: string, labels: string[], closedAt: string | null }
+  | { kind: 'pr', number: number, body: string | null, labels: string[], headSha: string | null, base: string | null, closed: boolean }
+  | { kind: 'comment', prNumber: number, comment: GhComment }
+  | { kind: 'checks', headSha: string, prNumbers: number[], conclusion: string }
+
+/** The issue row of an issue event: its fields from the payload; a closed issue with no row adds none. */
+function issueEvent(plan: BoardPlan, ev: Extract<BoardEvent, { kind: 'issue' }>, rows: Map<number, BoardItem>, waiting: Set<number>, now: number) {
+  const prev = rows.get(ev.number)
+  if (!prev && ev.closedAt) return
+  const closedAt = ev.closedAt ? new Date(ev.closedAt) : null
+  const next: BoardItem = { ...(prev ?? { number: ev.number, checksRed: false }), title: ev.title, url: ev.url, labels: join(ev.labels), closedAt }
+  planRow(plan, prev, next, waiting, now)
+}
+
+/**
+ * A PR event updates the row of the issue its body closes — only when that row exists (the webhook
+ * can't read the issue's labels, so it never adds a row for a PR). Closed → its PR fields are cleared
+ * (when it is the row's PR). An older PR than the row's never takes it over (the sync keeps the newest).
+ * A new head clears `checksRed`; another PR starts with no verdict. Issue labels are left as they were.
+ */
+function prEvent(plan: BoardPlan, ev: Extract<BoardEvent, { kind: 'pr' }>, rows: Map<number, BoardItem>, waiting: Set<number>, now: number) {
+  const n = closesIssue(ev.body)
+  const prev = n === null ? undefined : rows.get(n)
+  if (!prev) return
+  if (ev.closed) {
+    if (prev.prNumber === ev.number) planRow(plan, prev, { ...prev, ...PR_CLEARED }, waiting, now)
+    return
+  }
+  if (hasPr(prev) && prev.prNumber! > ev.number) return
+  const next: BoardItem = { ...prev, prNumber: ev.number, prHeadSha: ev.headSha, prBase: ev.base, prLabels: join(ev.labels) }
+  if (prev.prNumber !== ev.number) Object.assign(next, { verdict: null, verdictSha: null, checksSha: null })
+  if (prev.prHeadSha !== ev.headSha) next.checksRed = false
+  planRow(plan, prev, next, waiting, now)
+}
+
+/** A pipeline-bot build-review comment on a row's PR sets its verdict; any other comment changes nothing. */
+function commentEvent(plan: BoardPlan, ev: Extract<BoardEvent, { kind: 'comment' }>, rows: BoardItem[], waiting: Set<number>, now: number) {
+  const prev = rows.find(r => r.prNumber === ev.prNumber)
+  const v = prev ? commentVerdict(ev.comment) : null
+  if (prev && v) planRow(plan, prev, { ...prev, verdict: v.verdict, verdictSha: v.verdictSha }, waiting, now)
+}
+
+/**
+ * CI finished on a PR head: `failure` → red, `success` → not red, on rows whose PR is in the run and
+ * whose stored head is the run's head (an old run never paints a newer head). Any other conclusion
+ * (e.g. `cancelled` when a newer commit lands) changes nothing, `checksSha` included.
+ */
+function checksEvent(plan: BoardPlan, ev: Extract<BoardEvent, { kind: 'checks' }>, rows: BoardItem[], waiting: Set<number>, now: number) {
+  if (ev.conclusion !== 'failure' && ev.conclusion !== 'success') return
+  for (const prev of rows) {
+    if (!hasPr(prev) || !ev.prNumbers.includes(prev.prNumber!) || prev.prHeadSha !== ev.headSha) continue
+    planRow(plan, prev, { ...prev, checksRed: ev.conclusion === 'failure', checksSha: ev.headSha }, waiting, now)
+  }
+}
+
+/**
+ * What one webhook event writes to the board, against the stored rows (never a GitHub read, never a
+ * delete). Same row rules as the sync: a new row only when `stageOf` gives a column (so an issue with
+ * no pipeline label adds nothing), never for an epic; `stageSince` moves only when the stage changes.
+ */
+export function boardFromEvent({ event, existing, waiting, now = Date.now() }: {
+  event: BoardEvent
+  existing: BoardItem[]
+  waiting: Set<number>
+  now?: number
+}): BoardPlan {
+  const plan: BoardPlan = { create: [], update: [], remove: [] }
+  if (event.kind === 'issue') issueEvent(plan, event, firstBy(existing), waiting, now)
+  else if (event.kind === 'pr') prEvent(plan, event, firstBy(existing), waiting, now)
+  else if (event.kind === 'comment') commentEvent(plan, event, existing, waiting, now)
+  else checksEvent(plan, event, existing, waiting, now)
+  return plan
+}
+
 // ---------------------------------------------------------------- GET /api/status/board
 
 export interface BoardCard { sourceType: string, sourceNumber: number, state: string, askedAt: When }
@@ -255,6 +340,10 @@ function waitingSince(rows: BoardItem[], cards: BoardCard[], now: number): Map<n
   }
   return out
 }
+
+/** Issue numbers with a waiting inbox card on the issue or its PR — `stageOf`'s `waiting`. */
+export const waitingNumbers = (rows: BoardItem[], cards: BoardCard[], now: number = Date.now()) =>
+  new Set(waitingSince(rows, cards, now).keys())
 
 /** When the row entered `column`: the card's askedAt for "you", else stageSince while the stored stage still matches. */
 function sinceOf(r: BoardItem, column: Stage, askedAt: Map<number, number>): number | null {
