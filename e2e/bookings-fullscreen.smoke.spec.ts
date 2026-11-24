@@ -132,8 +132,9 @@ test.describe(FIXTURE === 'with-bookings' ? 'bookings full screen' : 'bookings f
     await expect(dialog.getByRole('button', { name: 'Next week' })).toHaveCount(0)
 
     // The scroll area (map + list) under the fixed filters + calendar.
+    // 180, not 200: the location tab row (#4471) now sits above the list
     const list = dialog.locator('.booking-panel > :nth-child(2)')
-    await expect.poll(async () => (await list.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(200)
+    await expect.poll(async () => (await list.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(180)
 
     // No dots clipped: a rendered month cell holds its whole stack.
     const cell = dialog.locator('[style*="min-height"]').first()
