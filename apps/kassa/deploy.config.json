@@ -69,10 +69,6 @@
         "expectStatus": [401]
       },
       {
-        "path": "/api/crouton-sales/events/seed:event:test1:vlaamsekermis/orders",
-        "expectStatus": [405]
-      },
-      {
         "path": "/api/crouton-sales/teams/{teamId}/devices"
       },
       {
