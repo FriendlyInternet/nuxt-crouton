@@ -26,7 +26,7 @@ export function packageTestCmd(p) { return `pnpm --filter "./packages/${p}" run 
 /**
  * Package tests need the merged branch's workspace links, not main's (#4155); `--ignore-scripts` because they don't need the apps' `nuxt prepare`
  * — and its package builds too: `BUILD_CMD` runs after it when the merge changed packages/ or the lockfile compared with the tree the
- * builds came from (PKG_DIST_REF, #4374).
+ * builds came from (PKG_DIST_REF, #4374), and before the migration check, which reads the built packages (#4487).
  */
 export const INSTALL_CMD = 'pnpm install --frozen-lockfile --prefer-offline --ignore-scripts'
 
@@ -77,25 +77,44 @@ export function failedTestsNote(output, { max = 5 } = {}) {
 /**
  * The build + test tail of `verify` (#4374). `run(cmd)` → `{ ok, output }`; `log(line)` writes to stderr.
  * `changed` is the build-decision list (changedSinceBuild); `conflicted` picks the packages whose tests run.
+ * `migApps` + `regenerate(app) → error | null` (#4487): the migration check runs AFTER the build, because the
+ * generator reads the packages' built copy — before it, a package column is invisible and nothing is written.
  */
-export function runChecks({ changed, conflicted, run, log }) {
-  const need = needsPackageBuild(changed)
-  let installed = false
-  if (need.build) {
-    if (!run(INSTALL_CMD).ok) return { ok: false, errors: ['install for the merged branch failed — package build not run'] }
-    installed = true
-    const b = run(BUILD_CMD)
-    if (!b.ok) return { ok: false, errors: ['package build failed after the merge — tests not run', ...failingLines(b.output, { max: 5 }).map((l) => `  ${l.text}`)] }
-    log(`package build: ${need.reason}`)
-  } else {
-    log(`package build skipped: ${need.reason}`)
-  }
+export function runChecks({ changed, conflicted, run, log, migApps = [], regenerate }) {
+  const built = buildStep(needsPackageBuild(changed), run, log)
+  if (built.errors) return { ok: false, errors: built.errors }
+  const regenErr = regenerate ? firstError(migApps, regenerate) : null
+  if (regenErr) return { ok: false, errors: [regenErr] }
   const t = run(SCRIPTS_TEST_CMD)
   if (!t.ok) return { ok: false, errors: failedTestsNote(t.output) }
+  return packageTestsStep(conflicted, built.installed, run)
+}
+
+/** The first non-null `fn(item)`, stopping there (#4487: one app's regenerate error ends the run). */
+function firstError(items, fn) {
+  for (const it of items) {
+    const err = fn(it)
+    if (err) return err
+  }
+  return null
+}
+
+/** Install + build when the merge needs fresh builds. → `{ installed }` or `{ errors }`. */
+function buildStep(need, run, log) {
+  if (!need.build) { log(`package build skipped: ${need.reason}`); return { installed: false } }
+  if (!run(INSTALL_CMD).ok) return { errors: ['install for the merged branch failed — package build not run'] }
+  const b = run(BUILD_CMD)
+  if (!b.ok) return { errors: ['package build failed after the merge — tests not run', ...failingLines(b.output, { max: 5 }).map((l) => `  ${l.text}`)] }
+  log(`package build: ${need.reason}`)
+  return { installed: true }
+}
+
+/** The conflicted packages' own tests (installing first when the build step did not). */
+function packageTestsStep(conflicted, installed, run) {
   const pkgs = [...new Set(conflicted.map((f) => f.match(/^packages\/([^/]+)\//)?.[1]).filter(Boolean))]
   if (pkgs.length && !installed && !run(INSTALL_CMD).ok) return { ok: false, errors: ['install for the merged branch failed — package tests not run'] }
-  for (const p of pkgs) if (!run(packageTestCmd(p)).ok) return { ok: false, errors: [`${p} tests fail after resolution`] }
-  return { ok: true }
+  const failed = pkgs.find((p) => !run(packageTestCmd(p)).ok)
+  return failed ? { ok: false, errors: [`${failed} tests fail after resolution`] } : { ok: true }
 }
 
 /**
@@ -275,8 +294,11 @@ export function withMarkers(contents) {
  * The verdict, from facts only: a choice file means pi found incompatible intents and stopped;
  * leftover markers mean the resolution is not one.
  */
-export function verdict({ choiceText, markerFiles }) {
+export function verdict({ choiceText, markerFiles, migrations = false }) {
   if (choiceText && choiceText.trim()) return { status: 'choice' }
+  const inPackages = migrations ? markerFiles.filter((f) => f.startsWith('packages/')) : []
+  // #4487: a migration is regenerated from the BUILT packages, so their code must be resolved first.
+  if (inPackages.length) return { status: 'failed', reason: `conflict markers remain in ${inPackages.join(', ')} — resolve the code conflicts first, then build the packages, then regenerate the migrations` }
   if (markerFiles.length) return { status: 'failed', reason: `conflict markers remain in: ${markerFiles.join(', ')}` }
   return { status: 'resolved' }
 }
@@ -285,8 +307,11 @@ export function buildPrompt({ base, files, choiceFile }) {
   const gens = GENERATORS.map((g) => `  - ${g.touches.join(', ')} → \`${g.run}\``).join('\n')
   const migApps = [...new Set(files.filter(isMigrationFile).map((f) => appDirOf(migrationDirOf(f))))].sort()
   const mig = migApps.length
-    ? `\n5. MIGRATION FILES ARE NEVER HAND-MERGED (\`server/db/migrations/\`: \`*.sql\`, \`meta/_journal.json\`, \`meta/*_snapshot.json\`). Take the base version of every conflicted file there (\`git checkout --theirs -- <file>\`), delete this branch's own migration files after the base's last journal entry (its \`.sql\` and \`meta/NNNN_snapshot.json\`), then regenerate: ${migApps.map((a) => `\`pnpm --filter ./${a} db:generate\``).join(', ')}. Keep what it writes; never edit a snapshot or the journal yourself. If it fails, or writes nothing while this branch's schema differs from the base, write \`could not regenerate the migration: <reason>\` to ${choiceFile}.`
+    ? `\n5. MIGRATION FILES ARE NEVER HAND-MERGED (\`server/db/migrations/\`: \`*.sql\`, \`meta/_journal.json\`, \`meta/*_snapshot.json\`). Work in this order: (a) resolve every conflict OUTSIDE \`server/db/migrations/\` first (code, then \`pnpm-lock.yaml\`); (b) run \`${INSTALL_CMD}\` and then \`${BUILD_CMD}\` — the generator reads the packages' BUILT copy, so before the build it sees the old schema and writes nothing; (c) take the base version of every conflicted file in the migrations folders (\`git checkout --theirs -- <file>\`); (d) delete every \`.sql\` and \`meta/NNNN_snapshot.json\` there that the base's \`meta/_journal.json\` does not list — this branch's own can have LOWER numbers than the base's last entry; (e) regenerate: ${migApps.map((a) => `\`pnpm --filter ./${a} db:generate\``).join(', ')}. Keep what it writes; never edit a snapshot or the journal yourself. If it fails, or writes nothing while this branch's schema differs from the base, write \`could not regenerate the migration: <reason>\` to ${choiceFile}.`
     : ''
+  const finish = migApps.length
+    ? 'Once every conflict is resolved: you already ran the install and the build in rule 5; run the touched tests (scripts/*.test.mjs via node --test, a touched package\'s tests) before you finish.'
+    : `Once every conflict (including pnpm-lock.yaml) is resolved, run \`${INSTALL_CMD}\`, then \`${BUILD_CMD}\` if the merge touched packages/ or pnpm-lock.yaml, then the touched tests (scripts/*.test.mjs via node --test, a touched package's tests) before you finish.`
   return `RESOLVE THE MERGE CONFLICT. This PR's branch is behind \`${base}\`, and merging \`${base}\` in left conflicts in:
 ${files.map((f) => `- ${f}`).join('\n')}
 
@@ -296,7 +321,7 @@ The merge is IN PROGRESS in the working tree (do not run git merge --abort, git 
 ${gens}
 3. If both sides change the SAME logic in incompatible ways (same lines, different intent), do NOT pick one. Write the choice to ${choiceFile} instead: name side A's intent and side B's intent in one line each, then your recommendation. Leave the files as they are. Making no file change and writing no choice is a FAILED run.
 4. When every conflict is resolved, no \`<<<<<<<\`, \`=======\` or \`>>>>>>>\` line may remain in any file.${mig}
-Once every conflict (including pnpm-lock.yaml) is resolved, run \`${INSTALL_CMD}\`, then \`${BUILD_CMD}\` if the merge touched packages/ or pnpm-lock.yaml, then the touched tests (scripts/*.test.mjs via node --test, a touched package's tests) before you finish.`
+${finish}`
 }
 
 const sh = (cmd, args) => execFileSync(cmd, args, { encoding: 'utf8' })
@@ -363,7 +388,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const changed = sh('git', ['diff', '--name-only', 'HEAD']).split('\n').filter(Boolean)
     const files = conflicted() // the files that clashed — generators/tests key off these, not the whole base diff
     const contents = Object.fromEntries([...new Set([...changed, ...files])].filter(existsSync).map((f) => [f, readFileSync(f, 'utf8')]))
-    const v = verdict({ choiceText, markerFiles: withMarkers(contents) })
+    const v = verdict({ choiceText, markerFiles: withMarkers(contents), migrations: files.some(isMigrationFile) })
     if (v.status === 'choice') process.exit(3)
     if (v.status === 'failed') { console.error(`::error::${v.reason}`); process.exit(1) }
     const untracked = lines(sh('git', ['ls-files', '--others', '--exclude-standard']))
@@ -374,19 +399,18 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     // Mid-merge the auto-merged base files are already staged, so nothing of the base is dropped.
     const stage = resolutionPaths({ modified: lines(sh('git', ['diff', '--name-only'])), conflicted: files, untracked })
     if (stage.length) sh('git', ['add', '--', ...stage])
-    if (mig.applies) {
-      for (const app of mig.apps) {
-        const err = regenerateOk(app, mig.dirs.filter((d) => appDirOf(d) === app))
-        if (err) { console.error(`::error::${err}`); process.exit(1) }
-      }
-    }
     // Only the conflicted files: mid-merge the index holds the whole base diff, whose own whitespace is not ours to judge.
     try { if (files.length) sh('git', ['diff', '--cached', '--check', '--', ...files]) } catch (e) { console.error(`::error::git diff --check: ${e.stdout}`); process.exit(1) }
     for (const g of generatorsFor(files)) if (g.check && !run(g.check).ok) { console.error(`::error::${g.name} --check failed after resolution`); process.exit(1) }
     // #4374: the package builds came from PKG_DIST_REF's tree (main), not this merge — rebuild when that differs.
     const since = changedSinceBuild({ distRef: process.env.PKG_DIST_REF })
     if (since.note) console.error(since.note)
-    const checks = runChecks({ changed: since.files, conflicted: files, run, log: (l) => console.error(l) })
+    // #4487: the migration regenerate check runs inside runChecks, after the build — it reads the built packages.
+    const checks = runChecks({
+      changed: since.files, conflicted: files, run, log: (l) => console.error(l),
+      migApps: mig.applies ? mig.apps : [],
+      regenerate: (app) => regenerateOk(app, mig.dirs.filter((d) => appDirOf(d) === app)),
+    })
     if (!checks.ok) { for (const e of checks.errors) console.error(`::error::${e}`); process.exit(1) }
     console.log(files.join('\n'))
   } else {
