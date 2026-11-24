@@ -49,6 +49,8 @@ jobs:
         with:
           node-version: 22
       - name: Ticket review gate
+        # Fails open (#4508): a fault in the gate prints a warning, writes no held, and exits 0, so
+        # Dispatch runs as before; it exits non-zero only if it took work-this off and lost it.
         id: gate
         if: env.LABEL == 'work-this'
         env:

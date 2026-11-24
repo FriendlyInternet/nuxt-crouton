@@ -8,7 +8,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, chmodSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { gateDecision, gateRelease, pipelineMade } from './ticket-review-gate.mjs'
+import { gateDecision, gateRelease, pipelineMade, runGate } from './ticket-review-gate.mjs'
 import { reviewActions } from './ticket-review-actions.mjs'
 import { releaseReady } from './wave-release.mjs'
 import { decide, renderComment } from './lib/ticket-verdict.mjs'
@@ -104,6 +104,7 @@ if (s.includes('-X DELETE') && s.includes('/labels/work-this')) {
   if (st.removed) { process.stderr.write('gh: Label does not exist (HTTP 404)\\n'); process.exit(1) }
   st.removed = true; save(); process.exit(0)
 }
+if ((st.fail || []).some((f) => s.includes(f))) { process.stderr.write('gh: Server Error (HTTP 502)\\n'); process.exit(1) }
 if (/issues\\/\\d+\\/parent/.test(s)) { if (!st.parent) { process.stderr.write('gh: No parent issue found (HTTP 404)\\n'); process.exit(1) } line(st.parent); process.exit(0) }
 if (/issues\\/\\d+\\/comments/.test(s) && args[0] === 'api') { for (const c of st.comments) line(c); process.exit(0) }
 if (s.includes('actions/workflows/ticket-review.yml/runs')) { for (const r of st.runs) line(r); process.exit(0) }
@@ -121,8 +122,9 @@ function fakeWorld(state) {
   const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, FAKE_GH_DIR: dir, GITHUB_OUTPUT: out,
     GITHUB_REPOSITORY: 'o/r', GH_TOKEN: 'x', HANDOFF_FALLBACK_TOKEN: 'y', ACTOR: 'pmcp' }
   const run = (n = '21') => execFileSync('node', [new URL('./ticket-review-gate.mjs', import.meta.url).pathname, n], { env, encoding: 'utf8' })
+  const runRaw = (n = '21') => { try { return { code: 0, stdout: execFileSync('node', [new URL('./ticket-review-gate.mjs', import.meta.url).pathname, n], { env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) } } catch (e) { return { code: e.status, stdout: String(e.stdout) } } }
   const calls = () => (existsSync(join(dir, 'calls.log')) ? readFileSync(join(dir, 'calls.log'), 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)) : [])
-  return { run, calls, output: () => readFileSync(out, 'utf8') }
+  return { run, runRaw, calls, output: () => readFileSync(out, 'utf8') }
 }
 const REST_TICKET = { number: 21, body: 'Rule: x. Test: y.', labels: ['type:feat', 'work-this'], user: PMCP }
 
@@ -157,6 +159,95 @@ test('CLI: a review already running → skip and take work-this off, so the go r
   assert.equal(calls.filter((a) => a.includes('DELETE')).length, 1)
   assert.ok(!calls.some((a) => a[0] === 'workflow'))
   assert.equal(w.output(), 'held=true\n')
+})
+
+// ── Fail open (#4508): a fault in the gate never stops a ticket from starting ──
+// An injected `gh` (runGate is the CLI core) that answers like the fake world and throws on demand.
+function injected({ ticket: t = REST_TICKET, parent = EPIC, comments = [], runs = [], throwOn = [], handoffThrows = false } = {}) {
+  const calls = []; const logs = []; const outputs = []
+  const gh = (args) => {
+    const s = args.join(' '); calls.push(args)
+    const hit = throwOn.find((f) => s.includes(f))
+    if (hit) { const e = new Error(`gh: Server Error (HTTP 502) on ${hit}`); e.stderr = 'gh: Server Error (HTTP 502)'; throw e }
+    if (/issues\/\d+\/parent/.test(s)) { if (!parent) { const e = new Error('No parent issue found (HTTP 404)'); throw e } return JSON.stringify(parent) }
+    if (/issues\/\d+\/comments/.test(s)) return comments.map((c) => JSON.stringify(c)).join('\n')
+    if (s.includes('ticket-review.yml/runs')) return runs.map((r) => JSON.stringify(r)).join('\n')
+    return s.startsWith('api repos/o/r/issues/') && !s.includes('-X') ? JSON.stringify(t) : ''
+  }
+  const deps = { env: { GITHUB_REPOSITORY: 'o/r', ACTOR: 'pmcp' }, gh, log: (m) => logs.push(m), output: (l) => outputs.push(l),
+    handoff: () => { if (handoffThrows) throw new Error('dispatch failed (HTTP 500)') } }
+  return { deps, calls, logs, outputs }
+}
+const decisionLine = (logs) => logs.some((l) => /^ticket-review gate #21: \S+ \(\S+\)$/.test(l))
+
+// covers: T4
+test('fail open: throw on the issue read → no held, exit 0, one warning naming the ticket, decision line printed', async () => {
+  const w = injected({ throwOn: ['api repos/o/r/issues/21 --jq'] })
+  const r = await runGate('21', w.deps)
+  assert.equal(r.exitCode, 0)
+  assert.deepEqual(w.outputs, [])
+  assert.equal(w.logs.filter((l) => l.startsWith('::warning::')).length, 1)
+  assert.match(w.logs.find((l) => l.startsWith('::warning::')), /#21.*HTTP 502/)
+  assert.ok(decisionLine(w.logs), w.logs.join('\n'))
+  assert.ok(!w.calls.some((a) => a.includes('DELETE')))
+})
+// covers: T4
+test('fail open: throw on the epic comments read → no held, exit 0, warning, decision line printed', async () => {
+  const w = injected({ throwOn: ['/comments'] })
+  const r = await runGate('21', w.deps)
+  assert.equal(r.exitCode, 0)
+  assert.deepEqual(w.outputs, [])
+  assert.match(w.logs.find((l) => l.startsWith('::warning::')), /#21/)
+  assert.ok(decisionLine(w.logs))
+  assert.ok(!w.calls.some((a) => a.includes('DELETE')))
+})
+// covers: T4
+test('fail open: claim succeeds then dispatch throws → work-this put back, no held, exit 0', async () => {
+  const w = injected({ handoffThrows: true })
+  const r = await runGate('21', w.deps)
+  assert.equal(r.exitCode, 0)
+  assert.deepEqual(w.outputs, [])
+  const del = w.calls.findIndex((a) => a.includes('DELETE'))
+  const back = w.calls.findIndex((a) => a[0] === 'issue' && a[1] === 'edit' && a.includes('--add-label') && a.includes('work-this') && a.includes('21'))
+  assert.ok(del >= 0 && back > del, 'the label is taken off, then put back')
+  assert.match(w.logs.find((l) => l.startsWith('::warning::')), /#21/)
+  assert.ok(decisionLine(w.logs))
+})
+// covers: T4
+test('fail open: dispatch throws and putting work-this back throws too → non-zero, ::error:: names the ticket', async () => {
+  const w = injected({ handoffThrows: true, throwOn: ['--add-label'] })
+  const r = await runGate('21', w.deps)
+  assert.notEqual(r.exitCode, 0)
+  assert.deepEqual(w.outputs, [])
+  const err = w.logs.find((l) => l.startsWith('::error::'))
+  assert.match(err, /#21 has lost work-this/)
+  assert.ok(decisionLine(w.logs))
+})
+// covers: T4
+test('fail open through the real CLI: a 502 on the issue read → exit 0, no held; lost label → exit non-zero', () => {
+  const w = fakeWorld({ ticket: REST_TICKET, parent: EPIC, fail: ['api repos/o/r/issues/21 --jq'] })
+  const r = w.runRaw()
+  assert.equal(r.code, 0)
+  assert.match(r.stdout, /::warning::ticket-review gate #21/)
+  assert.match(r.stdout, /ticket-review gate #21: proceed \(gate-error\)/)
+  assert.equal(w.output(), '')
+  // the note after the claim fails, and so does putting the label back
+  const w2 = fakeWorld({ ticket: REST_TICKET, parent: EPIC, fail: ['issue comment', 'issue edit'] })
+  const r2 = w2.runRaw()
+  assert.notEqual(r2.code, 0)
+  assert.match(r2.stdout, /::error::.*#21 has lost work-this/)
+  assert.equal(w2.output(), '')
+})
+// covers: T2
+test('a pipeline-made ticket proceeds without reading the epic\'s comments', async () => {
+  const w = injected({ ticket: { ...REST_TICKET, body: `Rule: x.\n${BLOCK}`, user: BOT } })
+  const r = await runGate('21', w.deps)
+  assert.equal(r.action, 'proceed'); assert.equal(r.reason, 'pipeline-made')
+  assert.ok(!w.calls.some((a) => a.join(' ').includes('/comments')), 'no comments request')
+  // and through the real CLI
+  const fw = fakeWorld({ ticket: { ...REST_TICKET, body: `Rule: x.\n${BLOCK}`, user: BOT }, parent: EPIC })
+  assert.match(fw.run(), /proceed \(pipeline-made\)/)
+  assert.ok(!fw.calls().some((a) => a.join(' ').includes('/comments')))
 })
 
 // ── T8: the gate's own release ──
