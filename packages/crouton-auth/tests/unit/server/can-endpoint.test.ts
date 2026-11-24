@@ -72,8 +72,10 @@ beforeAll(async () => {
 
   const route = (await import('../../../server/api/teams/[id]/can.get')).default
   const app = createApp({
+    // h3 v1 needs the status set on the node response; h3 v2 passes no `node`
+    // and already answers with the error's own status.
     onError: (err, event) => {
-      event.node.res.statusCode = (err as ReturnType<typeof createError>).statusCode ?? 500
+      if (event?.node?.res) event.node.res.statusCode = (err as ReturnType<typeof createError>).statusCode ?? 500
     }
   })
   app.use(createRouter().get('/api/teams/:id/can', route))

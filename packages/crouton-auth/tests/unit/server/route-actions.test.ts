@@ -79,7 +79,6 @@ const GROUPS: Record<string, Row[]> = {
     ['teams/[id]/domains/[domainId]/set-primary.post.ts', 'team:domains'],
     ['teams/[id]/email-logs/index.get.ts', 'team:manage'],
     ['teams/[id]/email-logs/stats.get.ts', 'team:manage'],
-    ['auth/scoped-access/mint.post.ts', 'team:manage'],
     ['auth/invitations/[id]/resend.post.ts', 'team:manage']
   ]),
   admin: T('crouton-admin/server/api/teams/[id]/settings', [
