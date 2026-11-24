@@ -6,28 +6,23 @@ interface Props {
   locations: LocationData[]
   /** Selected location IDs */
   selectedLocations: string[]
-  /** Whether map is visible */
-  showMap?: boolean
   /** Whether calendar is visible */
   showCalendar?: boolean
-  /** Whether there are locations with coordinates (for map toggle) */
-  hasLocationsWithCoordinates?: boolean
   /** Whether a day is selected in the calendar */
   hasSelectedDate?: boolean
   /** Whether to show cancelled bookings */
-  showCancelled: boolean
+  showCancelled?: boolean
   /** Whether user can manage locations (admin) */
   canManageLocations?: boolean
   /** Current calendar view mode */
   calendarView?: 'week' | 'month'
-  /** Panel-only view controls (Week/Month, Today, fold, map). Off on composed pages, where this renders the location tab row itself (#4471). */
+  /** Panel-only view controls (Week/Month, Today, fold). Off on composed pages, where this renders the cog (Show cancelled) and the location tab row itself (#4471, #4492). */
   viewToggles?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  showMap: false,
   showCalendar: true,
-  hasLocationsWithCoordinates: false,
+  showCancelled: false,
   viewToggles: true,
   canManageLocations: false,
   calendarView: 'week',
@@ -36,7 +31,6 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   'update:selectedLocations': [value: string[]]
-  'update:showMap': [value: boolean]
   'update:showCalendar': [value: boolean]
   'update:showCancelled': [value: boolean]
   'update:calendarView': [value: 'week' | 'month']
@@ -50,18 +44,10 @@ const hasActiveFilter = computed(() => props.selectedLocations.length > 0 || pro
 
 const keepOpen = (e: Event) => e.preventDefault()
 
-const settingsItems = computed(() => {
-  const viewItems = [
-    ...(props.viewToggles && props.hasLocationsWithCoordinates
-      ? [{
-          type: 'checkbox' as const,
-          label: t('bookings.filters.map'),
-          icon: 'i-lucide-map',
-          checked: props.showMap,
-          onUpdateChecked: (v: boolean) => emit('update:showMap', v),
-          onSelect: keepOpen,
-        }]
-      : []),
+// Only rendered on composed pages (!viewToggles); in the Panel, Show cancelled and Map live on the list (#4492)
+const settingsItems = computed(() => [
+  [
+    { type: 'label' as const, label: t('bookings.filters.view') },
     {
       type: 'checkbox' as const,
       label: t('bookings.filters.cancelled'),
@@ -70,11 +56,8 @@ const settingsItems = computed(() => {
       onUpdateChecked: (v: boolean) => emit('update:showCancelled', v),
       onSelect: keepOpen,
     },
-  ]
-  return [
-    [{ type: 'label' as const, label: t('bookings.filters.view') }, ...viewItems],
-  ]
-})
+  ],
+])
 </script>
 
 <template>
@@ -108,7 +91,7 @@ const settingsItems = computed(() => {
           {{ t('bookings.filters.today') }}
         </UButton>
 
-        <UDropdownMenu :items="settingsItems">
+        <UDropdownMenu v-if="!viewToggles" :items="settingsItems">
           <UChip :show="hasActiveFilter" color="primary" size="md">
             <UButton
               size="sm"
