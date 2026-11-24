@@ -745,6 +745,14 @@ _Source: `packages/crouton-auth/server/utils/team-auth.ts`_
 
 **Also exported from `packages/crouton-auth/server/utils/team-auth.ts`:** everything from `team.ts`, everything from `permissions.ts`
 
+## requireTeamDomain
+
+```ts
+requireTeamDomain(event: H3Event, guard: () => Promise<TeamContext>)
+```
+
+_Source: `packages/crouton-auth/server/utils/team-domain.ts`_
+
 ## resolveTeamAndCheckMembership
 
 Resolve team and check membership (mode-aware)
