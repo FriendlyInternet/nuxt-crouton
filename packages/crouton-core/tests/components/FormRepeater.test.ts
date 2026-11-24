@@ -140,7 +140,9 @@ describe('FormRepeater', () => {
       { label: 'repeater.moveDown', disabled: false, color: undefined },
       { label: 'common.remove', disabled: false, color: 'error' }
     ])
+    expect(menuItems(w, 1).find(i => i.label === 'repeater.moveUp')!.disabled).toBe(false)
     expect(menuItems(w, 2).find(i => i.label === 'repeater.moveDown')!.disabled).toBe(true)
+    expect(w.findAll('[data-testid="repeater-row-menu"]')[1]!.attributes('aria-label')).toBe('repeater.actions:2/3')
     w.unmount()
 
     const unsorted = await mountRows(['a', 'b', 'c'], { sortable: false })
@@ -173,19 +175,41 @@ describe('FormRepeater', () => {
     const w = await mountRows(['a', 'b', 'c'])
     await pick(w, 2, 'repeater.moveUp')
     expect(document.activeElement).toBe(w.findAll('[data-testid="repeater-row-menu"]')[1]!.element)
-    w.unmount()
 
-    const fresh = await mountRows(['a', 'b', 'c'])
-    await pick(fresh, 1, 'repeater.moveUp')
-    expect(document.activeElement).toBe(fresh.findAll('[data-testid="repeater-row-menu"]')[0]!.element)
+    // Move up on that same row again: focus follows it to the top
+    await pick(w, 1, 'repeater.moveUp')
+    expect(document.activeElement).toBe(w.findAll('[data-testid="repeater-row-menu"]')[0]!.element)
   })
 
   // covers: T6
   it('dragging gives the same update as the menu', async () => {
-    const w = await mountRows(['a', 'b', 'c'])
+    // Mount A: the menu path, Move up twice on row 3
+    const byMenu = await mountRows(['a', 'b', 'c'])
+    await pick(byMenu, 2, 'repeater.moveUp')
+    await pick(byMenu, 1, 'repeater.moveUp')
+    const menuResult = emittedIds(byMenu).at(-1)
+    byMenu.unmount()
+
+    // Mount B: the drag path, Sortable's onUpdate from row 3 to the top
+    const byDrag = await mountRows(['a', 'b', 'c'])
     expect(hoisted.sortableOptions).toBeTruthy()
     hoisted.sortableOptions.onUpdate({ oldIndex: 2, newIndex: 0 })
     await nextTick()
-    expect(emittedIds(w)).toEqual([['c', 'a', 'b']])
+    const dragResult = emittedIds(byDrag).at(-1)
+
+    expect(menuResult).toEqual(['c', 'a', 'b'])
+    expect(dragResult).toEqual(menuResult)
+  })
+
+  // covers: T7
+  it('removes a row from its menu next to the move items, focus going to the next row', async () => {
+    const w = await mountRows(['a', 'b', 'c'])
+    expect(menuItems(w, 1).map(i => i.label)).toEqual(['repeater.moveUp', 'repeater.moveDown', 'common.remove'])
+    await pick(w, 1, 'common.remove')
+    expect(emittedIds(w)).toEqual([['a', 'c']])
+    const triggers = w.findAll('[data-testid="repeater-row-menu"]')
+    expect(triggers).toHaveLength(2)
+    // The row that took the removed row's place now has focus
+    expect(document.activeElement).toBe(triggers[1]!.element)
   })
 })
