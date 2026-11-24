@@ -18,7 +18,7 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { organization } from 'better-auth/plugins'
 import * as authSchema from '../../../../server/database/schema/auth'
 import { buildOrganizationConfig, setAuthInstance } from '../../../../server/lib/auth'
-import { buildAccessControl, setAccessControl } from '../../../../server/lib/access'
+import { buildAccessControl, setAccessControl, type CroutonActionRegistry } from '../../../../server/lib/access'
 import { buildAuthHooks } from '../../../../server/lib/team-admin-role'
 import { DECLARED } from './access-setup'
 
@@ -39,25 +39,41 @@ export function openMigratedDb(): Database.Database {
 
 export type User = { userId: string, headers: Headers }
 
-/** Better Auth + access control + `useDB` on one SQLite. Close `sqlite` when done. */
-export function setupAdminRoleWorld() {
+/**
+ * Better Auth + access control + `useDB` on one SQLite. Close `sqlite` when done.
+ * `redeploy(actions)` rebuilds access + Better Auth on the same database, as a
+ * deploy that declares other actions would (#4283); `world.auth` / `world.access`
+ * then return the new pair.
+ */
+export function setupAdminRoleWorld(actions: CroutonActionRegistry = DECLARED) {
   const sqlite = openMigratedDb()
   const db = drizzle(sqlite, { schema: authSchema })
   vi.stubGlobal('useDB', () => db)
-  const access = buildAccessControl({ actions: DECLARED })
-  setAccessControl(access)
-  const auth = betterAuth({
-    database: drizzleAdapter(db, { provider: 'sqlite', schema: authSchema }),
-    secret: 'test-secret-test-secret-test-secret-123',
-    baseURL: ORIGIN,
-    emailAndPassword: { enabled: true },
-    plugins: [organization(buildOrganizationConfig({}, db as never, access) as never)],
-    hooks: buildAuthHooks(access, db as never)
-  })
-  setAuthInstance(auth as never)
+
+  function build(declared: CroutonActionRegistry) {
+    const access = buildAccessControl({ actions: declared })
+    setAccessControl(access)
+    const auth = betterAuth({
+      database: drizzleAdapter(db, { provider: 'sqlite', schema: authSchema }),
+      secret: 'test-secret-test-secret-test-secret-123',
+      baseURL: ORIGIN,
+      emailAndPassword: { enabled: true },
+      plugins: [organization(buildOrganizationConfig({}, db as never, access) as never)],
+      hooks: buildAuthHooks(access, db as never)
+    })
+    setAuthInstance(auth as never)
+    return { access, auth }
+  }
+
+  let current = build(actions)
+
+  function redeploy(declared: CroutonActionRegistry) {
+    current = build(declared)
+    return current
+  }
 
   async function signUp(email: string): Promise<User> {
-    const res = await auth.api.signUpEmail({
+    const res = await current.auth.api.signUpEmail({
       body: { email, password: 'correct-horse-battery-staple', name: email.split('@')[0]! },
       returnHeaders: true
     })
@@ -66,11 +82,19 @@ export function setupAdminRoleWorld() {
   }
 
   /** The team's admin rows (there must only ever be one). */
-  function adminRows(orgId: string): Array<{ id: string, permission: string }> {
-    return sqlite.prepare('SELECT id, permission FROM organizationRole WHERE organizationId = ? AND role = ?').all(orgId, 'admin') as never
+  function adminRows(orgId: string): Array<{ id: string, permission: string, removedActions: string | null }> {
+    return sqlite.prepare('SELECT id, permission, removedActions FROM organizationRole WHERE organizationId = ? AND role = ?').all(orgId, 'admin') as never
   }
 
-  return { sqlite, db, access, auth, signUp, adminRows }
+  return {
+    sqlite,
+    db,
+    get access() { return current.access },
+    get auth() { return current.auth },
+    redeploy,
+    signUp,
+    adminRows
+  }
 }
 
 /** 'ok', or Better Auth's error code (falls back to the HTTP status name). */

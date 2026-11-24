@@ -28,7 +28,7 @@ import {
   type CroutonActionRegistry
 } from '../lib/access'
 import { getAuthInstance, isAuthInitialized } from '../lib/auth'
-import { ADMIN_ROLE_NAME, readTeamAdminRole, type RawDb } from '../lib/team-admin-role'
+import { ADMIN_ROLE_NAME, catchUpAdminPermission, readTeamAdminRow, removedOf, type RawDb } from '../lib/team-admin-role'
 import { getOrganizationMembershipDirect, resolveTeamAndCheckMembership, type TeamContext } from './team'
 import { useServerAuth } from './useServerAuth'
 
@@ -70,12 +70,16 @@ async function authContext(event?: H3Event) {
  * The roles to check against. `admin` is a row per team (#4130), not a code
  * role: for an admin, read that team's row through `useDB()` (so the answer is
  * the same with or without an auth context), or use the config template while
- * the team has no row yet. Owner and member never read the extra row.
+ * the team has no row yet. The row is caught up with the template at read time
+ * (#4283): an action declared since is granted unless the owner removed it.
+ * Owner and member never read the extra row.
  */
 async function rolesFor(access: CroutonAccessControl, role: string, teamId: string): Promise<Record<string, unknown>> {
   if (!role.split(',').map(r => r.trim()).includes(ADMIN_ROLE_NAME)) return { ...access.roles }
-  const row = await readTeamAdminRole(useDB() as unknown as RawDb, teamId)
-  return { ...access.roles, admin: row ? access.ac.newRole(row as never) : access.adminTemplateRole }
+  const row = await readTeamAdminRow(useDB() as unknown as RawDb, teamId)
+  if (!row) return { ...access.roles, admin: access.adminTemplateRole }
+  const { permission } = catchUpAdminPermission(row.permission, removedOf(row, access), access)
+  return { ...access.roles, admin: access.ac.newRole(permission as never) }
 }
 
 /**
