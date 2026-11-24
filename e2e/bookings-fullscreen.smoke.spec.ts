@@ -14,7 +14,7 @@
  */
 import { expect, type Locator, type Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
-import { test, FIXTURE, ensureAuthed, surfaceUrl, TEAM_FILE } from './helpers'
+import { test, FIXTURE, ensureAuthed, ensureBookingLocations, surfaceUrl, TEAM_FILE } from './helpers'
 
 const FIRST_HIT = 180000
 const PHONE = { width: 390, height: 667 }
@@ -57,40 +57,6 @@ async function openFullScreen(page: Page): Promise<Locator> {
 async function closeFullScreen(page: Page, dialog: Locator) {
   await dialog.getByRole('button', { name: 'Close full screen' }).click()
   await expect(dialog).toHaveCount(0)
-}
-
-/** Make sure the fixture team has at least `count` locations (idempotent across retries). */
-async function ensureLocations(page: Page, baseURL: string | undefined, count: number) {
-  const base = baseURL || 'http://localhost:3000'
-  const slug = JSON.parse(readFileSync(TEAM_FILE, 'utf8')).slug
-  await ensureAuthed(page, base)
-  const headers = { Origin: base, Referer: `${base}/` }
-  const orgsRes = await page.request.get(`${base}/api/auth/organization/list`, { headers })
-  const orgs = orgsRes.ok() ? await orgsRes.json().catch(() => []) : []
-  const teamId = (Array.isArray(orgs) ? orgs : []).find((o: any) => o.slug === slug)?.id
-  expect(teamId, `team id for slug ${slug}`).toBeTruthy()
-
-  const url = `${base}/api/teams/${teamId}/bookings-locations`
-  const listRes = await page.request.get(url, { headers })
-  expect(listRes.ok(), `list locations failed: ${listRes.status()}`).toBeTruthy()
-  const existing = await listRes.json()
-  const have = Array.isArray(existing) ? existing.length : (existing?.items?.length ?? 0)
-  const colors = ['#3b82f6', '#22c55e', '#f97316', '#a855f7']
-  for (let n = have; n < count; n++) {
-    const res = await page.request.post(url, {
-      headers,
-      data: {
-        title: `e2e loc ${n + 1}`,
-        color: colors[n % colors.length],
-        slots: [
-          { id: `s1-${n}`, label: 'Morning' },
-          { id: `s2-${n}`, label: 'Afternoon' },
-          { id: `s3-${n}`, label: 'Evening' }
-        ]
-      }
-    })
-    expect(res.ok(), `create location failed: ${res.status()} ${await res.text()}`).toBeTruthy()
-  }
 }
 
 // Only the with-bookings fixture has the admin bookings page; other fixtures don't register this suite.
@@ -158,7 +124,7 @@ test.describe(FIXTURE === 'with-bookings' ? 'bookings full screen' : 'bookings f
   })
 
   test('phone: month view leaves room for the list', async ({ page, baseURL }) => {
-    await ensureLocations(page, baseURL, 3)
+    await ensureBookingLocations(page, baseURL, 3)
     await page.setViewportSize(PHONE)
     await openPage(page, baseURL)
     const dialog = await openFullScreen(page)
