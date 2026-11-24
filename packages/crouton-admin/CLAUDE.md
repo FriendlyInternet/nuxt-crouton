@@ -33,6 +33,7 @@ Requires `@crouton/auth` as a peer dependency (uses its user/session/team tables
 | `app/middleware/super-admin.ts` | Route protection for super admin pages |
 | `app/middleware/team-admin.ts` | Route protection for team admin pages |
 | `server/utils/admin.ts` | Server-side admin utilities |
+| `app/utils/theme-picker.ts` | Pure helpers for the Look & Feel page (preset list visibility, colour/corner names); tested in `test/theme-picker.test.ts` |
 
 ### Composables
 | File | Purpose |
