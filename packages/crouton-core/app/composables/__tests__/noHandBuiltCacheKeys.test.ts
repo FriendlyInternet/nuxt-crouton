@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { readdirSync, readFileSync, statSync } from 'node:fs'
-import { join, relative, resolve } from 'node:path'
+import { readdirSync, readFileSync } from 'node:fs'
+import { basename, join, relative, resolve, sep } from 'node:path'
 
 // covers: T7
 // One builder names every collection cache slot (#4506). Any other file in
@@ -9,21 +9,18 @@ import { join, relative, resolve } from 'node:path'
 const appDir = resolve(import.meta.dirname, '../..')
 const BUILDER = 'useCollectionCacheKeys.ts'
 const PATTERNS = ['`collection:${', '`collection-item:${']
+const SKIP_DIRS = ['__tests__', 'node_modules']
 
-function walk(dir: string): string[] {
-  const out: string[] = []
-  for (const name of readdirSync(dir)) {
-    if (name === '__tests__' || name === 'node_modules') continue
-    const full = join(dir, name)
-    if (statSync(full).isDirectory()) out.push(...walk(full))
-    else if ((name.endsWith('.ts') || name.endsWith('.vue')) && name !== BUILDER) out.push(full)
-  }
-  return out
-}
+const isScanned = (rel: string) =>
+  (rel.endsWith('.ts') || rel.endsWith('.vue'))
+  && basename(rel) !== BUILDER
+  && !rel.split(sep).some(part => SKIP_DIRS.includes(part))
 
 describe('collection cache keys', () => {
   it('are built only by useCollectionCacheKeys', () => {
-    const files = walk(appDir)
+    const files = readdirSync(appDir, { recursive: true, encoding: 'utf8' })
+      .filter(isScanned)
+      .map(rel => join(appDir, rel))
     expect(files.length).toBeGreaterThan(0)
     const offenders = files
       .filter(f => PATTERNS.some(p => readFileSync(f, 'utf8').includes(p)))
