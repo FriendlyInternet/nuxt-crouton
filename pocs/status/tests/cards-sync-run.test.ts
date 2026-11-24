@@ -89,6 +89,70 @@ describe('runCardsSync (no request)', () => {
 const issue = (n: number, labels: string[]) => ({ number: n, title: `Issue ${n}`, body: '', html_url: `https://github.com/o/r/issues/${n}`, labels: labels.map(name => ({ name })), updated_at: new Date().toISOString() }) // recent: no "quiet" stuck card
 const HOUR = 3_600_000
 
+describe('runCardsSync — delivery card names the merged epic PR (#4501)', () => {
+  const LABELED_AT = '2026-11-20T10:00:00Z'
+  const epicPrHit = (number: number, title: string, mergedAt: string | null) => ({
+    number, title, body: '', html_url: `https://github.com/o/r/pull/${number}`, labels: [], pull_request: { merged_at: mergedAt }
+  })
+  beforeEach(() => {
+    gh.labelled['status:to-test'] = [{
+      number: 70, title: 'Epic 70', body: '## 🧪 How to test\n1. Open /x', html_url: 'https://github.com/o/r/issues/70',
+      labels: [{ name: 'epic' }, { name: 'status:to-test' }], updated_at: OLD
+    }]
+    gh.events[70] = [{ event: 'labeled', label: { name: 'status:to-test' }, created_at: LABELED_AT }]
+    gh.prFiles[501] = [{ filename: 'pocs/a.ts', additions: 10, deletions: 2 }, { filename: 'pocs/b.ts', additions: 3, deletions: 1 }]
+    gh.prFiles[502] = [{ filename: 'pocs/z.ts', additions: 999, deletions: 999 }]
+    gh.prFiles[503] = [{ filename: 'pocs/y.ts', additions: 7, deletions: 7 }]
+    gh.prFiles[504] = [{ filename: 'pocs/new.ts', additions: 4, deletions: 0 }]
+  })
+  const stored = (changes: unknown) => ({
+    id: 'd1', kind: 'delivery', sourceType: 'issue', sourceNumber: 70, sourceCommentId: LABELED_AT, title: 'Epic 70',
+    ask: 'Try it, then reply ok or not ok.', link: 'https://github.com/o/r/issues/70', state: 'waiting', askedAt: LABELED_AT,
+    payload: { steps: ['Open /x'], to: '/x', changes }
+  })
+  const deliveryCard = () => created.find(c => c.kind === 'delivery')
+
+  // covers: T2
+  it('keeps only merged "Epic #70:" PRs — a title that merely contains 70 and an unmerged one are ignored', async () => {
+    gh.epicPrHits = [
+      epicPrHit(501, 'Epic #70: the thing', '2026-11-19T10:00:00Z'),
+      epicPrHit(502, 'Epic #2889: … 70 workflows …', '2026-11-21T10:00:00Z'),
+      epicPrHit(503, 'Epic #70: the thing (again)', null)
+    ]
+    await sync()
+    expect(deliveryCard()?.payload.changes).toEqual({ files: 2, added: 13, removed: 3, top: ['pocs/a.ts', 'pocs/b.ts'], pr: 501, prCount: 1 })
+  })
+
+  // covers: T2
+  it('two merged epic PRs → the newer merged_at one, prCount 2', async () => {
+    gh.epicPrHits = [
+      epicPrHit(501, 'Epic #70: first', '2026-11-19T10:00:00Z'),
+      epicPrHit(504, 'Epic #70: second', '2026-11-22T10:00:00Z')
+    ]
+    await sync()
+    expect(deliveryCard()?.payload.changes).toMatchObject({ files: 1, added: 4, removed: 0, pr: 504, prCount: 2 })
+  })
+
+  // covers: T2
+  it('the epic-PR search fails → the stored card is left unchanged and #70 is skipped', async () => {
+    gh.failEpicSearch = true
+    gh.existingCards = [stored({ files: 9, added: 9, removed: 9, top: [], pr: 1, prCount: 1 })]
+    const out = await sync()
+    expect(out.skipped).toContain(70)
+    expect(updateInboxCard.mock.calls.some((c: any[]) => c[0] === 'd1')).toBe(false)
+  })
+
+  // covers: T2
+  it('the search works → the stored card with different changes is updated', async () => {
+    gh.epicPrHits = [epicPrHit(501, 'Epic #70: the thing', '2026-11-19T10:00:00Z')]
+    gh.existingCards = [stored({ files: 9, added: 9, removed: 9, top: [], pr: 1, prCount: 1 })]
+    await sync()
+    const call = (updateInboxCard.mock.calls as any[][]).find(c => c[0] === 'd1')
+    expect(call).toBeDefined()
+    expect(call!.find(a => a && typeof a === 'object' && 'payload' in a)?.payload.changes).toMatchObject({ pr: 501, prCount: 1 })
+  })
+})
+
 describe('runCardsSync writes the Pipeline board (#4349)', () => {
   // covers: T5
   it('makes exactly as many GitHub reads as before the board (20 for the default fixture)', async () => {

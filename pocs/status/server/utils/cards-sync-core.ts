@@ -87,6 +87,8 @@ export interface SyncItem {
   files?: GhFile[]
   /** Body of the issue the PR closes (`Closes #N`); null/undefined = none or not read. */
   closedIssueBody?: string | null
+  /** Delivery epic only: its newest merged "Epic #N:" PR into main; undefined = not looked up or none found. */
+  epicPr?: { number: number, files: GhFile[], count: number }
   readError?: boolean
 }
 
@@ -443,20 +445,25 @@ const lineCount = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ?
  * Null when the file list was not read or is empty.
  */
 export function changesPayload(i: SyncItem): ChangesPayload | null {
-  if (!i.files?.length) return null
+  return changesFromFiles(i.files)
+}
+
+/** The same summary from any file list (#4501: also the delivery card's epic PR). */
+export function changesFromFiles(files?: GhFile[]): ChangesPayload | null {
+  if (!files?.length) return null
   let added = 0
   let removed = 0
-  for (const f of i.files) {
+  for (const f of files) {
     added += lineCount(f.additions)
     removed += lineCount(f.deletions)
   }
   const size = (f: GhFile) => lineCount(f.additions) + lineCount(f.deletions)
-  const top = i.files
+  const top = files
     .filter((f): f is GhFile & { filename: string } => typeof f.filename === 'string' && !!f.filename)
     .sort((a, b) => size(b) - size(a) || (a.filename < b.filename ? -1 : a.filename > b.filename ? 1 : 0))
     .slice(0, 3)
     .map(f => f.filename)
-  return { files: i.files.length, added, removed, top }
+  return { files: files.length, added, removed, top }
 }
 
 // ---------------------------------------------------------------- collectAsks
@@ -746,6 +753,8 @@ function deliveryAsk(i: SyncItem): Ask {
   const app = appFromLabels(i.labels)
   const payload: Record<string, unknown> = { steps, to: extractTargetPath(steps) }
   if (app) payload.app = app
+  const ch = i.epicPr ? changesFromFiles(i.epicPr.files) : null
+  if (ch && i.epicPr) payload.changes = { ...ch, pr: i.epicPr.number, prCount: i.epicPr.count }
   return { ...base(i), kind: 'delivery', sourceCommentId: askedAt, ask: 'Try it, then reply ok or not ok.', payload, askedAt }
 }
 
