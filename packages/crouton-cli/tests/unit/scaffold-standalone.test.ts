@@ -80,7 +80,10 @@ describe('scaffoldApp standalone mode (#3392)', () => {
         'db:generate': 'drizzle-kit generate',
         'db:migrate': 'npx wrangler d1 migrations apply my-app-db --local',
         'db:migrate:prod': 'npx wrangler d1 migrations apply my-app-db --remote',
-        'db:migrate:staging': 'npx wrangler d1 migrations apply my-app-staging-db --env staging --remote'
+        'db:migrate:staging': 'npx wrangler d1 migrations apply my-app-staging-db --env staging --remote',
+        // #4377 — the seed scripts `pnpm preview` calls
+        'db:seed': 'crouton-seed --db my-app-db',
+        'db:seed:staging': 'crouton-seed --db my-app-staging-db --remote'
       },
       dependencies: {
         '@fyit/crouton-core': 'workspace:*',
