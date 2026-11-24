@@ -117,6 +117,43 @@ describe('cart product (#4110 S3)', () => {
   })
 })
 
+describe('location switch and edit product (#4331)', () => {
+  // covers: T1
+  it('a location switch clears group, slots and amount, and picks the new location\'s only product', async () => {
+    const c = await cartAt('court')
+    c.formState.groupId = 'adults'
+    c.formState.slotIds = ['am']
+    c.formState.productId = 'P'
+    c.formState.quantity = 2
+    await settle()
+
+    c.formState.locationId = 'single'
+    await settle()
+    expect(c.formState.groupId).toBeNull()
+    expect(c.formState.slotIds).toEqual([])
+    expect(c.formState.quantity).toBe(1)
+    expect(c.formState.productId).toBe('P')
+  })
+
+  // covers: T2
+  it('an opened edit keeps its saved values; an unlisted product falls back to the location\'s product', async () => {
+    const { applyBookingToForm } = await import('../app/utils/booking-form')
+    const c = await cartAt('single')
+    // replay the card's mount order: location (unchanged), slots, group, then the booking's quantity + product
+    c.formState.locationId = 'single'
+    c.formState.slotIds = ['am']
+    c.formState.groupId = 'adults'
+    applyBookingToForm(c.formState, { id: 'b1', location: 'single', slot: ['am'], group: 'adults', quantity: 2, product: 'loc-single' })
+    await settle()
+
+    expect(c.formState.slotIds).toEqual(['am'])
+    expect(c.formState.groupId).toBe('adults')
+    expect(c.formState.quantity).toBe(2)
+    expect(c.formState.productId).toBe('P')
+    expect(c.getSlotRemaining('am')).toBe(3)
+  })
+})
+
 describe('cart counts per product (#4110 S4)', () => {
   // covers: T2
   it('one P am booking at stock 3 leaves 2 in the morning; the amount is capped by the lowest slot', async () => {

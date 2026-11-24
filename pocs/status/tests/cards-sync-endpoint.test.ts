@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createError } from 'h3'
 import { createStorage } from 'unstorage'
 import memory from 'unstorage/drivers/memory'
-import { BOT, EPIC_BRANCH, MAIN_SHA, OLD, fetchSpy, gh, resetGh } from './helpers/gh-routes'
+import { BOT, EPIC_BRANCH, MAIN_SHA, OLD, boardMock, fetchSpy, gh, resetGh } from './helpers/gh-routes'
 
 // Drives the REAL handler (server/api/cards/sync.post.ts) with the REAL owner check and GitHub
 // reader (server/utils/github.ts + github-core.ts) — only Nitro globals, global fetch, the card
@@ -24,6 +24,8 @@ vi.mock('../layers/inbox/collections/cards/server/database/queries', () => ({
 vi.mock('@fyit/crouton-auth/server/utils/team', () => ({
   resolveTeamAndCheckMembership: vi.fn(async () => ({ team: { id: 'team1' }, user: { id: 'u1' }, membership: { role: 'owner' } }))
 }))
+// The Pipeline board's rows (#4349): an in-memory table (no D1 in vitest).
+vi.mock('../layers/pipeline/collections/items/server/database/queries', () => boardMock())
 
 /** Promises the handler handed to event.waitUntil (work that must outlive the request). */
 let waited: Promise<unknown>[]

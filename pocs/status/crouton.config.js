@@ -8,7 +8,9 @@ export default {
   //   { name: 'products', fieldsFile: './schemas/products.json' }
   // ],
   collections: [
-    { name: 'cards', fieldsFile: './schemas/cards.json' }
+    { name: 'cards', fieldsFile: './schemas/cards.json' },
+    // sortable adds the `order` column the board's kanban sorts by (a system field, not in the schema)
+    { name: 'items', fieldsFile: './schemas/items.json', sortable: true }
   ],
 
   // Target layers (add after creating collections)
@@ -17,7 +19,8 @@ export default {
   //   { layer: 'shop', collections: ['products'] }
   // ],
   targets: [
-    { layer: 'inbox', collections: ['cards'] }
+    { layer: 'inbox', collections: ['cards'] },
+    { layer: 'pipeline', collections: ['items'] }
   ],
 
   dialect: 'sqlite'
