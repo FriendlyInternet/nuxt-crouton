@@ -4,7 +4,6 @@
     "expand": "Agrandir en plein écran",
     "close": "Fermer",
     "dragToReorder": "Glisser pour réorganiser",
-    "removeItem": "Supprimer l'élément",
     "metaSettings": "Paramètres méta",
     "sendingUpdate": "Envoi de la mise à jour...",
     "maxDepthTitle": "Profondeur maximale atteinte",
@@ -162,7 +161,11 @@
   "repeater": {
     "componentMissing": "Impossible d'afficher cet élément : le composant « {name} » est introuvable.",
     "emptyState": "Aucun élément pour le moment. Cliquez sur \"{label}\" pour commencer.",
-    "addItem": "Ajouter un élément"
+    "addItem": "Ajouter un élément",
+    "moveUp": "Monter",
+    "moveDown": "Descendre",
+    "actions": "Actions pour l'élément {position} sur {total}",
+    "moved": "Déplacé en position {position} sur {total}"
   },
   "validation": {
     "fixErrors": "Veuillez corriger {count} erreur de validation | Veuillez corriger {count} erreurs de validation",
