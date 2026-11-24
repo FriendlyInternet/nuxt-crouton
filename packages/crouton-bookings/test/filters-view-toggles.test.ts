@@ -28,11 +28,24 @@ describe('viewToggles', () => {
     expect(filters).toMatch(/viewToggles:\s*true/)
   })
 
-  it('Week/Month, Today, fold button and Map are all guarded', () => {
+  it('Week/Month, Today and fold button are all guarded', () => {
     expect(filters).toMatch(/v-if="viewToggles && showCalendar"/g)
     expect(filters.match(/v-if="viewToggles && showCalendar"/g)?.length).toBe(2)
     expect(filters).toMatch(/v-if="viewToggles"/)
-    expect(filters).toMatch(/props\.viewToggles && props\.hasLocationsWithCoordinates/)
+  })
+
+  // covers: T4 — #4492: Map and Show cancelled moved to the list; the cog only on composed pages
+  it('no Map item; the cog (with Show cancelled) only renders when !viewToggles', () => {
+    expect(filters).not.toMatch(/bookings\.filters\.map/)
+    expect(filters).not.toMatch(/hasLocationsWithCoordinates/)
+    expect(filters).not.toMatch(/update:showMap/)
+    expect(filters).toMatch(/<UDropdownMenu v-if="!viewToggles"/)
+    expect(filters.match(/<UDropdownMenu/g)?.length).toBe(1)
+    expect(filters).toMatch(/showCancelled\?:\s*boolean/)
+    expect(filters).toMatch(/showCancelled:\s*false/)
+    const usage = panel.slice(panel.indexOf('<CroutonBookingsPanelFilters'))
+    const tag = usage.slice(0, usage.indexOf('>'))
+    expect(tag).not.toMatch(/show-cancelled|show-map|has-locations-with-coordinates/)
   })
 
   // #4471 — location cards and their cog toggle are gone; composed pages get the tab row

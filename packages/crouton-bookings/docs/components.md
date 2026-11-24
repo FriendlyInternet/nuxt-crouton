@@ -104,6 +104,10 @@ File: `app/components/List.vue`
 | `activeLocationFilter` | `string[]` | `undefined` | no | Active location filter - when set, only these locations are selectable in create form |
 | `isDayFullyBooked` | `((date: Date) => boolean)` | `undefined` | no | Whether every location is fully booked on a date (disables the New booking row) |
 | `scrollRoot` | `HTMLElement \| null` | `null` | no | Scroll container the list lives in (IntersectionObserver root) |
+| `listToggles` | `boolean` | `false` | no | Show the Show cancelled / Map toggles on the first month label (Panel only) |
+| `showCancelled` | `boolean` | `false` | no | Whether cancelled bookings are shown (for the Show cancelled toggle) |
+| `showMap` | `boolean` | `false` | no | Whether the map is shown (for the Map toggle) |
+| `canShowMap` | `boolean` | `false` | no | Whether a location has coordinates (shows the Map toggle) |
 
 | Event | Payload |
 | --- | --- |
@@ -114,6 +118,8 @@ File: `app/components/List.vue`
 | `updated` | `[]` |
 | `emailSent` | `[]` |
 | `newBooking` | `[date: Date]` |
+| `update:showCancelled` | `[value: boolean]` |
+| `update:showMap` | `[value: boolean]` |
 
 ## CroutonBookingsLocationTabs
 

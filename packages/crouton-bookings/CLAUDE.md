@@ -44,12 +44,13 @@ CroutonBooking
 │   ├── Locations.vue    - CroutonBookingsLayoutLocations (`bookings-locations`) — selectable location list → shared location filter (one location at a time, #4471) (a robust list, NOT the geo/maplibre PanelMap — see #924 gap notes)
 │   └── Filters.vue      - CroutonBookingsLayoutFilters (`bookings-filters`) — status/location/cancelled → shared store (Panel-only view controls hidden via `PanelFilters` `view-toggles=false`, #2563)
 ├── Calendar.vue        - Calendar date picker
-├── List.vue            - Bookings list
+├── List.vue            - Bookings list; `listToggles` (Panel only) puts Show cancelled / Map (Map only with coordinates) on the first month label, or atop a loading/error/empty list (#4492)
+├── ListToggles.vue     - the Show cancelled / Map text toggles List.vue renders (internal)
 ├── BookingCard.vue     - Individual booking card
 ├── BookingCreateCard.vue - Booking creation form
 ├── LocationTabs.vue   - CroutonBookingsLocationTabs: one sideways-scrolling location tab row (optional "All", admin "+"; hidden with one location), shared by the panel and the booking form (#4471)
 ├── DateBadge.vue       - Date display badge
-├── PanelFilters.vue    - Filter controls; `viewToggles` (default on) shows the Panel-only view controls (Week/Month, Today, fold, map); with `viewToggles` off it renders the location tab row itself (composed pages); a `#toolbar-end` slot renders after the fold button (the admin full-screen close, #3046)
+├── PanelFilters.vue    - Filter controls; `viewToggles` (default on) shows the Panel-only view controls (Week/Month, Today, fold); with `viewToggles` off it renders the cog (View · Show cancelled) and the location tab row itself (composed pages); in the Panel, Show cancelled and Map live on the list (#4492); a `#toolbar-end` slot renders after the fold button (the admin full-screen close, #3046)
 └── PanelMap.vue        - Map display
 ```
 
