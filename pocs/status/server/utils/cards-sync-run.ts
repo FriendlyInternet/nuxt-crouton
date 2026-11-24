@@ -254,8 +254,8 @@ function planBoard(collected: Collected, asks: Ask[], existing: BoardItem[]): Bo
   })
 }
 
-/** Every write of `plan`, each tried on its own; returns the failures (what, error). */
-async function applyBoard(plan: BoardPlan, teamId: string, userId: string): Promise<unknown[]> {
+/** Every write of `plan`, each tried on its own; returns the failures (what, error). Shared with the webhook writer (board-webhook.ts). */
+export async function applyBoard(plan: BoardPlan, teamId: string, userId: string): Promise<unknown[]> {
   const writes: Array<() => Promise<unknown>> = [
     ...plan.create.map(c => () => createPipelineItem({ ...c, teamId, owner: userId, createdBy: userId, updatedBy: userId } as unknown as Parameters<typeof createPipelineItem>[0])),
     ...plan.update.map(u => () => updatePipelineItem(u.id, teamId, userId, u.patch as unknown as Parameters<typeof updatePipelineItem>[3], { role: 'owner' })),
