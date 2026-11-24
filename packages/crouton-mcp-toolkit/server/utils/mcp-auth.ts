@@ -25,7 +25,7 @@ export async function requireMcpAuth(event: H3Event, teamId: string) {
       throw createError({ status: 403, statusText: 'Token is not an MCP access token' })
     }
 
-    // A pages token (`mcp-pages`, #3982) only drives /mcp/pages — never the generic tools
+    // Only general `mcp-toolkit` tokens drive the generic tools (the page tools take sign-in, #4097)
     if (result.resourceId !== 'mcp-toolkit') {
       throw createError({ status: 403, statusText: 'Token is not a general MCP token' })
     }

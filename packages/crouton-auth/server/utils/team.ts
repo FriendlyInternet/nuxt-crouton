@@ -490,6 +490,45 @@ export async function getOrganizationMembershipDirect(
   return { role: row.role as 'owner' | 'admin' | 'member' }
 }
 
+/**
+ * The single page-edit rule (#4097): may this user edit this team's pages?
+ * Today: team `admin` or `owner`. No session needed (MCP sign-in tokens have none).
+ *
+ * TODO(#4103): swap to `can(teamId, userId, 'pages:edit')` once site roles land.
+ */
+export async function canEditPages(teamId: string, userId: string): Promise<boolean> {
+  const membership = await getOrganizationMembershipDirect(teamId, userId)
+  return membership?.role === 'admin' || membership?.role === 'owner'
+}
+
+/**
+ * The teams a user belongs to, read straight from the database (#4097) — for
+ * callers with no session (an MCP sign-in token). `{ id, slug, name, role }` per team.
+ */
+export async function getUserTeamsDirect(
+  userId: string
+): Promise<Array<{ id: string, slug: string, name: string, role: 'owner' | 'admin' | 'member' }>> {
+  const db = useDB()
+
+  const rows = await db
+    .select({
+      id: organization.id,
+      slug: organization.slug,
+      name: organization.name,
+      role: memberTable.role
+    })
+    .from(memberTable)
+    .innerJoin(organization, eq(memberTable.organizationId, organization.id))
+    .where(eq(memberTable.userId, userId))
+
+  return (rows as Array<{ id: string, slug: string, name: string, role: string }>).map(row => ({
+    id: row.id,
+    slug: row.slug,
+    name: row.name,
+    role: row.role as 'owner' | 'admin' | 'member'
+  }))
+}
+
 // ============================================================================
 // Helper Functions
 // ============================================================================

@@ -4,7 +4,9 @@
  *
  * The handler lives in `server/mcp-pages/` — outside the `server/mcp/` folder the
  * MCP toolkit scans in every layer — so it loads ONLY when the app sets
- * `croutonMcpToolkit.pages: true`, and only when the packages it imports are there.
+ * `croutonMcpToolkit.pages: true` AND `croutonAuth.mcpOAuth: true` (Claude signs
+ * in, #4097), and only when the packages it imports are there. It is then the
+ * default handler, served at `/mcp`.
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -41,23 +43,39 @@ export interface ToolkitSetupPlan {
   enabled: boolean
   /** Serve the generic tools at /mcp (false → the 404 gate is registered). */
   genericTools: boolean
-  /** Serve the pages handler at /mcp/pages. */
+  /** `pages: true` passed the package check AND sign-in is on. */
   pages: boolean
+  /** Serve the page tools at `/mcp` (the default handler); the gate lets only `/mcp` through. */
+  pagesAtRoot: boolean
+  /** Build-time warnings module.ts prints (dev and prod). */
+  warnings: string[]
 }
+
+export const PAGES_NEED_SIGN_IN_WARNING = 'croutonMcpToolkit.pages: page tools need croutonAuth.mcpOAuth (sign-in); none served'
+const SIGN_IN_WITH_GENERIC_TOOLS_ERROR = 'croutonAuth.mcpOAuth cannot be combined with croutonMcpToolkit.genericTools: the generic collection tools still use member tokens — set genericTools: false'
 
 /**
  * What module.ts should set up. `enabled` defaults to dev-only; the pages check
  * (and the layer scan behind `layerPackages`) only runs when the toolkit is on.
+ * `mcpOAuth` is `croutonAuth.mcpOAuth`: the page tools are served only with it
+ * (else a warning, no page tools), and it cannot be combined with the generic
+ * tools (they would share `/mcp` but still take member tokens — build error).
  */
 export function resolveToolkitSetup(
   config: { enabled?: boolean, genericTools?: boolean, pages?: boolean },
   dev: boolean,
-  layerPackages: () => string[]
+  layerPackages: () => string[],
+  mcpOAuth = false
 ): ToolkitSetupPlan {
   const enabled = config.enabled ?? dev
-  if (!enabled) return { enabled: false, genericTools: false, pages: false }
-  const { enabled: pages } = resolvePagesHandler({ pages: config.pages, layerPackages: layerPackages() })
-  return { enabled: true, genericTools: config.genericTools !== false, pages }
+  if (!enabled) return { enabled: false, genericTools: false, pages: false, pagesAtRoot: false, warnings: [] }
+  const genericTools = config.genericTools !== false
+  if (mcpOAuth && genericTools) throw new Error(SIGN_IN_WITH_GENERIC_TOOLS_ERROR)
+  const { enabled: pagesOk } = resolvePagesHandler({ pages: config.pages, layerPackages: layerPackages() })
+  if (pagesOk && !mcpOAuth) {
+    return { enabled: true, genericTools, pages: false, pagesAtRoot: false, warnings: [PAGES_NEED_SIGN_IN_WARNING] }
+  }
+  return { enabled: true, genericTools, pages: pagesOk, pagesAtRoot: pagesOk && mcpOAuth, warnings: [] }
 }
 
 /** The `name` of each layer root's package.json; roots without a readable one are skipped. */
