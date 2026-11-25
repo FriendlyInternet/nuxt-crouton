@@ -12,10 +12,10 @@ This is NOT crouton-core's `CroutonCalendar` date picker — do not touch that.
 |------|---------|
 | `nuxt.config.ts` | Layer config; components registered with prefix `CroutonCalendar` at `priority: -1` (stubs, overridable) |
 | `app/app.config.ts` | Registers `calendar` in `croutonApps` |
-| `app/components/Week.vue` | `CroutonCalendarWeek` — swipeable week strip; slots `#day` (indicators) and `#day-action` (per-day hover action); emits `select`; panels keyed by week start (#3917) |
-| `app/components/Month.vue` | `CroutonCalendarMonth` — swipeable month grid (3-panel `UCalendar` track); slot `#day` (`neighbour` flag); emits `select`; panels keyed by the month they show (a step builds one new panel, #3917) |
+| `app/components/Week.vue` | `CroutonCalendarWeek` — swipeable week strip; slots `#day` (indicators), `#day-action` (per-day hover action), `#header-start` / `#header-end` (left / right end of the label row); emits `select` and `today` (label tapped, #4516); panels keyed by week start (#3917) |
+| `app/components/Month.vue` | `CroutonCalendarMonth` — swipeable month grid (3-panel `UCalendar` track); slots `#day` (`neighbour` flag), `#header-start` / `#header-end` (left / right end of the label row); emits `select` and `today` (label tapped, #4516); panels keyed by the month they show (a step builds one new panel, #3917) |
 | `app/composables/useSlideSwipe.ts` | Swipe/slide behaviour |
-| `app/composables/useHoldHeight.ts` | Holds the swipe strip's height for good (min-height, measured on mount and on width change, grows with content) — stops the page jumping on a swipe (#3924, #3813) |
+| `app/composables/useHoldHeight.ts` | Holds the swipe strip's height for good (min-height, measured on mount and on width change, grows with content) — stops the page jumping on a swipe (#3924, #3813). Month/Week take a `holdKey` prop: when it changes the height is measured again from scratch (bookings passes the visible location count, so a filtered calendar shrinks, #4516) |
 | `test/panels.test.ts` | Panel-identity tests (happy-dom, real Month/Week) |
 | `test/hold-height.test.ts` | Height-hold tests (happy-dom, real Month/Week, stubbed layout + ResizeObserver) |
 | `i18n/locales/*.json` | `calendar.week.*` / `calendar.month.*` keys (en/fr/nl) |

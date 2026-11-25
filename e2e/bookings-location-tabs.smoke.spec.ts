@@ -1,7 +1,7 @@
 /**
  * Bookings panel location tabs (#4471).
  *
- * The panel's locations are one sideways-scrolling row of tabs under the calendar:
+ * The panel's locations are one sideways-scrolling row of tabs at the top, above the calendar (#4516):
  * "All" first and active, then one tab per location. Tapping a location filters
  * the list to it (one at a time); "All" brings everything back.
  *

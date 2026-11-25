@@ -13,13 +13,24 @@ import { CalendarDate, getLocalTimeZone, today } from '@internationalized/date'
  */
 const emit = defineEmits<{
   select: [value: Date]
+  /** The label was tapped (it shows today); the consumer can also select it (#4516) */
+  today: []
+}>()
+
+const props = defineProps<{
+  /** Change it when the cells' height really changes (e.g. a filter hides indicator rows) so the held strip height is measured again (#4516) */
+  holdKey?: string | number
 }>()
 
 // The month being shown (any date in it)
 const date = defineModel<Date>('date', { required: true })
 
 defineSlots<{
-  day(props: { day: DateValue, jsDate: Date, neighbour: boolean }): any
+  'day'(props: { day: DateValue, jsDate: Date, neighbour: boolean }): any
+  /** Left end of the label row (e.g. a month ↔ week toggle) */
+  'header-start'?(): any
+  /** Right end of the label row (e.g. a close button) */
+  'header-end'?(): any
 }>()
 
 const { t } = useT()
@@ -29,8 +40,9 @@ const now = today(getLocalTimeZone())
 const selected = ref<DateValue | undefined>(new CalendarDate(now.year, now.month, 1))
 const placeholder = computed<DateValue>(() => new CalendarDate(date.value.getFullYear(), date.value.getMonth() + 1, 1))
 const swipeEl = ref<HTMLElement | null>(null)
-// Keep the strip's height for good, so the page doesn't jump on a swipe (#3924)
-useHoldHeight(swipeEl)
+// Keep the strip's height for good, so the page doesn't jump on a swipe (#3924);
+// measured again when holdKey changes (#4516)
+useHoldHeight(swipeEl, () => props.holdKey)
 
 const isSameMonth = (a: { year: number, month: number }, b: { year: number, month: number }) =>
   a.year === b.year && a.month === b.month
@@ -79,6 +91,11 @@ function goToToday() {
   date.value = new Date()
 }
 
+function onLabelClick() {
+  goToToday()
+  emit('today')
+}
+
 // Day activation comes through UCalendar's own cellTrigger (a real <button>,
 // so mouse AND keyboard land here) — never through handlers on the #day slot
 // content. Param typed to UCalendar's emit union; this calendar is single-date.
@@ -96,32 +113,41 @@ function onActivate(value: any) {
 
 <template>
   <div class="flex flex-col w-full touch-pan-y">
-    <div class="flex items-center justify-center gap-1">
-      <UButton
-        icon="i-lucide-chevrons-left"
-        variant="ghost"
-        color="neutral"
-        size="sm"
-        :aria-label="t('calendar.month.previousMonth')"
-        @click="slide('prev')"
-      />
-      <UButton
-        variant="ghost"
-        color="neutral"
-        class="font-medium"
-        :aria-label="t('calendar.month.today')"
-        @click="goToToday"
-      >
-        {{ monthLabel }}
-      </UButton>
-      <UButton
-        icon="i-lucide-chevrons-right"
-        variant="ghost"
-        color="neutral"
-        size="sm"
-        :aria-label="t('calendar.month.nextMonth')"
-        @click="slide('next')"
-      />
+    <!-- Label row; #header-start / #header-end sit at the edges, the label stays centred (#4516) -->
+    <div class="grid grid-cols-[1fr_auto_1fr] items-center">
+      <div class="flex justify-start">
+        <slot name="header-start" />
+      </div>
+      <div class="flex items-center gap-1">
+        <UButton
+          icon="i-lucide-chevrons-left"
+          variant="ghost"
+          color="neutral"
+          size="sm"
+          :aria-label="t('calendar.month.previousMonth')"
+          @click="slide('prev')"
+        />
+        <UButton
+          variant="ghost"
+          color="neutral"
+          class="font-medium"
+          :aria-label="t('calendar.month.today')"
+          @click="onLabelClick"
+        >
+          {{ monthLabel }}
+        </UButton>
+        <UButton
+          icon="i-lucide-chevrons-right"
+          variant="ghost"
+          color="neutral"
+          size="sm"
+          :aria-label="t('calendar.month.nextMonth')"
+          @click="slide('next')"
+        />
+      </div>
+      <div class="flex justify-end">
+        <slot name="header-end" />
+      </div>
     </div>
     <div class="grid grid-cols-7 px-1 pt-1" aria-hidden="true">
       <span v-for="wd in weekdays" :key="wd" class="text-center text-xs text-muted">{{ wd }}</span>

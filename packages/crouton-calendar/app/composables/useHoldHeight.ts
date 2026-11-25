@@ -1,5 +1,5 @@
-import { onBeforeUnmount, onMounted } from 'vue'
-import type { Ref } from 'vue'
+import { onBeforeUnmount, onMounted, watch } from 'vue'
+import type { Ref, WatchSource } from 'vue'
 
 /**
  * Hold an element's height for good — never released (#3924 / #3813).
@@ -16,10 +16,13 @@ import type { Ref } from 'vue'
  * - Never stops the strip growing: `min-height` lets content get taller, and
  *   when it does the held value goes up with it.
  * - A hidden strip (height 0) is never given a min-height.
+ * - `resetOn` (optional): when it changes, the hold is released and the height
+ *   read again from scratch after the next render — for content whose height
+ *   really changes, e.g. fewer indicator rows once a filter hides some (#4516).
  *
  * The style is written straight to the element, not through a bound `:style`.
  */
-export function useHoldHeight(el: Ref<HTMLElement | null>): void {
+export function useHoldHeight(el: Ref<HTMLElement | null>, resetOn?: WatchSource<unknown>): void {
   let held = 0
   let width = -1
   let observer: ResizeObserver | null = null
@@ -52,6 +55,13 @@ export function useHoldHeight(el: Ref<HTMLElement | null>): void {
       observer.observe(el.value)
     }
   })
+
+  if (resetOn) {
+    watch(resetOn, () => {
+      width = -1
+      measure()
+    }, { flush: 'post' })
+  }
 
   onBeforeUnmount(() => {
     observer?.disconnect()

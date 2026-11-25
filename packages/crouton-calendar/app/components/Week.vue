@@ -14,6 +14,8 @@ interface Props {
   activeDate?: Date | null
   /** Function to check if a date is disabled by schedule rules */
   isDateDisabled?: ((date: Date) => boolean) | null
+  /** Change it when the cells' height really changes (e.g. a filter hides indicator rows) so the held strip height is measured again (#4516) */
+  holdKey?: string | number
 }
 
 const { t } = useT()
@@ -26,10 +28,13 @@ const props = withDefaults(defineProps<Props>(), {
   selectedDate: null,
   activeDate: null,
   isDateDisabled: null,
+  holdKey: undefined,
 })
 
 const emit = defineEmits<{
   'select': [value: Date | null]
+  /** The label was tapped (it shows today); the consumer can also select it (#4516) */
+  'today': []
 }>()
 
 const { locale } = useI18n()
@@ -102,8 +107,9 @@ const nextWeek = () => showWeek(referenceDate.value.add({ weeks: 1 }))
 // the next/previous week or spring back. Vertical drags pass through to the
 // page (touch-action: pan-y) (#2485, #2515)
 const swipeEl = ref<HTMLElement | null>(null)
-// Keep the strip's height for good, so the page doesn't jump on a swipe (#3924)
-useHoldHeight(swipeEl)
+// Keep the strip's height for good, so the page doesn't jump on a swipe (#3924);
+// measured again when holdKey changes (#4516)
+useHoldHeight(swipeEl, () => props.holdKey)
 const trackEl = ref<HTMLElement | null>(null)
 const { slide } = useSlideSwipe(swipeEl, {
   track: trackEl,
@@ -113,6 +119,11 @@ const { slide } = useSlideSwipe(swipeEl, {
 
 function goToToday() {
   date.value = new Date()
+}
+
+function onLabelClick() {
+  goToToday()
+  emit('today')
 }
 
 function isToday(day: { date: DateValue }): boolean {
@@ -169,33 +180,41 @@ const sizeClasses = computed(() => {
 
 <template>
   <div class="flex flex-col touch-pan-y">
-    <!-- Header: Nav + Month Label (calendar style) -->
-    <div class="flex items-center justify-center gap-1">
-      <UButton
-        icon="i-lucide-chevrons-left"
-        variant="ghost"
-        color="neutral"
-        size="sm"
-        :aria-label="t('calendar.week.previousWeek')"
-        @click="slide('prev')"
-      />
-      <UButton
-        variant="ghost"
-        color="neutral"
-        :class="['font-medium', sizeClasses.header]"
-        :title="t('calendar.week.today')"
-        @click="goToToday"
-      >
-        {{ weekLabel }}
-      </UButton>
-      <UButton
-        icon="i-lucide-chevrons-right"
-        variant="ghost"
-        color="neutral"
-        size="sm"
-        :aria-label="t('calendar.week.nextWeek')"
-        @click="slide('next')"
-      />
+    <!-- Header: Nav + Month Label (calendar style); #header-start / #header-end sit at the edges (#4516) -->
+    <div class="grid grid-cols-[1fr_auto_1fr] items-center">
+      <div class="flex justify-start">
+        <slot name="header-start" />
+      </div>
+      <div class="flex items-center gap-1">
+        <UButton
+          icon="i-lucide-chevrons-left"
+          variant="ghost"
+          color="neutral"
+          size="sm"
+          :aria-label="t('calendar.week.previousWeek')"
+          @click="slide('prev')"
+        />
+        <UButton
+          variant="ghost"
+          color="neutral"
+          :class="['font-medium', sizeClasses.header]"
+          :title="t('calendar.week.today')"
+          @click="onLabelClick"
+        >
+          {{ weekLabel }}
+        </UButton>
+        <UButton
+          icon="i-lucide-chevrons-right"
+          variant="ghost"
+          color="neutral"
+          size="sm"
+          :aria-label="t('calendar.week.nextWeek')"
+          @click="slide('next')"
+        />
+      </div>
+      <div class="flex justify-end">
+        <slot name="header-end" />
+      </div>
     </div>
 
     <!-- Days Grid -->

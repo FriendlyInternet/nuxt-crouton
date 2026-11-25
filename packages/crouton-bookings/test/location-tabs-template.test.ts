@@ -79,11 +79,17 @@ describe('CroutonBookingsLocationTabs (#4471)', () => {
   })
 
   // covers: T4
-  it('(d) Panel renders it under the calendar, above the scroll area, with "All"', () => {
+  it('(d) Panel renders it as the first row of the fixed block, above the calendar, with "All" (#4516)', () => {
     const src = panel.template
     const at = src.indexOf('<CroutonBookingsLocationTabs')
-    expect(at).toBeGreaterThan(src.indexOf('<CroutonBookingsCalendar'))
+    expect(at).toBeGreaterThan(0)
+    expect(at).toBeLessThan(src.indexOf('<CroutonBookingsCalendar'))
     expect(at).toBeLessThan(src.indexOf('Scroll area'))
+    // its wrapper is the fixed block's first child
+    const { anc } = find(panel.ast, 'CroutonBookingsLocationTabs')[0]!
+    const block = anc[anc.length - 2]
+    expect(String(block.props.find((p: Node) => p.name === 'class')?.value?.content)).toMatch(/^shrink-0 .*border-b/)
+    expect(block.children.filter((c: Node) => c.type === 1)[0]).toBe(anc[anc.length - 1])
     const row = find(panel.ast, 'CroutonBookingsLocationTabs')
     expect(row).toHaveLength(1)
     expect(hasProp(row[0]!.node, 'show-all')).toBe(true)
@@ -107,6 +113,19 @@ describe('CroutonBookingsLocationTabs (#4471)', () => {
     expect(row).toHaveLength(1)
     expect(hasProp(row[0]!.node, 'show-all')).toBe(false)
     expect(hasProp(row[0]!.node, 'can-add')).toBe(false)
+  })
+
+  // covers: T3 — #4516 option A: one full-width line under the row, the green underline sits on it
+  it('(h) the tab row has no own line; the Panel block\'s border-b is the only one', () => {
+    expect(tabs.source).toContain(`:ui="{ list: SCROLL_ROW_X + ' border-b-0'`)
+    expect(String(directive(find(tabs.ast, 'UTabs')[0]!.node, 'bind', 'ui'))).toContain(`indicator: 'bottom-0'`)
+    const { anc } = find(panel.ast, 'CroutonBookingsLocationTabs')[0]!
+    // the wrapper's own start tag (class + :class) carries no pb-2
+    const wrapperSource: string = anc[anc.length - 1].loc.source
+    expect(wrapperSource.slice(0, wrapperSource.indexOf('>'))).not.toMatch(/pb-2/)
+    const classes = String(panel.template.match(/class="[^"]*"/g)).split(/\s|,/)
+    expect(classes.filter(c => c === 'border-b')).toHaveLength(1)
+    expect(panel.template).toMatch(/class="shrink-0 [^"]*border-b border-default/)
   })
 
   // covers: T4
