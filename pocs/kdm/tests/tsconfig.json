@@ -1,0 +1,13 @@
+{
+  // Plain-node tests: don't extend ../.nuxt/tsconfig.json, which only exists after `nuxt prepare`
+  // (CI installs with --ignore-scripts, so it is missing there and vite can't transform the tests).
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["./**/*.ts"]
+}

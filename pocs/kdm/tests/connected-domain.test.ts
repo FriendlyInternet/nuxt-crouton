@@ -2,6 +2,7 @@
 // keeps kdm.pmcp.dev as the app's own address. Reads the real wrangler.jsonc and the
 // evaluated nuxt.config.ts (the resolver reads runtimeConfig.public.croutonPages).
 import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
 
@@ -13,7 +14,8 @@ const jsonc = (p: string) => JSON.parse(readFileSync(resolve(app, p), 'utf8')
 let config: any
 beforeAll(async () => {
   ;(globalThis as any).defineNuxtConfig = (c: unknown) => c
-  config = (await import('../nuxt.config')).default
+  // Node loads nuxt.config.ts itself, so vite never needs ../.nuxt/tsconfig.json (absent before `nuxt prepare`).
+  config = createRequire(import.meta.url)('../nuxt.config.ts').default
 })
 
 describe('kdm — connected domain (#4559)', () => {

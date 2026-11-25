@@ -2,6 +2,7 @@
 // tools, the way velo does. Reads the real nuxt.config.ts (evaluated, not grepped),
 // deploy.config.json, wrangler.jsonc, package.json and the committed migrations.
 import { readFileSync, readdirSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
 
@@ -14,7 +15,8 @@ const jsonc = (p: string) => JSON.parse(read(p).split('\n').filter(l => !/^\s*\/
 let config: any
 beforeAll(async () => {
   ;(globalThis as any).defineNuxtConfig = (c: unknown) => c
-  config = (await import('../nuxt.config')).default
+  // Node loads nuxt.config.ts itself, so vite never needs ../.nuxt/tsconfig.json (absent before `nuxt prepare`).
+  config = createRequire(import.meta.url)('../nuxt.config.ts').default
 })
 
 describe('kdm — Claude page tools (#4493)', () => {
