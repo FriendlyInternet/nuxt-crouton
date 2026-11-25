@@ -8,12 +8,13 @@
 //
 // `--key` is the review login's key (`pr<N>` on a PR preview, `main` on staging); the password
 // is derived the same way deploy-app.yml / scripts/staging-get.mjs seed it. Case 6 fails
-// without a login. Needs the seeded `welcome` page ("Welkom") in team kdm.
+// without a login. Team kdm has no pages until step 4 (the demo page is kept out, #4559).
 // Screenshots land in screenshots/4526-case<N>.png (repo root).
 //
 // Case 6's last part (the demo page opens in the editor WITH its text) is a known package gap:
 // no editor node is registered for `richTextBlock`, so the body opens empty. Owner's call
 // (25 Nov): report it as NOT PASSED, waits on #4436 — never as a pass, and not as an exit failure.
+// Until step 4 the team has no pages, so the editor-body part prints NOT RUN under the same rule.
 
 import { createHash } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
@@ -57,43 +58,32 @@ async function activeTeamSlug(jar) {
 
 const mark = ok => (ok ? 'PASS' : 'FAIL')
 
-/** Open the Pages admin; true when it answers 200 and lists the demo page. */
+/**
+ * Open the Pages admin; true when it answers 200, the admin has rendered, and the demo page
+ * is NOT listed (#4559). Waits for the sidebar's page search and for its list to finish
+ * loading (the reorder toggle is disabled while pending) — both show even with an empty
+ * list — so "not listed" cannot pass on a blank page.
+ */
 async function openPagesAdmin(page) {
   const r = await page.goto(`${base}/admin/${TEAM}/workspace`, { waitUntil: 'load', timeout: NAV_TIMEOUT })
-  const listed = await page.getByText(TITLE, { exact: true }).first()
-    .waitFor({ state: 'visible', timeout: 30000 }).then(() => true, () => false)
-  const ok = r?.status() === 200 && listed
-  console.log(`${mark(ok)}  case 6 (Pages admin): HTTP ${r?.status()}, "${TITLE}" listed ${listed}`)
+  const rendered = await page.getByPlaceholder(/Search pages|Zoek pagina|Rechercher des pages/).first()
+    .waitFor({ state: 'visible', timeout: 30000 })
+    .then(() => page.locator('button[aria-pressed]:not([disabled])').first().waitFor({ state: 'visible', timeout: 30000 }))
+    .then(() => true, () => false)
+  const listed = (await page.getByText(TITLE, { exact: true }).count()) > 0
+  const ok = r?.status() === 200 && rendered && !listed
+  console.log(`${mark(ok)}  case 6 (Pages admin): HTTP ${r?.status()}, admin rendered ${rendered}, "${TITLE}" listed ${listed}`)
   return ok
 }
 
-/** Open the demo page in the editor and return the body editor's text. */
-async function readEditorBody(page) {
-  await page.getByText(TITLE, { exact: true }).first().click()
-  // The editor opens on Settings; the body editor is on the Content tab.
-  await page.getByText('Content', { exact: true }).first().click({ timeout: 30000 })
-  const editable = page.locator('[contenteditable="true"]').first()
-  await editable.waitFor({ state: 'visible', timeout: 30000 }).catch(() => {})
-  await page.waitForTimeout(1500)
-  return (await editable.innerText().catch(() => '')).trim()
-}
-
-/** Print the editor-body line: PASS, or the known gap (never a pass, owner 25 Nov). */
-function reportEditorBody(body) {
-  if (body.includes(TITLE)) { console.log('PASS  case 6 (editor body): PASS'); return true }
-  const seen = body ? `"${body.slice(0, 40)}"` : 'an empty body'
-  console.log(`case 6 (editor body): NOT PASSED — ${GAP} (editor shows ${seen})`)
-  return false
-}
-
-/** Case 6's result: the gap never fails the exit code and never counts as a pass. */
-function caseSixResult(teamOk, adminOk, bodyOk) {
+// Step 4 (Kasper's pages, filled through Claude) brings back the editor-body check.
+/** Case 6's result: the editor body is not run, so this is never a pass and never an exit failure. */
+function caseSixResult(teamOk, adminOk) {
   const ok = teamOk && adminOk
-  if (ok && bodyOk) return { ok, detail: 'team kdm + Pages admin + editor body ok' }
   return {
     ok,
     detail: `team ${teamOk ? 'ok' : 'FAIL'}, Pages admin ${adminOk ? 'ok' : 'FAIL'}`,
-    last: ok ? 'case 6: PARTLY PASSED — team kdm + Pages admin ok; editor body waits on #4436' : undefined
+    last: ok ? 'case 6: PARTLY PASSED — team kdm + Pages admin ok, no demo page; editor body not run (no pages until step 4), waits on #4436' : undefined
   }
 }
 
@@ -113,8 +103,8 @@ const cases = [
     await ctx.close()
     return { ok: path === '/' && hasPassword, detail: `ended on ${path}, password field ${hasPassword}` }
   }],
-  // covers: T6 — case 6: review login lands in team kdm, the Pages admin renders, the demo page opens in the editor
-  ['6', '6 signed in → team kdm, /admin/kdm/workspace shows the Pages admin, "Welkom" opens in the editor', async () => {
+  // covers: T4 (#4559) — case 6: review login lands in team kdm, the Pages admin renders without the demo page
+  ['6', '6 signed in → team kdm, /admin/kdm/workspace shows the Pages admin without the demo page', async () => {
     const { loggedIn, jar } = await signIn(base, email, password)
     if (!loggedIn) return { ok: false, detail: `sign-in as ${email || '(no login: pass --key or KDM_REVIEW_*)'} failed` }
     const slug = await activeTeamSlug(jar)
@@ -124,10 +114,10 @@ const cases = [
     await ctx.addCookies(jarToContextCookies(jar, base))
     const page = await ctx.newPage()
     const adminOk = await openPagesAdmin(page)
-    const body = adminOk ? await readEditorBody(page) : ''
+    console.log(`case 6 (editor body): NOT RUN — the team has no pages until step 4; still ${GAP}`)
     await shot(page, 6)
     await ctx.close()
-    return caseSixResult(teamOk, adminOk, reportEditorBody(body))
+    return caseSixResult(teamOk, adminOk)
   }],
   // covers: T8 (#4493) — signed in, the sign-in tables exist on this deploy: get-consents is 200, not a 500
   ['8', '8 signed in, GET /api/auth/oauth2/get-consents → 200', async () => {

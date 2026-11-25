@@ -68,22 +68,58 @@ TypeScript peers across the whole lockfile, so it was redone lockfile-only).
 |---|---|---|
 | Settings-and-CSS-only rule, team kdm twice, guarded postinstall, light mode, one locale, label | pass (13/13) | `node pocs/kdm/scripts/check-scaffold.mjs` |
 | Review team resolves to `kdm` | pass | `node scripts/review-team.mjs pocs/kdm` |
-| 1 `/kdm/welcome` → 200, one `h1`, no menu, no footer | pass (answered on the plain address, no `/en`) | `check-public-routes.mjs` |
+| 1 `/kdm/welcome` → 404 (demo page kept out of team kdm, #4559) | open — run on the PR preview | `check-public-routes.mjs` |
 | 2 `/kdm/does-not-exist-4526` → 404 | pass | `check-public-routes.mjs` |
 | 3 `/test1/welcome` → 404 | pass | `check-public-routes.mjs` |
 | 4 `/` → 200, crouton start page | pass | `check-public-routes.mjs` |
 | 5 signed out, `/auth/login` → ends on `/` with the sign-in form | pass | `check-browser-cases.mjs --case 5` (Playwright) |
 | 6 review login lands in team `kdm` | pass | `check-browser-cases.mjs --case 6` (Playwright) |
-| 6 `/admin/kdm/workspace` shows the Pages admin with "Welkom" | pass | `check-browser-cases.mjs --case 6` (Playwright) |
-| 6 the demo page opens in the editor **with its text** | **not passed — waits on [#4436](https://github.com/FriendlyInternet/nuxt-crouton/issues/4436)** | `check-browser-cases.mjs --case 6` (Playwright) |
+| 6 `/admin/kdm/workspace` shows the Pages admin without "Welkom" | open — run on the PR preview | `check-browser-cases.mjs --case 6` (Playwright) |
+| 6 the demo page opens in the editor **with its text** | **not run — no pages until step 4; still waits on [#4436](https://github.com/FriendlyInternet/nuxt-crouton/issues/4436)** | `check-browser-cases.mjs --case 6` (Playwright) |
+| 9a `kasper.pmcp.dev/` answers like `/kdm` on the app | open: run after the owner's verify | `check-public-routes.mjs <app> <domain>` |
+| 9b `kasper.pmcp.dev/does-not-exist-4559` answers like `/kdm/does-not-exist-4559` | open: run after the owner's verify | `check-public-routes.mjs <app> <domain>` |
+| 9c `kasper.pmcp.dev/en/does-not-exist-4559` answers like `/kdm/en/…` (redirect without `/kdm`) | open: run after the owner's verify | `check-public-routes.mjs <app> <domain>` |
+| 9d `kasper.pmcp.dev/admin/kdm` answers like the app's `/admin/kdm` | open: run after the owner's verify | `check-public-routes.mjs <app> <domain>` |
+| 9e `/auth/login` and `/api/auth/get-session` answer the same on both addresses | open: run after the owner's verify | `check-public-routes.mjs <app> <domain>` |
+| 9f `/account` answers the same on both addresses | open: run after the owner's verify | `check-public-routes.mjs <app> <domain>` |
 | Kasper's look matches https://kasperdemeulemeester.be/t-i-c/ | manual, open | a person, side by side |
 
 Run them again on the PR preview:
 
 ```
-node pocs/kdm/scripts/check-public-routes.mjs https://kdm.pmcp.dev
-REVIEW_SEED_SECRET=… node pocs/kdm/scripts/check-browser-cases.mjs https://kdm.pmcp.dev --key pr<N>
+node pocs/kdm/scripts/check-public-routes.mjs https://kdm-pr<N>.cloudflare-e53.workers.dev
+REVIEW_SEED_SECRET=… node pocs/kdm/scripts/check-browser-cases.mjs https://kdm-pr<N>.cloudflare-e53.workers.dev --key pr<N>
 ```
+
+On staging (the review login's key is `main` there), with the connected domain:
+
+```
+node pocs/kdm/scripts/check-public-routes.mjs https://kdm.pmcp.dev https://kasper.pmcp.dev
+REVIEW_SEED_SECRET=… node pocs/kdm/scripts/check-browser-cases.mjs https://kdm.pmcp.dev --key main
+```
+
+## Connected domain (#4559)
+
+- Site: https://kasper.pmcp.dev — team `kdm`'s connected domain (`/` is the team's site root).
+- Admin: https://kdm.pmcp.dev/admin/kdm — `kdm.pmcp.dev` is the app's own address
+  (`runtimeConfig.public.croutonPages.appDomains: ['kdm.pmcp.dev']`). Never list `pmcp.dev`
+  itself: the resolver matches subdomains, so that would switch kasper.pmcp.dev off.
+- Both are custom-domain routes on the staging worker (`wrangler.jsonc` `env.staging.routes`).
+
+Owner's steps, once staging is deployed:
+
+1. Open https://kdm.pmcp.dev/admin/kdm/team/domains and add `kasper.pmcp.dev`.
+2. In Cloudflare DNS for `pmcp.dev`, add the TXT record `_crouton-verification.kasper.pmcp.dev`
+   with the value the domains page shows.
+3. Click **Verify**. Then run `check-public-routes.mjs https://kdm.pmcp.dev https://kasper.pmcp.dev`
+   (cases 9a–9f).
+
+Why the demo page is gone: the staging seed still runs on every deploy (it keeps the `kdm`
+team and the review login on their fixed ids), but migration
+`server/db/migrations/sqlite/0001_kdm_no_demo_page.sql` deletes seed-owned pages and adds two
+triggers that drop any later seed write to `pages_pages` (`owner = 'seed'`). Pages made in the
+admin or through Claude carry a real owner and are not affected. Temporary: remove the
+migration once crouton-seed can skip a single provider.
 
 ## Connect Claude (#4493)
 

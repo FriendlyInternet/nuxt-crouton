@@ -66,8 +66,8 @@ export default defineNuxtConfig({
     public: {
       croutonPages: {
         hideLocaleInUrl: true,
-        // Domains this app itself runs on (not treated as a team's connected domain), e.g. ['myapp.com']
-        appDomains: []
+        // kdm.pmcp.dev is the app's own address; kasper.pmcp.dev is the kdm team's connected domain (#4559)
+        appDomains: ['kdm.pmcp.dev']
       }
     }
   },

@@ -31,7 +31,10 @@
   // via scripts/inject-wrangler-env.mjs before deploying.
   "env": {
     "staging": {
-      "routes": [{ "pattern": "kdm.pmcp.dev", "custom_domain": true }],
+      "routes": [
+        { "pattern": "kdm.pmcp.dev", "custom_domain": true },
+        { "pattern": "kasper.pmcp.dev", "custom_domain": true }
+      ],
       "d1_databases": [
         {
           "binding": "DB",
