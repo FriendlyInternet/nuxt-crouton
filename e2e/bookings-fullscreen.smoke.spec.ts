@@ -336,6 +336,40 @@ test.describe(FIXTURE === 'with-bookings' ? 'bookings full screen' : 'bookings f
     expect(Math.abs(probe.indBottom - probe.rowBottom)).toBeLessThanOrEqual(1)
   })
 
+  // #4516 (owner, 25 Nov, iPhone): one tap on a month day always selects it. The hover-only "+"
+  // strip at the bottom of a day must not catch the tap on a touch screen and open the form.
+  test.describe('touch screen', () => {
+    test.use({ hasTouch: true, viewport: { width: 390, height: 844 } })
+
+    test('phone (touch): tapping the lower part of an empty month day selects it, no form opens', async ({ page, baseURL }) => {
+      // with a location, the strip's tap would really open the form (not the "no locations" warning)
+      await ensureBookingLocations(page, baseURL, 1)
+      await openPage(page, baseURL)
+      const dialog = await openFullScreen(page)
+      await handleOf(dialog).tap()
+      await expect(dialog.getByRole('button', { name: 'Next month' })).toBeVisible({ timeout: FIRST_HIT })
+      await page.waitForTimeout(500)
+      // An empty, open, unselected day of this month, numbered 7–25 so the number is unique
+      // (days 1–6 and 26–31 can also show as the neighbour months' days)
+      const cell = (n: string) => dialog.locator('div.group[style*="min-height"]')
+        .filter({ has: page.locator('span', { hasText: new RegExp(`^${n}$`) }) })
+      const empty = dialog.locator('div.group[style*="min-height"]:not(.cursor-pointer):not(.opacity-40):not(.bg-elevated)')
+      const numbers = (await empty.locator('> span').allTextContents()).map(s => s.trim())
+      const n = numbers.find(s => Number(s) >= 7 && Number(s) <= 25)
+      expect(n, 'an empty day between the 7th and the 25th').toBeTruthy()
+      const day = cell(n!)
+      await expect(day).toHaveCount(1)
+      const box = (await day.boundingBox())!
+      // the strip sits on the bottom edge of the day: tap 3px above the bottom
+      await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height - 3)
+
+      await expect(day).toHaveClass(/bg-elevated/)
+      await expect(dialog.getByText('New booking for')).toHaveCount(0)
+      // the strip is not drawn at all on touch (no invisible hit area)
+      await expect(day.locator('button')).toBeHidden()
+    })
+  })
+
   test('desktop: no full-screen button, inline week navigation still works', async ({ page, baseURL }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await openPage(page, baseURL)

@@ -522,12 +522,14 @@ onBeforeUnmount(card.close)
             <!-- Deliberately a raw button (#1410): a calendar hover cell whose
                  geometry (absolute slide-down tab under the date block) and
                  booked-state colors are the widget itself — no Nuxt UI equivalent.
-                 Colors use semantic tokens where possible. -->
+                 Colors use semantic tokens where possible.
+                 Only on devices that can hover (#4516): on a touch screen the strip is
+                 display:none, so a tap anywhere on the day selects it (no hidden hit area). -->
             <button
               v-if="!isCreatingDate(jsDate)"
               type="button"
               :disabled="isDayFullyBooked(jsDate)"
-              class="absolute bottom-0 left-0 right-0 translate-y-0 flex items-center justify-center h-4 rounded-b-md opacity-0 transition-all duration-200 ease-out group-hover:translate-y-1 group-hover:opacity-100 z-10"
+              class="absolute bottom-0 left-0 right-0 translate-y-0 hidden [@media(hover:hover)]:flex items-center justify-center h-4 rounded-b-md opacity-0 transition-all duration-200 ease-out group-hover:translate-y-1 group-hover:opacity-100 z-10"
               :class="isDayFullyBooked(jsDate)
                 ? 'bg-neutral-700 cursor-default'
                 : 'bg-primary cursor-pointer hover:bg-primary/80 active:scale-[0.98]'"

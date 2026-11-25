@@ -144,3 +144,27 @@ describe('Calendar — one location picked shrinks the cells (#4516)', () => {
     w.unmount()
   })
 })
+
+// Owner, 25 Nov (iPhone): one tap on a month day must always select it. The "+" strip at the
+// bottom of a month day only shows on devices that can hover; on touch it is display:none,
+// so it can't catch a tap on the lower half of the day and open the form.
+describe('Calendar — the month "+" strip is only there on hover devices (#4516)', () => {
+  it('the strip is display:none unless the device can hover, using real Tailwind', async () => {
+    const w = mountCalendar('month', [])
+    const strip = w.find('.group.relative button')
+    expect(strip.exists()).toBe(true)
+    const cls = strip.classes()
+    expect(cls).not.toContain('flex') // no unconditional display
+
+    // Compile the strip's own classes with Tailwind and check what a touch screen gets
+    const { compile } = await import('tailwindcss')
+    const css = (await compile('@tailwind utilities;')).build(cls)
+    // the only rule that shows it sits inside a hover media query…
+    expect(css).toMatch(/@media \(hover:\s*hover\)\s*\{[^}]*display:\s*flex/)
+    // …and outside that query it is display:none
+    const outsideMedia = css.replace(/@media[^{]*\{(?:[^{}]*\{[^}]*\})*[^}]*\}/g, '')
+    expect(outsideMedia).toMatch(/\.hidden\s*\{\s*display:\s*none/)
+    expect(outsideMedia).not.toMatch(/display:\s*flex/)
+    w.unmount()
+  })
+})
