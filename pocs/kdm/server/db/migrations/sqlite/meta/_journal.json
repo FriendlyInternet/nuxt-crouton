@@ -8,6 +8,13 @@
       "when": 1795606932386,
       "tag": "0000_petite_joystick",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1795644773923,
+      "tag": "0001_kdm_no_demo_page",
+      "breakpoints": true
     }
   ]
 }
