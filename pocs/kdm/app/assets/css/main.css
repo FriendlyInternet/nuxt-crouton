@@ -1,0 +1,24 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+/* Scan Nuxt Crouton layers for Tailwind classes */
+@source "../../../../node_modules/@fyit/crouton*/app/**/*.{vue,js,ts}";
+
+/* Kasper's look (#4526): crouton-pages' own public page, settings + CSS only.
+   Source: pmcp/kdm app/layouts/default.vue (max-w-4xl, font-mono) + app/pages/[...slug].vue (prose mx-auto mt-12, h1 mb-20).
+   Side padding 16/24/32px comes from the public layout's px-4 sm:px-6 lg:px-8. */
+.page-view { max-width: 56rem; margin-inline: auto; font-family: var(--font-mono); }
+.page-view .page-renderer { max-width: 65ch; margin: 3rem auto 0; }
+.page-view .prose {
+  font-family: inherit; font-size: 1rem; line-height: 1.75;
+  --tw-prose-body: var(--ui-text); --tw-prose-headings: var(--ui-text-highlighted);
+  --tw-prose-lead: var(--ui-text-toned); --tw-prose-links: var(--ui-text-highlighted);
+  --tw-prose-bold: var(--ui-text-highlighted); --tw-prose-counters: var(--ui-text-muted);
+  --tw-prose-bullets: var(--ui-text-dimmed); --tw-prose-hr: var(--ui-border);
+  --tw-prose-quotes: var(--ui-text-highlighted); --tw-prose-quote-borders: var(--ui-border);
+  --tw-prose-captions: var(--ui-text-muted); --tw-prose-code: var(--ui-text-highlighted);
+  --tw-prose-th-borders: var(--ui-border); --tw-prose-td-borders: var(--ui-border-muted);
+}
+.page-view .page-content { padding: 0; }
+.page-view .page-content > div > h1:first-child,
+.page-view .block-content > :first-child h1:first-of-type { margin-top: 0; margin-bottom: 5rem; }

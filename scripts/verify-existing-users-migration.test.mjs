@@ -9,6 +9,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DatabaseSync } from 'node:sqlite'
@@ -23,6 +24,10 @@ const FOLDERS = [
   'fixtures/minimal', 'fixtures/with-assets', 'fixtures/with-bookings', 'fixtures/with-collab',
   'fixtures/with-devtools', 'fixtures/with-maps', 'fixtures/with-mcp-oauth', 'fixtures/with-pages', 'fixtures/with-relations', 'fixtures/with-sales'
 ]
+
+// Brand-new apps whose first migration creates `user` (#4526): no user predates e-mail
+// verification, so there is nothing to backfill and no backfill migration.
+const FRESH = ['pocs/kdm']
 
 const migrationsDir = folder => path.join(ROOT, folder, 'server/db/migrations/sqlite')
 
@@ -39,7 +44,38 @@ test('the list covers every sqlite migration folder in the repo', () => {
       if (fs.existsSync(migrationsDir(`${top}/${name}`))) found.push(`${top}/${name}`)
     }
   }
-  assert.deepEqual(found.sort(), [...FOLDERS].sort())
+  assert.deepEqual(found.sort(), [...FOLDERS, ...FRESH].sort())
+})
+
+/** Why a folder is not a fresh baseline (user created in journal idx 0, no backfill), or null. */
+function freshProblem(dir, label) {
+  const sqls = fs.readdirSync(dir).filter(f => f.endsWith('.sql'))
+  if (sqls.some(f => f.endsWith('_verify_existing_users.sql'))) return `${label}: a fresh app needs no backfill migration`
+  const journal = JSON.parse(fs.readFileSync(path.join(dir, 'meta/_journal.json'), 'utf8'))
+  const first = journal.entries.find(e => e.idx === 0)
+  if (!first) return `${label}: journal has no first migration`
+  const sql = fs.readFileSync(path.join(dir, `${first.tag}.sql`), 'utf8')
+  if (!/CREATE TABLE `user`[^;]*`emailVerified`/.test(sql)) return `${label}: the first migration must create user with emailVerified`
+  return null
+}
+
+// covers: T10 (#4526)
+for (const folder of FRESH) {
+  test(`${folder}: a fresh baseline — user is created in the first migration, nothing to backfill`, () => {
+    assert.equal(freshProblem(migrationsDir(folder), folder), null)
+  })
+}
+
+// covers: T10 (#4526)
+test('a fresh-app folder with a backfill, or whose user table comes later, is not a fresh baseline', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fresh-'))
+  fs.mkdirSync(path.join(dir, 'meta'))
+  fs.writeFileSync(path.join(dir, '0000_init.sql'), 'CREATE TABLE `team` (`id` text);')
+  fs.writeFileSync(path.join(dir, '0001_users.sql'), 'CREATE TABLE `user` (`id` text, `emailVerified` integer);')
+  fs.writeFileSync(path.join(dir, 'meta/_journal.json'), JSON.stringify({ entries: [{ idx: 0, tag: '0000_init' }, { idx: 1, tag: '0001_users' }] }))
+  assert.match(freshProblem(dir, 'x') ?? '', /first migration must create user/)
+  fs.writeFileSync(path.join(dir, '0002_verify_existing_users.sql'), 'UPDATE `user` SET `emailVerified` = 1;')
+  assert.match(freshProblem(dir, 'x') ?? '', /needs no backfill/)
 })
 
 for (const folder of FOLDERS) {
