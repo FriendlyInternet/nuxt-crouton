@@ -223,6 +223,45 @@ test('#4113 only the final no-go carries a plan-rejected record; round-1 no-go a
   assert.equal(withoutRecord(r1), r1)
 })
 
+// covers: T4 (#4524) — the reviewer can't approve a mockup that was never posted.
+test('T4 rule: a missing requested mockup is the pipeline\'s own question, never the reviewer\'s "approve the mockup"', async () => {
+  const { MOCKUP_MISSING_QUESTION } = await import('./signoff-route.mjs')
+  const asked = fx('owner.verdict.md').replace(/### Question\n[\s\S]*$/, '### Question\nDo you approve the mockup and the plan?\n')
+  const d = decide(fx('clean.plan.md'), asked, { mockup: 'missing' })
+  assert.equal(d.ok, true)
+  assert.equal(d.verdict, 'needs-owner')
+  assert.equal(d.question, MOCKUP_MISSING_QUESTION)
+  assert.match(d.notes['7'], /reviewer also asked: Do you approve the mockup/)
+  const c = renderComment(d)
+  const head = c.slice(0, c.indexOf('<details>'))
+  assert.match(head, /no mockup/)
+  assert.doesNotMatch(head, /approve the mockup/)
+  assert.equal(readRecord(c).question, MOCKUP_MISSING_QUESTION)
+  assert.deepEqual(readRecord(c), QUESTION_RECORD(MOCKUP_MISSING_QUESTION))
+  // a lenient go cannot pass a missing mockup either
+  assert.equal(decide(fx('clean.plan.md'), fx('pass.verdict.md'), { mockup: 'missing' }).verdict, 'needs-owner')
+  // posted / waived / default leave today's verdict unchanged
+  for (const opt of [{ mockup: 'posted' }, { mockup: 'waived' }, undefined]) {
+    assert.deepEqual(decide(fx('clean.plan.md'), asked, opt), decide(fx('clean.plan.md'), asked))
+    assert.equal(decide(fx('clean.plan.md'), fx('pass.verdict.md'), opt).verdict, 'go')
+  }
+})
+
+test('T4 wiring: the real CLI reads --mockup anywhere in argv for decide, render and route', () => {
+  const script = fileURLToPath(new URL('./plan-verdict.mjs', import.meta.url))
+  const plan = fileURLToPath(new URL('../fixtures/plan-review/clean.plan.md', import.meta.url))
+  const pass = fileURLToPath(new URL('../fixtures/plan-review/pass.verdict.md', import.meta.url))
+  const dec = spawnSync('node', [script, plan, pass, '--mockup', 'missing'], { encoding: 'utf8' })
+  assert.equal(dec.status, 0)
+  assert.equal(JSON.parse(dec.stdout).verdict, 'needs-owner')
+  assert.equal(JSON.parse(spawnSync('node', [script, plan, pass, '--mockup', 'posted'], { encoding: 'utf8' }).stdout).verdict, 'go')
+  const r = spawnSync('node', [script, 'render', plan, pass, '1', 'm', '--mockup', 'missing'], { encoding: 'utf8' })
+  assert.match(r.stdout, /plan-review-verdict:needs-owner/)
+  assert.match(r.stdout, /no mockup was posted/)
+  // route needs a no-go: a missing mockup is a hold, never a retry count
+  assert.equal(spawnSync('node', [script, 'route', plan, pass, '1', '--mockup', 'missing'], { encoding: 'utf8' }).status, 1)
+})
+
 // covers: T7 (#4113)
 test('#4113 a pending design sign-off hold carries the plan-question record with SIGNOFF_QUESTION', () => {
   const plan = fx('clean.plan.md').replace(/### Needs owner\n[^\n]*/, '### Needs owner\nyes — design sign-off by ticket instruction, still open')
