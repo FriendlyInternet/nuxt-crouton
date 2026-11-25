@@ -41,4 +41,21 @@ describe('TeamThemeSettings unsaved-changes bar', () => {
     // (the selected preset card keeps its own bg-primary/5 tint on purpose)
     expect(saveBarBlock()).not.toContain('bg-primary/5')
   })
+
+  // covers: T1 — Editorial's serif body must not reach the bar title
+  it('sets a sans title through the UAlert ui prop', () => {
+    expect(saveBarBlock()).toMatch(/title: '[^']*\bfont-sans\b[^']*'/)
+  })
+})
+
+describe('Editorial theme', () => {
+  const editorialCss = readFileSync(
+    fileURLToPath(new URL('../../crouton-themes/editorial/assets/css/main.css', import.meta.url)),
+    'utf8'
+  )
+
+  // covers: T2
+  it('has no .sticky.justify-between save-bar patch', () => {
+    expect(editorialCss).not.toContain('.sticky.justify-between')
+  })
 })

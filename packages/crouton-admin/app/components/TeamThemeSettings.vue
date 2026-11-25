@@ -362,7 +362,7 @@ function presetDescription(key: ThemePreset, preset: (typeof THEME_PRESETS)['cus
         class="sticky bottom-4 bg-default p-3"
         :ui="{
           root: 'flex-col items-stretch sm:flex-row sm:items-center',
-          title: 'text-default',
+          title: 'text-default font-sans',
           actions: 'justify-end gap-2'
         }"
       />
