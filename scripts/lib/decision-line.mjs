@@ -13,7 +13,17 @@ const DECISION = /^\s*decision:\s*/i
 const OK_REASON = /^\s*ok:\s*(?=\S)/i
 const NOT_OK = /^\s*not\s+ok:\s*(?=\S)/i
 // owner's answer relayed from an agent account: "posted from `@x`'s account (not Maarten) · _Maarten's answer…_"
-const RELAYED = /posted from [^_]*account \(not [^)]+\)\s*·\s*_[^_]*\b(?:answer|decisions?)\b/iu
+// (the word ends at any non-letter, so `_owner answer_` counts too: `\b` misses before the closing `_`, #4531)
+const RELAYED = /posted from [^_]*account \(not [^)]+\)\s*·\s*_[^_]*\b(?:answer|decisions?)(?![\p{L}\p{N}])/iu
+// …but a context that says it is NOT the owner's answer ("this is not his answer", #4531) is not a relay.
+const NOT_RELAYED = /\bnot\s+(?:[\p{L}']+\s+){0,2}(?:answer|decisions?)(?![\p{L}\p{N}])/iu
+
+/** The header relays the owner's answer: `RELAYED`, and its italic context does not deny it (#4531). */
+function isRelayed(header) {
+  if (!RELAYED.test(header)) return false
+  const context = header.match(/\(not [^)]+\)\s*·\s*_(.*)$/u)?.[1] ?? ''
+  return !NOT_RELAYED.test(context)
+}
 
 /** The prefix pattern the line starts with (`ok:` / `not ok:` only on a held plan), or null. */
 function matchPrefix(line, held) {
@@ -25,7 +35,7 @@ function matchPrefix(line, held) {
 /**
  * PURE. Is this comment the owner speaking (#4192)? The owner's login, and either no leading 🤖
  * header (typed by the owner) or a 🤖 header that says "owner decision" or relays the owner's
- * answer (`RELAYED`). A chat's status note from the owner's account (🪪 claim, FYI, ✅ done) is not.
+ * answer (`RELAYED`, unless its context says it is *not* the owner's answer, #4531). A chat's status note from the owner's account (🪪 claim, FYI, ✅ done) is not.
  * @param {{body?: string, userLogin?: string, userType?: string}} c
  * @param {string} [owner]
  */
@@ -33,7 +43,7 @@ export function isOwnerVoice({ body, userLogin, userType } = {}, owner) {
   if (!isOwner({ userLogin, userType }, owner)) return false
   const header = stripGeneratedTrailer(String(body || '')).split('\n').find(l => l.trim())
   const isAgent = /^\s*(?:>\s*)?🤖/u.test(header || '')
-  return !(isAgent && !/owner decision/i.test(header) && !RELAYED.test(header))
+  return !(isAgent && !/owner decision/i.test(header) && !isRelayed(header))
 }
 
 /** @returns {string|null} the decision text (single line, verbatim words), or null */
