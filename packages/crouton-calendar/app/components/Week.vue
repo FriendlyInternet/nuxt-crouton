@@ -14,6 +14,8 @@ interface Props {
   activeDate?: Date | null
   /** Function to check if a date is disabled by schedule rules */
   isDateDisabled?: ((date: Date) => boolean) | null
+  /** Change it when the cells' height really changes (e.g. a filter hides indicator rows) so the held strip height is measured again (#4516) */
+  holdKey?: string | number
 }
 
 const { t } = useT()
@@ -26,6 +28,7 @@ const props = withDefaults(defineProps<Props>(), {
   selectedDate: null,
   activeDate: null,
   isDateDisabled: null,
+  holdKey: undefined,
 })
 
 const emit = defineEmits<{
@@ -104,8 +107,9 @@ const nextWeek = () => showWeek(referenceDate.value.add({ weeks: 1 }))
 // the next/previous week or spring back. Vertical drags pass through to the
 // page (touch-action: pan-y) (#2485, #2515)
 const swipeEl = ref<HTMLElement | null>(null)
-// Keep the strip's height for good, so the page doesn't jump on a swipe (#3924)
-useHoldHeight(swipeEl)
+// Keep the strip's height for good, so the page doesn't jump on a swipe (#3924);
+// measured again when holdKey changes (#4516)
+useHoldHeight(swipeEl, () => props.holdKey)
 const trackEl = ref<HTMLElement | null>(null)
 const { slide } = useSlideSwipe(swipeEl, {
   track: trackEl,

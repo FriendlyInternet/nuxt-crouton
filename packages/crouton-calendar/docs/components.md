@@ -9,6 +9,7 @@ File: `app/components/Month.vue`
 
 | Prop | Type | Default | Required | Description |
 | --- | --- | --- | --- | --- |
+| `holdKey` | `string \| number` | - | no | Change it when the cells' height really changes (e.g. a filter hides indicator rows) so the held strip height is measured again (#4516) |
 | `date` | `Date` | - | yes |  |
 
 | Event | Payload |
@@ -38,6 +39,7 @@ File: `app/components/Week.vue`
 | `selectedDate` | `Date \| null` | `null` | no | The selected day |
 | `activeDate` | `Date \| null` | `null` | no | Date shown as the active one (e.g. being created/edited) |
 | `isDateDisabled` | `((date: Date) => boolean) \| null` | `null` | no | Function to check if a date is disabled by schedule rules |
+| `holdKey` | `string \| number` | `undefined` | no | Change it when the cells' height really changes (e.g. a filter hides indicator rows) so the held strip height is measured again (#4516) |
 | `date` | `Date` | - | yes |  |
 
 | Event | Payload |

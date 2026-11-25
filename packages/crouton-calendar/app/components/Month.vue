@@ -17,6 +17,11 @@ const emit = defineEmits<{
   today: []
 }>()
 
+const props = defineProps<{
+  /** Change it when the cells' height really changes (e.g. a filter hides indicator rows) so the held strip height is measured again (#4516) */
+  holdKey?: string | number
+}>()
+
 // The month being shown (any date in it)
 const date = defineModel<Date>('date', { required: true })
 
@@ -35,8 +40,9 @@ const now = today(getLocalTimeZone())
 const selected = ref<DateValue | undefined>(new CalendarDate(now.year, now.month, 1))
 const placeholder = computed<DateValue>(() => new CalendarDate(date.value.getFullYear(), date.value.getMonth() + 1, 1))
 const swipeEl = ref<HTMLElement | null>(null)
-// Keep the strip's height for good, so the page doesn't jump on a swipe (#3924)
-useHoldHeight(swipeEl)
+// Keep the strip's height for good, so the page doesn't jump on a swipe (#3924);
+// measured again when holdKey changes (#4516)
+useHoldHeight(swipeEl, () => props.holdKey)
 
 const isSameMonth = (a: { year: number, month: number }, b: { year: number, month: number }) =>
   a.year === b.year && a.month === b.month

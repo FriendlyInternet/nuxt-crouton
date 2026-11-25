@@ -86,11 +86,11 @@ describe('CalendarFoldHandle (#4516)', () => {
     expect(w.find('button').attributes('aria-expanded')).toBe('false')
   })
 
-  it('shows calendar-days in week and calendar-minus in month', async () => {
+  it('shows calendar-days in week and calendar-minus-2 in month', async () => {
     const { w } = mountHandle('week')
     expect(w.find('button').attributes('data-icon')).toBe('i-lucide-calendar-days')
     await click(w)
-    expect(w.find('button').attributes('data-icon')).toBe('i-lucide-calendar-minus')
+    expect(w.find('button').attributes('data-icon')).toBe('i-lucide-calendar-minus-2')
   })
 
   it('is icon-only: no text, ghost/neutral, same size as the close X (sm)', () => {

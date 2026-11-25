@@ -362,6 +362,7 @@ onBeforeUnmount(card.close)
       :selected-date="selectedDate"
       :active-date="creatingAtDate"
       :is-date-disabled="isDateUnavailable ? isDayUnavailable : undefined"
+      :hold-key="maxIndicatorCount"
       @select="onWeekSelect"
       @today="emit('today')"
     >
@@ -423,7 +424,8 @@ onBeforeUnmount(card.close)
     </CroutonCalendarWeek>
 
     <!-- Month View -->
-    <CroutonCalendarMonth v-else v-model:date="date" @select="onMonthSelect" @today="emit('today')">
+    <!-- hold-key: picking a location tab shrinks the cells, so the strip's held height is measured again (#4516) -->
+    <CroutonCalendarMonth v-else v-model:date="date" :hold-key="maxIndicatorCount" @select="onMonthSelect" @today="emit('today')">
       <template v-if="$slots['header-start']" #header-start>
         <slot name="header-start" />
       </template>
