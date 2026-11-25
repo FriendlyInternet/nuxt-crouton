@@ -98,6 +98,19 @@ test('CLI count reads a jobs file like the workflow does', () => {
   assert.equal(r.stdout.trim(), '1')
 })
 
+// covers: T8 (#4535)
+test('missing declared app → failure with the missing text, even with no records; ok still wins', () => {
+  const missing = 'review-surface declared for kassa, but this commit\'s deploys left no preview for it'
+  const v = screenshotVerdict({ expected: 0, records: 0, result: '', missing })
+  assert.equal(v.conclusion, 'failure')
+  assert.equal(v.summary, missing)
+  const ok = screenshotVerdict({ expected: 1, records: 1, result: 'ok', summary: 'posted 1 shot(s): a.png', missing })
+  assert.equal(ok.conclusion, 'success')
+  const r = spawnSync('node', [cli, 'verdict'], { env: { ...process.env, EXPECTED: '0', RECORDS: '0', RESULT: '', SUMMARY: '', MISSING: missing }, encoding: 'utf8' })
+  assert.match(r.stdout, /conclusion=failure/)
+  assert.match(r.stdout, /summary=review-surface declared for kassa/)
+})
+
 test('preview-screenshot.yml does not pipe gh api into jq for the jobs lookup', () => {
   const w = readFileSync(new URL('../../.github/workflows/preview-screenshot.yml', import.meta.url), 'utf8')
   assert.ok(!/gh api[^\n]*\|\s*jq -s/.test(w))
