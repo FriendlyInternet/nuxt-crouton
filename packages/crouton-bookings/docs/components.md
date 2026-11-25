@@ -52,6 +52,7 @@ File: `app/components/Calendar.vue`
 
 | Slot | Props |
 | --- | --- |
+| `header-start` | `{}` |
 | `header-end` | `{}` |
 
 ## CroutonBookingsDateBadge
