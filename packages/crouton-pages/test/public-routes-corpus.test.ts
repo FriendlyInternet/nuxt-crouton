@@ -60,7 +60,10 @@ function todaysHookOutput(routingMode: string) {
   return pages
 }
 
-const consumers = findConsumers()
+// covers: T12 (#4526)
+// An app that switches hideLocaleInUrl on (pocs/kdm, #4526) has opted into the
+// new behaviour, so the "setting off changes nothing" check does not apply to it.
+const consumers = findConsumers().filter(c => !/hideLocaleInUrl:\s*true/.test(c.config))
 
 describe('crouton-pages consumers — setting off changes nothing (T4)', () => {
   it('finds at least the five known consumers', () => {

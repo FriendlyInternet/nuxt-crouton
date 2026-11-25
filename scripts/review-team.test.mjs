@@ -25,14 +25,17 @@ test('case 1: no reviewTeam key → test1', () => {
   assert.deepEqual(resolveReviewTeam({ manifest: { seed: true }, nuxtConfigText: "defaultTeamSlug: 'test1'" }), { team: 'test1' })
 })
 
-test('corpus: every committed deploy.config.json (with its nuxt.config.ts) resolves to test1, no error', () => {
+// covers: T11 (#4526)
+test('corpus: every committed deploy.config.json (with its nuxt.config.ts) resolves to its reviewTeam (default test1), no error', () => {
   const dirs = ['apps', 'pocs'].flatMap(ws => readdirSync(join(ROOT, ws)).map(a => join(ROOT, ws, a)))
     .filter(d => existsSync(join(d, 'deploy.config.json')))
   assert.ok(dirs.length >= 10, `expected the committed deploy configs, found ${dirs.length}`)
   for (const d of dirs) {
     const r = teamForAppDir(d)
     assert.equal(r.error, undefined, `${d}: ${r.error}`)
-    assert.equal(r.team, 'test1', d)
+    // An app that names its own team (pocs/kdm, #4526) resolves to it; every other app to test1.
+    const own = JSON.parse(readFileSync(join(d, 'deploy.config.json'), 'utf8')).reviewTeam
+    assert.equal(r.team, own || 'test1', d)
   }
 })
 
