@@ -162,3 +162,5 @@ pocs/snippets/.data
 pocs/crate/.data
 # Generator history, written per app by `crouton config`; read by crouton-devtools (#2290)
 .crouton-generation-history.json
+
+pocs/devframe-spike/.data
