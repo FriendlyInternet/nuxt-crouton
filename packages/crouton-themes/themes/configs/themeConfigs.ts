@@ -146,6 +146,12 @@ const risoConfig = namedVariantConfig('riso', { primary: 'pink', neutral: 'stone
 const einkConfig = namedVariantConfig('eink', { primary: 'neutral', neutral: 'neutral' })
 const blueprintConfig = namedVariantConfig('blueprint', { primary: 'sky', neutral: 'slate' })
 
+// Editorial (#4520) — named variants registered by editorial/app.config.ts;
+// badge is the same deliberate pass as minimal (no editorial badge variant).
+const editorialConfig = namedVariantConfig('editorial', { primary: 'neutral', neutral: 'neutral' }, {
+  badge: { defaultVariants: { variant: 'solid' } }
+})
+
 // Export all theme configs
 export const THEME_UI_CONFIGS: Record<ThemeName, ThemeUIConfig> = {
   default: defaultConfig,
@@ -160,5 +166,6 @@ export const THEME_UI_CONFIGS: Record<ThemeName, ThemeUIConfig> = {
   gameboy: gameboyConfig,
   riso: risoConfig,
   eink: einkConfig,
-  blueprint: blueprintConfig
+  blueprint: blueprintConfig,
+  editorial: editorialConfig
 }
