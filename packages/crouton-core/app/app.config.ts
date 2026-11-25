@@ -9,6 +9,11 @@ export default defineAppConfig({
   croutonCollections: {
     croutonRedirects: croutonRedirectsConfig,
   },
+  // Actions this package guards (#4104) — see crouton-auth CLAUDE.md "Permissions (actions)".
+  croutonActions: {
+    'site:manage': { label: 'permissions.siteManage' },
+    'collections:manage': { label: 'permissions.collectionsManage' },
+  },
   // Disabled UButton reads as disabled, not just faded (#4329).
   ui: {
     button: {

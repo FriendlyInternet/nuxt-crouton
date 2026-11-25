@@ -17,7 +17,10 @@ import type { NavigationMenuItem, DropdownMenuItem } from '@nuxt/ui'
  */
 
 const { navigation, isLoading, isActive } = useNavigation()
-const { currentTeam, isAdmin } = useTeam()
+const { currentTeam } = useTeam()
+// "Manage site" is for people who may edit pages: `pages:edit` (#4105).
+// Browser-only — the public page route is shared-cached (swr).
+const canEdit = useCan('pages:edit', { server: false })
 const { teamSlug: teamSlugRef, teamId: teamIdRef } = useTeamContext()
 const { appsList, getAppAllRoutes } = useCroutonApps()
 const { adminCollections } = useCroutonCollectionsNav()
@@ -146,7 +149,7 @@ const adminDropdownItems = computed<DropdownMenuItem[][]>(() => {
 })
 
 const manageSiteItems = computed<DropdownMenuItem[]>(() =>
-  isAdmin.value && currentTeam.value?.slug
+  canEdit.value && currentTeam.value?.slug
     ? [{ label: t('pages.nav.manageSite'), icon: 'i-lucide-settings', children: adminDropdownItems.value }]
     : []
 )

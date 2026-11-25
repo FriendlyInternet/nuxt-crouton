@@ -26,6 +26,8 @@ import { sql } from 'drizzle-orm'
 import { useNitroApp } from 'nitropack/runtime'
 import { isSuperAdminUser } from '../../shared/utils/auth'
 import { resolveInitialOrgId, getOrgBySlug } from './session-org'
+import { buildAccessControl, setAccessControl, type CroutonAccessControl } from './access'
+import { buildAuthHooks, seedTeamAdminRole } from './team-admin-role'
 import type { BetterAuthOptions } from 'better-auth'
 import type { DrizzleD1Database } from 'drizzle-orm/d1'
 import type {
@@ -80,6 +82,12 @@ export interface CreateAuthOptions {
    * the app can send e-mail (crouton-email installed).
    */
   requireEmailVerification?: boolean
+  /**
+   * Crouton actions → Better Auth access control (#4104). `useServerAuth`
+   * builds it from every layer's `croutonActions` + `teams.roles`. When left
+   * out, it is built from `config.teams.roles` and the built-in actions.
+   */
+  access?: CroutonAccessControl
 }
 
 /**
@@ -116,6 +124,10 @@ export function createAuth(options: CreateAuthOptions) {
     schema,
     requireEmailVerification = false
   } = options
+
+  // One access-control definition for the organization plugin and can() (#4104).
+  const access = options.access ?? buildAccessControl({ roles: config.teams?.roles })
+  setAccessControl(access)
 
   // Build Better Auth configuration
   const authConfig: BetterAuthOptions = {
@@ -216,10 +228,14 @@ export function createAuth(options: CreateAuthOptions) {
     },
 
     // Plugins - Organization (Teams), Passkey, and 2FA support
-    plugins: buildPlugins(config, baseURL, config.debug, db),
+    plugins: buildPlugins(config, baseURL, config.debug, db, access),
+
+    // The team's admin row (#4130): seeded on first use, only the owner edits it,
+    // nobody renames or deletes it (server/lib/team-admin-role.ts).
+    hooks: buildAuthHooks(access, db),
 
     // Database hooks for single-tenant mode (auto-add users to default org)
-    databaseHooks: buildDatabaseHooks(config, db)
+    databaseHooks: buildDatabaseHooks(config, db, access)
   }
 
   // Create and return the Better Auth instance
@@ -499,7 +515,8 @@ export function signupGate(config: Pick<CroutonAuthConfig, 'signup'>) {
 
 function buildDatabaseHooks(
   config: CroutonAuthConfig,
-  db: DrizzleD1Database<Record<string, unknown>>
+  db: DrizzleD1Database<Record<string, unknown>>,
+  access?: CroutonAccessControl
 ): BetterAuthOptions['databaseHooks'] {
   const teams = config.teams ?? {}
   const hasDefaultTeam = !!teams.defaultTeamSlug
@@ -526,7 +543,7 @@ function buildDatabaseHooks(
           if (hasDefaultTeam) {
             const defaultTeamSlug = teams.defaultTeamSlug!
             // 1. Ensure default org exists (lazy creation)
-            await ensureDefaultOrgExists(db, defaultTeamSlug, appName)
+            await ensureDefaultOrgExists(db, defaultTeamSlug, appName, access)
 
             // 2. Add user to default org as member
             await addUserToDefaultOrg(db, user.id, defaultTeamSlug)
@@ -538,7 +555,7 @@ function buildDatabaseHooks(
 
           // Handle auto-create personal workspace
           if (hasAutoCreate) {
-            const orgId = await createPersonalOrg(db, user.id, user.name, user.email, config.appName)
+            const orgId = await createPersonalOrg(db, user.id, user.name, user.email, config.appName, access)
 
             if (config.debug) {
               console.log(`[crouton/auth] Personal org ${orgId} created for user ${user.email}`)
@@ -563,7 +580,7 @@ function buildDatabaseHooks(
           if (hasDefaultTeam) {
             const defaultTeamSlug = teams.defaultTeamSlug!
             try {
-              await ensureDefaultOrgExists(db, defaultTeamSlug, appName)
+              await ensureDefaultOrgExists(db, defaultTeamSlug, appName, access)
               await addUserToDefaultOrg(db, session.userId, defaultTeamSlug)
             } catch (error) {
               // Never block sign-in over the default-team join (#3786)
@@ -602,11 +619,13 @@ function buildDatabaseHooks(
  * @param db - Drizzle database instance
  * @param slug - Default team slug from config
  * @param appName - Application name for the default org
+ * @param access - Access control; the new org gets its admin row from it (#4130)
  */
 async function ensureDefaultOrgExists(
   db: DrizzleD1Database<Record<string, unknown>>,
   slug: string,
-  appName: string
+  appName: string,
+  access?: CroutonAccessControl
 ): Promise<void> {
   // Check if org exists by slug
   const existing = await getOrgBySlug(db, slug)
@@ -619,6 +638,7 @@ async function ensureDefaultOrgExists(
       INSERT INTO organization (id, name, slug, isDefault, personal, createdAt)
       VALUES (${orgId}, ${appName}, ${slug}, 1, 0, ${now})
     `)
+    await seedTeamAdminRole(db, orgId, access)
     console.log(`[crouton/auth] Created default organization "${appName}" (slug: ${slug})`)
   }
 }
@@ -683,6 +703,7 @@ async function addUserToDefaultOrg(
  * @param userName - User's name for workspace naming
  * @param userEmail - User's email (fallback for naming)
  * @param _appName - Application name (reserved for metadata)
+ * @param access - Access control; the new org gets its admin row from it (#4130)
  * @returns The created organization ID
  */
 async function createPersonalOrg(
@@ -690,7 +711,8 @@ async function createPersonalOrg(
   userId: string,
   userName: string | null,
   userEmail: string,
-  _appName?: string
+  _appName?: string,
+  access?: CroutonAccessControl
 ): Promise<string> {
   const orgId = crypto.randomUUID()
   const now = new Date().toISOString()
@@ -707,6 +729,7 @@ async function createPersonalOrg(
     INSERT INTO organization (id, name, slug, personal, isDefault, ownerId, createdAt)
     VALUES (${orgId}, ${orgName}, ${slug}, 1, 0, ${userId}, ${now})
   `)
+  await seedTeamAdminRole(db, orgId, access)
 
   // Add user as owner (member with 'owner' role)
   const memberId = crypto.randomUUID()
@@ -740,13 +763,14 @@ function buildPlugins(
   config: CroutonAuthConfig,
   baseURL: string,
   debug?: boolean,
-  db?: DrizzleD1Database<Record<string, unknown>>
+  db?: DrizzleD1Database<Record<string, unknown>>,
+  access?: CroutonAccessControl
 ) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- typing as BetterAuthPlugin[] widens the tuple betterAuth infers auth.api's plugin endpoints from
   const plugins: any[] = [
     // Organization plugin is always enabled (teams support)
     // Cast to any to work around strict typing - config is validated at runtime
-    organization(buildOrganizationConfig(config, db) as any),
+    organization(buildOrganizationConfig(config, db, access) as any),
 
     // Admin plugin - user management (ban, impersonate, revoke sessions, etc.)
     admin({
@@ -1262,7 +1286,8 @@ function buildGenericProviderConfig(config: OAuthProviderConfig): SocialProvider
  */
 export function buildOrganizationConfig(
   config: CroutonAuthConfig,
-  db?: DrizzleD1Database<Record<string, unknown>>
+  db?: DrizzleD1Database<Record<string, unknown>>,
+  access?: CroutonAccessControl
 ) {
   const teamsConfig = config.teams ?? {}
 
@@ -1294,6 +1319,16 @@ export function buildOrganizationConfig(
   }
 
   return {
+    // Roles carry crouton actions on top of Better Auth's own statements (#4104).
+    // A custom `roles` map replaces Better Auth's defaults, so buildAccessControl
+    // merges ownerAc/memberAc into each role. `admin` is left out on purpose
+    // (#4130): each team stores its own `admin` row (seeded below and by
+    // buildAuthHooks), which only the owner may change.
+    // Dynamic access control (#4106): each team can add its own roles (stored in
+    // `organizationRole`), which Better Auth's hasPermission — and so can() —
+    // loads per team. It needs `ac`, so it is tied to `access`.
+    ...(access && { ac: access.ac, roles: access.roles, dynamicAccessControl: { enabled: true } }),
+
     // Organization creation control
     allowUserToCreateOrganization: getAllowUserToCreateOrganization(),
 
@@ -1346,7 +1381,7 @@ export function buildOrganizationConfig(
     },
 
     // Organization lifecycle hooks
-    organizationHooks: buildOrganizationHooks(config, db)
+    organizationHooks: buildOrganizationHooks(config, db, access)
   }
 }
 
@@ -1355,7 +1390,8 @@ export function buildOrganizationConfig(
  */
 function buildOrganizationHooks(
   config: CroutonAuthConfig,
-  db?: DrizzleD1Database<Record<string, unknown>>
+  db?: DrizzleD1Database<Record<string, unknown>>,
+  access?: CroutonAccessControl
 ) {
   const teams = config.teams ?? {}
 
@@ -1377,6 +1413,8 @@ function buildOrganizationHooks(
         } catch (e) {
           console.error(`[crouton/auth] Failed to set ownerId on organization:`, e)
         }
+        // The team's own admin row, from the config template (#4130).
+        if (access) await seedTeamAdminRole(db, ctx.organization.id, access)
       }
 
       // Emit operation event for team creation

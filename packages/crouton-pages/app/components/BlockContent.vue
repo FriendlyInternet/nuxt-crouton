@@ -203,6 +203,16 @@ try {
   // No team context (or no auth package).
 }
 
+// The `admin` audience is the `admin:access` action (#4105). Browser-only:
+// this markup is shared-cached, so no server-resolved answer may land in it.
+// useAsyncData dedupes on the key, so many blocks make one request.
+let canAdminRef: { value: boolean } | null = null
+try {
+  canAdminRef = useCan('admin:access', { server: false })
+} catch {
+  // No auth package.
+}
+
 const audienceContext = computed<BlockAudienceContext>(() => {
   // Before hydration the session must not be read at all: this component's
   // markup is cached and shared between visitors.
@@ -214,7 +224,7 @@ const audienceContext = computed<BlockAudienceContext>(() => {
   const role: BlockAudienceRole | null
     = current === 'owner' || current === 'admin' || current === 'member' ? current : null
 
-  return { authenticated, role }
+  return { authenticated, role, canAdmin: canAdminRef ? canAdminRef.value : null }
 })
 
 /** The raw `blockVisibility` attr, if the block carries one. */

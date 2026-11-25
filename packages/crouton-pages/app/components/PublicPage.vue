@@ -174,13 +174,14 @@ watchEffect(() => {
 
 // --- Inline editing ---
 
-// Admin detection (useTeam may not be available if auth package not installed)
-let isAdmin = ref(false)
+// Who may edit this page: `pages:edit` (#4105). Browser-only — this route is
+// shared-cached (swr), so a server-resolved answer would reach the next visitor.
+// (useCan may not be available if the auth package is not installed.)
+let canEdit: Readonly<{ value: boolean }> = ref(false)
 try {
-  const teamComposable = useTeam()
-  isAdmin = teamComposable.isAdmin
+  canEdit = useCan('pages:edit', { server: false })
 } catch {
-  // Auth package not installed or useTeam unavailable
+  // Auth package not installed or useCan unavailable
 }
 
 // Shared editing state with layout
@@ -217,7 +218,7 @@ onMounted(() => {
     label: t('pages.admin.editPage', 'Edit Page'),
     order: 100,
     onSelect: startEditing,
-    show: () => isAdmin.value && !isEditing.value && !!page.value?.id
+    show: () => canEdit.value && !isEditing.value && !!page.value?.id
   })
 })
 

@@ -11,7 +11,9 @@ const hoisted = vi.hoisted(() => ({
   guarded: vi.fn(async (..._a: any[]) => ({}))
 }))
 
-vi.mock('@fyit/crouton-auth/server/utils/team', () => ({ resolveTeamAndCheckMembership: async () => hoisted.member, requireTeamAdmin: async () => hoisted.member }))
+vi.mock('@fyit/crouton-auth/server/utils/team', () => ({ resolveTeamAndCheckMembership: async () => hoisted.member }))
+// requireCan / can (#4108): the caller is an admin, which may every action with no site config
+vi.mock('@fyit/crouton-auth/server/utils/team-auth', async () => (await import('./stubs/team-auth')).teamAuthStub(() => hoisted.member).module)
 vi.mock('../collections/bookings/server/database/queries', () => ({ assertBookingsBookingReferences: hoisted.assertRef }))
 // The bookings write path is the capacity-guarded one (#3379); its own cases live in booking-capacity.test.ts
 vi.mock('../server/utils/booking-capacity', async (orig) => ({ ...(await orig() as object), patchBookingGuarded: hoisted.guarded }))

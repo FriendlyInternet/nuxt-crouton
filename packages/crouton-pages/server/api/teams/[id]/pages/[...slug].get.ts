@@ -374,7 +374,7 @@ async function enforceScopedVisibility(event: any, database: any, authSchema: an
 
 /**
  * Enforce `visibility: 'members' | 'admin'`: requires an authenticated team
- * member; admin pages additionally require the admin or owner role.
+ * member; admin pages additionally require the `admin:access` action (#4108).
  */
 async function enforceMemberVisibility(event: any, database: any, authSchema: any, teamId: string, page: any): Promise<void> {
   // Members/admin-only pages require authentication
@@ -409,12 +409,15 @@ async function enforceMemberVisibility(event: any, database: any, authSchema: an
       })
     }
 
-    // Admin-only pages require admin or owner role
-    if (page.visibility === 'admin' && membership.role !== 'admin' && membership.role !== 'owner') {
-      throw createError({
-        status: 403,
-        statusText: 'Access denied - admin access required'
-      })
+    // Admin-only pages require the admin:access action (owner/admin by default)
+    if (page.visibility === 'admin') {
+      const { can } = await import('@fyit/crouton-auth/server/utils/team-auth')
+      if (!(await can(teamId, session.user.id, 'admin:access', event))) {
+        throw createError({
+          status: 403,
+          statusText: 'Access denied - admin access required'
+        })
+      }
     }
 
     // Prevent ISR/SWR from caching restricted page responses

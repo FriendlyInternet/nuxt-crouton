@@ -1,8 +1,8 @@
 // Team-based endpoint - requires @fyit/crouton-auth package
-// The requireTeamAdmin utility handles team resolution and auth
+// The requireCan utility handles team resolution and auth
 import { z } from 'zod'
 import { updateBookingsSetting } from '../../../../database/queries'
-import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
+import { requireCan, can } from '@fyit/crouton-auth/server/utils/team-auth'
 
 // Hand-added body validation (#3377)
 const bodySchema = z.object({
@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
   if (!settingId) {
     throw createError({ status: 400, statusText: 'Missing setting ID' })
   }
-  const { team, user, membership } = await requireTeamAdmin(event)
+  const { team, user } = await requireCan(event, 'bookings:manage')
 
   const body = await readValidatedBody(event, bodySchema.parse)
 
@@ -24,5 +24,5 @@ export default defineEventHandler(async (event) => {
     statuses: body.statuses,
     groups: body.groups,
     sendEmails: body.sendEmails
-  } as Parameters<typeof updateBookingsSetting>[3], { role: membership.role })
+  } as Parameters<typeof updateBookingsSetting>[3], { seesAll: await can(team.id, user.id, 'bookings:manage', event) })
 })

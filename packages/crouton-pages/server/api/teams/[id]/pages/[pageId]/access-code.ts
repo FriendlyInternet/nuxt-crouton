@@ -10,10 +10,10 @@
  * PUT    → body { code: string } — create/update the grant
  * DELETE → revoke the grant
  *
- * Team admin only.
+ * Requires the `pages:edit` action (owner/admin by default).
  */
 import { eq, and } from 'drizzle-orm'
-import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
+import { requireCan } from '@fyit/crouton-auth/server/utils/team-auth'
 import {
   upsertScopedGrant,
   revokeScopedGrantsForResource,
@@ -21,7 +21,7 @@ import {
 } from '@fyit/crouton-auth/server/utils/scoped-access'
 
 export default defineEventHandler(async (event) => {
-  const { team } = await requireTeamAdmin(event)
+  const { team } = await requireCan(event, 'pages:edit')
   const pageId = getRouterParam(event, 'pageId')
 
   if (!pageId) {

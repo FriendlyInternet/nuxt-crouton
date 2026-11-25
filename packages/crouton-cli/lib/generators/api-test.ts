@@ -131,8 +131,8 @@ export function generateApiTest(data: Record<string, any>, config: Record<string
   const idParam = `${camelCase}Id`                   // productId        — router param + filename
   const routeBase = `./server/api/teams/[id]/${apiPath}`
 
-  // Declared access (#3148): role-guarded handlers call requireTeamRole, so the
-  // mocked auth module must expose it too. No access → output unchanged.
+  // Declared access (#3148): guarded handlers call requireCan (#4108), so the
+  // mocked team-auth module must expose it too. No access → output unchanged.
   const access = resolveAccess(data)
   const usesRoleGuard = access.create === 'admin' || access.reorder === 'admin'
   const listOwn = access.list === 'own'
@@ -368,13 +368,19 @@ vi.hoisted(() => {
 })
 
 vi.mock('@fyit/crouton-auth/server/utils/team', () => ({
-  resolveTeamAndCheckMembership: vi.fn(),${usesRoleGuard ? '\n  requireTeamRole: vi.fn(),' : ''}
+  resolveTeamAndCheckMembership: vi.fn(),
+}))
+// Action checks (#4108): the test caller has no action, so update/delete and
+// list: 'own' stay scoped to the caller's own rows.
+vi.mock('@fyit/crouton-auth/server/utils/team-auth', () => ({
+  can: vi.fn().mockResolvedValue(false),
+  requireCan: vi.fn(),
 }))
 vi.mock('./server/database/queries', () => ({
   ${queryExports.join(',\n  ')},
 }))
 
-import { resolveTeamAndCheckMembership${usesRoleGuard ? ', requireTeamRole' : ''} } from '@fyit/crouton-auth/server/utils/team'
+import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'${usesRoleGuard ? `\nimport { requireCan } from '@fyit/crouton-auth/server/utils/team-auth'` : ''}
 import {
   ${queryImports.join(',\n  ')},
 } from './server/database/queries'
@@ -388,12 +394,12 @@ const VALID_BODY = ${validBodyLiteral}${invalidConst}
 ${usesRoleGuard
     ? `const authed = () => {
   ;(resolveTeamAndCheckMembership as any).mockResolvedValue({ team: TEAM, user: USER, membership: MEMBERSHIP })
-  // role-guarded handlers: the test caller is an admin
-  ;(requireTeamRole as any).mockResolvedValue({ team: TEAM, user: USER, membership: { role: 'admin' } })
+  // guarded handlers: the test caller has the action
+  ;(requireCan as any).mockResolvedValue({ team: TEAM, user: USER, membership: { role: 'admin' } })
 }
 const unauth = () => {
   ;(resolveTeamAndCheckMembership as any).mockRejectedValueOnce(Object.assign(new Error('Not a team member'), { status: 403 }))
-  ;(requireTeamRole as any).mockRejectedValueOnce(Object.assign(new Error('Not a team member'), { status: 403 }))
+  ;(requireCan as any).mockRejectedValueOnce(Object.assign(new Error('Not a team member'), { status: 403 }))
 }`
     : `const authed = () => (resolveTeamAndCheckMembership as any).mockResolvedValue({ team: TEAM, user: USER, membership: MEMBERSHIP })
 const unauth = () => (resolveTeamAndCheckMembership as any).mockRejectedValueOnce(Object.assign(new Error('Not a team member'), { status: 403 }))`}

@@ -2,6 +2,7 @@
 // The resolveTeamAndCheckMembership utility handles team resolution and auth
 import { deleteMainVenue } from '../../../../database/queries'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { can } from '@fyit/crouton-auth/server/utils/team-auth'
 
 export default defineEventHandler(async (event) => {
   const timing = useServerTiming(event)
@@ -12,11 +13,11 @@ export default defineEventHandler(async (event) => {
   }
 
   const authTimer = timing.start('auth')
-  const { team, user, membership } = await resolveTeamAndCheckMembership(event)
+  const { team, user } = await resolveTeamAndCheckMembership(event)
   authTimer.end()
 
   const dbTimer = timing.start('db')
-  const result = await deleteMainVenue(venueId, team.id, user.id, { role: membership.role })
+  const result = await deleteMainVenue(venueId, team.id, user.id, { seesAll: await can(team.id, user.id, 'collections:manage', event) })
   dbTimer.end()
   return result
 })

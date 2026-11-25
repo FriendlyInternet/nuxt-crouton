@@ -1,4 +1,8 @@
 {
+  "permissions": {
+    "siteManage": "Manage the site: info, look and feel, redirects",
+    "collectionsManage": "Manage all collection items and team files"
+  },
   "form": {
     "collapse": "Collapse to sidebar",
     "expand": "Expand to fullscreen",

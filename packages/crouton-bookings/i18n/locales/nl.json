@@ -1,4 +1,8 @@
 {
+  "permissions": {
+    "bookingsCreate": "Boekingen aanmaken",
+    "bookingsManage": "Alle boekingen beheren"
+  },
   "bookings": {
     "title": "Boekingen",
     "booking": "Boeking",

@@ -862,8 +862,10 @@ export default {
     { name: 'bookings', fieldsFile: './schemas/bookings.json', collab: true },      // enable collab presence
     { name: 'articles', fieldsFile: './schemas/articles.json', kind: 'content' },
     { name: 'gallery', fieldsFile: './schemas/gallery.json', kind: 'media' },       // media kind
-    // Access (optional; absent = output unchanged). create/reorder: 'member'|'admin'
+    // Access (optional). create/reorder: 'member'|'admin'
     // (reorder also guards [id]/move); list: 'team'|'own' ('own' filters list AND ?ids= for non-admins)
+    // action: '<pkg>:<verb>' (default 'collections:manage') — 'admin' guards and 'own'/update/delete
+    // "sees all rows" ask can(action) / requireCan(event, action), never a role name (#4108)
     { name: 'notes', fieldsFile: './schemas/notes.json', access: { create: 'admin', list: 'own' } }
     // Generator also emits an `<X>Access` export in queries.ts and registers it as `access` in the query registry (read by crouton-pages public endpoints)
   ],

@@ -31,7 +31,7 @@ Requires `@crouton/auth` as a peer dependency (uses its user/session/team tables
 | `nuxt.config.ts` | Layer configuration |
 | `types/admin.ts` | Type definitions for admin features |
 | `app/middleware/super-admin.ts` | Route protection for super admin pages |
-| `app/middleware/team-admin.ts` | Route protection for team admin pages |
+| `app/middleware/team-admin.ts` | Deprecated shim → `checkRouteCan(to, ['team:manage'])`; package pages use crouton-auth's `can` middleware + `meta.can` (#4105) |
 | `server/utils/admin.ts` | Server-side admin utilities |
 | `app/utils/theme-picker.ts` | Pure helpers for the Look & Feel page (preset list visibility, colour/corner names); tested in `test/theme-picker.test.ts` |
 
@@ -42,6 +42,8 @@ Requires `@crouton/auth` as a peer dependency (uses its user/session/team tables
 | `app/composables/useAdminTeams.ts` | Team management composable |
 | `app/composables/useAdminStats.ts` | Dashboard statistics composable |
 | `app/composables/useImpersonation.ts` | Impersonation composable |
+| `app/composables/useTeamAdminPages.ts` | Team pages for the side menu + team tabs, filtered by `can()` |
+| `app/utils/team-pages.ts` | The one ordered team-page list (label, icon, path, action) |
 
 ## Composables
 
@@ -69,6 +71,7 @@ Requires `@crouton/auth` as a peer dependency (uses its user/session/team tables
 ### Team Components
 - `Admin/TeamList.vue` - Team table with member counts
 - `Admin/TeamMembers.vue` - View team members
+- `TeamRolesSettings.vue` - Rôles tab (`/admin/[team]/team/roles`, #4106): owner and member read-only; admin editable by the owner only (read-only for everyone else, never deletable, #4130); the team's own roles (name + ticked actions grouped per package, labels from `croutonActions`), create / edit actions / delete via crouton-auth `useTeamRoles()`. Actions you don't hold are disabled; a role holding one opens read-only. i18n `teams.rolesScreen.*`
 
 ### Global Components
 - `ImpersonationBanner.vue` - Top banner when impersonating a user
@@ -94,22 +97,29 @@ Requires `@crouton/auth` as a peer dependency (uses its user/session/team tables
 
 ## Middleware
 
-### team-admin (new)
+### can (crouton-auth)
 
-Protects routes that require team admin or owner privileges for a specific team.
+Team admin pages are guarded by crouton-auth's `can` middleware: each page names
+the action it needs (#4105).
 
 ```vue
 <script setup lang="ts">
-definePageMeta({
-  middleware: 'team-admin'
-})
+definePageMeta({ middleware: ['auth', 'can'], can: 'site:manage' })
 </script>
 ```
 
 **What it checks:**
-1. User is authenticated
-2. User is a member of the team in the route param `[team]`
-3. User has `admin` or `owner` role in that team
+1. User is authenticated (else → `/auth/login?redirect=…`)
+2. Every matched route record's `meta.can` is allowed in the route's `[team]`
+   (`team.vue` asks `admin:access`, each child its own action) — refused → 403
+3. Super-admins skip the check
+
+The actions per page: admin home + `team.vue` → `admin:access`; members, invitations, roles,
+settings, email logs/templates → `team:manage`; site info, look & feel, redirects →
+`site:manage`; domains → `team:domains`. The `team.vue` tabs and the admin side menu's Team section both draw from `useTeamAdminPages()` (list in `app/utils/team-pages.ts`), so they show the same pages in the same order and only pages you can open.
+
+`team-admin` is **deprecated**: it now runs the same check with `team:manage`
+(default owner/admin — the same people as before). No package page uses it.
 
 ### super-admin
 

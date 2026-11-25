@@ -34,7 +34,9 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useT()
-const { currentTeam, updateTeam, isOwner, isAdmin } = useTeam()
+const { currentTeam, updateTeam, isOwner } = useTeam()
+// Editing team settings is the `team:manage` action (#4105)
+const isAdmin = useCan('team:manage')
 const notify = useNotify()
 
 // Logo upload (#2259) — uploads straight away, saved with "Save Changes"

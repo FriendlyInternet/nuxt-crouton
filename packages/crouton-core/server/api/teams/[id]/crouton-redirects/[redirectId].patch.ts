@@ -1,5 +1,5 @@
 import { updateCroutonRedirect } from '../../../../database/queries/redirects'
-import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
+import { requireCan, can } from '@fyit/crouton-auth/server/utils/team-auth'
 import { invalidateRedirectCache } from '../../../../utils/redirectCache'
 import { validateRedirectInput } from '../../../../utils/redirectValidation'
 
@@ -12,7 +12,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const authTimer = timing.start('auth')
-  const { team, user, membership } = await requireTeamAdmin(event)
+  const { team, user } = await requireCan(event, 'site:manage')
   authTimer.end()
 
   const body = validateRedirectInput(await readBody(event), true)
@@ -23,7 +23,7 @@ export default defineEventHandler(async (event) => {
     toPath: body.toPath,
     statusCode: body.statusCode,
     isActive: body.isActive
-  }, { role: membership.role })
+  }, { seesAll: await can(team.id, user.id, 'site:manage', event) })
   dbTimer.end()
 
   invalidateRedirectCache()
