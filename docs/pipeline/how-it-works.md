@@ -18,7 +18,8 @@ exact word they reply.
      starts it.
    - a. The issue already has `plan:approved` → straight to the build (step 4).
    - b. The issue is an epic (`scripts/epic-route.mjs` says `splitter`) **or** its text asks for a
-     design sign-off ("Hold for design sign-off", `scripts/lib/signoff-route.mjs`, #3238) → the
+     mockup first ("Hold for design sign-off", "Mockup first", "Hold for the mockup", … —
+     `SIGNOFF_PATTERN` in `scripts/lib/signoff-route.mjs`, #3238/#4524) → the
      splitter, `decompose-on-issue-pidev.yml`. For an epic it writes sub-issues to
      `decompose-plan.json`, applies them with `scripts/apply-decompose-plan.mjs`, and
      `ticket-review.yml` reviews each ticket (`scripts/lib/ticket-verdict.mjs`). A no-go sends the

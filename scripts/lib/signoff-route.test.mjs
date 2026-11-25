@@ -57,6 +57,56 @@ test('(17) epic + hold but children exist → false', () => {
 test('(18) leaf whose newest gate comment is the hold → true', () => {
   assert.equal(isDesignHold({ labels: [], comments: [plan, hold], noChildren: true }), true)
 })
+// ── #4524: the wider trigger and the mockup state ──
+import { readFileSync } from 'node:fs'
+import { mockupState, MOCKUP_MISSING_QUESTION } from './signoff-route.mjs'
+const T4520 = 'Redesign\n**Mockup first** (owner rule for visual changes) … Stop for `ok`.'
+
+// covers: T1
+test('T1 rule: the #4520 wording and the other mockup-first phrases route to the mockup step', () => {
+  for (const text of [T4520, 'Hold for the mockup before anything else.', 'Needs a design sign-off before building.', 'Please show me a mockup first.', 'Hold for design sign-off first']) {
+    assert.equal(signoffRoute({ text, comments: [] }).route, 'signoff', text)
+  }
+})
+
+// covers: T2
+test('T2 rule: a mention is not an ask, a plain ask is', () => {
+  for (const text of ['This mentions "mockup first" in quotes', '> mockup first', 'See [#2804 (mockup first)](https://x) for history.', 'Uses `mockup first` as a code span']) {
+    assert.equal(signoffRoute({ text, comments: [] }).route, 'none', text)
+  }
+  assert.equal(signoffRoute({ text: 'Mockup first.', comments: [] }).route, 'signoff')
+})
+
+// covers: T8
+test('T8: mockupState is none / posted / missing / waived', () => {
+  assert.equal(mockupState({ text: 'Fix a bug', comments: [] }), 'none')
+  assert.equal(mockupState({ text: T4520, comments: [plan, hold] }), 'posted')
+  assert.equal(mockupState({ text: T4520, comments: [plan] }), 'missing')
+  const waived = `${T4520}\n\n## Decisions\n- 2026-11-25 — owner answered yes (\`ok\`) to the plan review's question: "${MOCKUP_MISSING_QUESTION}"`
+  assert.equal(mockupState({ text: waived, comments: [plan] }), 'waived')
+  assert.doesNotMatch(MOCKUP_MISSING_QUESTION, /`/)
+})
+
+test('T8 wiring: the real CLI --mockup prints missing for the #4520 text with no hold, posted with one', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'so-'))
+  const f = join(dir, 'i.md'); writeFileSync(f, `# Redesign\n\n${T4520}`)
+  const cli = fileURLToPath(new URL('./signoff-route.mjs', import.meta.url))
+  const c = join(dir, 'comments.json')
+  const run = (comments) => { writeFileSync(c, JSON.stringify(comments)); return execFileSync('node', [cli, f, c, '--mockup']).toString().trim() }
+  assert.equal(run([plan]), 'missing')
+  assert.equal(run([hold]), 'posted')
+})
+
+test('T8 wiring: on-comment.yml plan-review job works out the mockup state and passes --mockup to every plan-verdict call', () => {
+  const all = readFileSync(new URL('../../.github/workflows/on-comment.yml', import.meta.url), 'utf8')
+  const job = all.slice(all.indexOf('\n  plan-review:\n'), all.indexOf('\n  plan-review-outcome:\n'))
+  assert.ok(job.length > 100, 'plan-review job not found')
+  assert.match(job, /signoff-route\.mjs "\$D\/issue\.md" "\$D\/comments\.json" --mockup > "\$D\/mockup"/)
+  const calls = job.split('\n').filter((l) => l.includes('plan-verdict.mjs'))
+  assert.ok(calls.length >= 3, `expected 3 plan-verdict calls, got ${calls.length}`)
+  for (const l of calls) assert.match(l, /--mockup "\$MOCKUP"/, l.trim())
+})
+
 test('(19) bot notes after the hold do not change the answer; ownerQuestionKind kinds', () => {
   const notes = [{ body: '<!-- pipeline-note -->\nworking' }, { body: '<!-- flow-checklist:3 -->\nx' }, { body: '<!-- work-run:3 -->\nx' }, { body: '🔄 the blocker has since closed' }]
   assert.equal(isDesignHold({ labels: [], comments: [hold, ...notes], noChildren: true }), true)
