@@ -177,8 +177,6 @@
       "cancellation": "annulation"
     },
     "filters": {
-      "settings": "Paramètres du calendrier",
-      "view": "Affichage",
       "all": "Tous",
       "map": "Carte",
       "cancelled": "Afficher les annulés",

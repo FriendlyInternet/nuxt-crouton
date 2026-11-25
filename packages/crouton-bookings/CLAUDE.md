@@ -46,12 +46,12 @@ CroutonBooking
 ├── Calendar.vue        - Calendar date picker
 ├── CalendarFoldHandle.vue - icon-only toggle (`calendar-days` in week, `calendar-minus-2` in month; tap/Enter/Space) that switches calendarView month ↔ week (#4516)
 ├── List.vue            - Bookings list; `listToggles` (Panel only) puts Show cancelled / Map (Map only with coordinates) on the first month label, or atop a loading/error/empty list (#4492)
-├── ListToggles.vue     - the Show cancelled / Map text toggles List.vue renders (internal)
+├── ListToggles.vue     - the Show cancelled / Map text toggles List.vue renders, and PanelFilters renders (Show cancelled only) on composed pages (internal)
 ├── BookingCard.vue     - Individual booking card
 ├── BookingCreateCard.vue - Booking creation form
 ├── LocationTabs.vue   - CroutonBookingsLocationTabs: one sideways-scrolling location tab row (optional "All", admin "+"; hidden with one location), shared by the panel and the booking form (#4471)
 ├── DateBadge.vue       - Date display badge
-├── PanelFilters.vue    - Filter controls; `viewToggles` (default on) = Panel mode: only the admin no-locations prompt renders; with `viewToggles` off it renders the cog row (View · Show cancelled) and the location tab row (composed pages); in the Panel, Show cancelled and Map live on the list (#4492)
+├── PanelFilters.vue    - Filter controls; `viewToggles` (default on) = Panel mode: only the admin no-locations prompt renders; with `viewToggles` off it renders the Show cancelled text toggle (`ListToggles`, #4562) and the location tab row (composed pages); in the Panel, Show cancelled and Map live on the list (#4492)
 └── PanelMap.vue        - Map display
 ```
 

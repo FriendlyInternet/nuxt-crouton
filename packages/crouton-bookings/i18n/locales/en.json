@@ -177,8 +177,6 @@
       "cancellation": "cancellation"
     },
     "filters": {
-      "settings": "Calendar settings",
-      "view": "View",
       "all": "All",
       "map": "Map",
       "cancelled": "Show cancelled",

@@ -10,11 +10,11 @@ interface Props {
   showCancelled?: boolean
   /** Whether user can manage locations (admin) */
   canManageLocations?: boolean
-  /** Panel mode (default): only the admin "no locations yet" prompt renders — the Panel shows the month label, the close X and the fold handle itself (#4516). Off on composed pages, where this renders the cog (Show cancelled) and the location tab row itself (#4471, #4492). */
+  /** Panel mode (default): only the admin "no locations yet" prompt renders — the Panel shows the month label, the close X and the fold handle itself (#4516). Off on composed pages, where this renders the Show cancelled text toggle (the same `ListToggles` the Panel's list uses, #4562) and the location tab row itself (#4471, #4492). */
   viewToggles?: boolean
 }
 
-const props = withDefaults(defineProps<Props>(), {
+withDefaults(defineProps<Props>(), {
   showCancelled: false,
   viewToggles: true,
   canManageLocations: false,
@@ -27,43 +27,19 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useT()
-
-const hasActiveFilter = computed(() => props.selectedLocations.length > 0 || props.showCancelled)
-
-const keepOpen = (e: Event) => e.preventDefault()
-
-// Only rendered on composed pages (!viewToggles); in the Panel, Show cancelled and Map live on the list (#4492)
-const settingsItems = computed(() => [
-  [
-    { type: 'label' as const, label: t('bookings.filters.view') },
-    {
-      type: 'checkbox' as const,
-      label: t('bookings.filters.cancelled'),
-      icon: 'i-lucide-x-circle',
-      checked: props.showCancelled,
-      onUpdateChecked: (v: boolean) => emit('update:showCancelled', v),
-      onSelect: keepOpen,
-    },
-  ],
-])
 </script>
 
 <template>
   <div class="flex flex-col gap-3">
-    <!-- Composed pages only: the settings cog row (the Panel has no toolbar row, #4516) -->
+    <!-- Composed pages only: the Show cancelled text toggle row (the Panel has no toolbar row, #4516) -->
     <div v-if="!viewToggles" class="flex items-center justify-between gap-2">
       <div class="flex items-center gap-1 shrink-0 ms-auto">
-        <UDropdownMenu :items="settingsItems">
-          <UChip :show="hasActiveFilter" color="primary" size="md">
-            <UButton
-              size="sm"
-              color="neutral"
-              variant="ghost"
-              icon="i-lucide-settings"
-              :aria-label="t('bookings.filters.settings')"
-            />
-          </UChip>
-        </UDropdownMenu>
+        <CroutonBookingsListToggles
+          :show-cancelled="showCancelled"
+          :show-map="false"
+          :can-show-map="false"
+          @update:show-cancelled="emit('update:showCancelled', $event)"
+        />
       </div>
     </div>
 

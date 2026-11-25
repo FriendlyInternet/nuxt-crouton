@@ -29,7 +29,7 @@ describe('viewToggles', () => {
     expect(filters).toMatch(/viewToggles:\s*true/)
   })
 
-  // covers: T1 — #4516: the Panel has no Week/Month, Today or fold; the cog row is composed-page only
+  // covers: T1 — #4516: the Panel has no Week/Month, Today or fold; the toggle row is composed-page only
   it('no Week/Month, Today or fold control; the toolbar row only renders when !viewToggles', () => {
     expect(filters).not.toMatch(/showCalendar|show-calendar/)
     expect(filters).not.toMatch(/calendarView|calendar-view/)
@@ -38,22 +38,22 @@ describe('viewToggles', () => {
     expect(filters).not.toMatch(/UFieldGroup/)
     expect(filters).not.toMatch(/bookings\.filters\.(week|month|today|foldCalendar|unfoldCalendar)/)
     expect(panel).not.toMatch(/showCalendar/)
-    // the toolbar row is behind !viewToggles and the cog is inside it
+    // the toolbar row is behind !viewToggles and the Show cancelled text toggle is inside it (#4562)
     const row = filters.indexOf('<div v-if="!viewToggles"')
     expect(row).toBeGreaterThan(-1)
-    const cog = filters.indexOf('<UDropdownMenu')
+    const toggle = filters.indexOf('<CroutonBookingsListToggles')
     const prompt = filters.indexOf('locations.length === 0 && canManageLocations')
-    expect(cog).toBeGreaterThan(row)
-    expect(cog).toBeLessThan(prompt)
+    expect(toggle).toBeGreaterThan(row)
+    expect(toggle).toBeLessThan(prompt)
     // the removed i18n keys are gone from every locale
     for (const lang of ['en', 'nl', 'fr']) {
       const json = JSON.parse(readFileSync(resolve(__dirname, `../i18n/locales/${lang}.json`), 'utf8'))
-      for (const key of ['week', 'month', 'today', 'foldCalendar', 'unfoldCalendar'])
+      for (const key of ['week', 'month', 'today', 'foldCalendar', 'unfoldCalendar', 'settings', 'view'])
         expect(json.bookings.filters[key]).toBeUndefined()
     }
   })
 
-  // covers: T6 — the admin "no locations yet" prompt keeps working from the Panel
+  // covers: T1 — the admin "no locations yet" prompt keeps working from the Panel
   it('Panel still renders the no-locations prompt for admins, outside the toolbar row', () => {
     const at = panel.indexOf('<CroutonBookingsPanelFilters')
     expect(at).toBeGreaterThan(-1)
@@ -69,17 +69,20 @@ describe('viewToggles', () => {
     expect(prompt).toBeGreaterThan(-1)
     expect(filters).toMatch(/emit\('add-location'\)/)
     const rowStart = filters.indexOf('<div v-if="!viewToggles"')
-    const rowEnd = filters.indexOf('</UDropdownMenu>', rowStart)
+    const rowEnd = filters.indexOf('<CroutonBookingsListToggles', rowStart)
+    expect(rowEnd).toBeGreaterThan(rowStart)
     expect(prompt).toBeGreaterThan(rowEnd)
   })
 
-  // covers: T4 — #4492: Map and Show cancelled moved to the list; the cog only on composed pages
-  it('no Map item; the cog (with Show cancelled) only renders when !viewToggles', () => {
+  // covers: T1 — #4492/#4562: Map lives on the list; composed pages get the Show cancelled text toggle, no cog
+  it('no Map item and no cog; the Show cancelled text toggle only renders when !viewToggles', () => {
     expect(filters).not.toMatch(/bookings\.filters\.map/)
     expect(filters).not.toMatch(/hasLocationsWithCoordinates/)
     expect(filters).not.toMatch(/update:showMap/)
-    expect(filters).toMatch(/<div v-if="!viewToggles"[\s\S]*?<UDropdownMenu/)
-    expect(filters.match(/<UDropdownMenu/g)?.length).toBe(1)
+    expect(filters).toMatch(/<div v-if="!viewToggles"[\s\S]*?<CroutonBookingsListToggles/)
+    expect(filters.match(/<CroutonBookingsListToggles/g)?.length).toBe(1)
+    expect(filters).toMatch(/<CroutonBookingsListToggles[\s\S]*?:can-show-map="false"/)
+    expect(filters).not.toMatch(/UDropdownMenu|UChip|i-lucide-settings|settingsItems|hasActiveFilter/)
     expect(filters).toMatch(/showCancelled\?:\s*boolean/)
     expect(filters).toMatch(/showCancelled:\s*false/)
     expect(panel.indexOf('<CroutonBookingsPanelFilters')).toBeGreaterThan(-1)
