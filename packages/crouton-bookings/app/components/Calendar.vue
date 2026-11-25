@@ -365,6 +365,9 @@ onBeforeUnmount(card.close)
       @select="onWeekSelect"
       @today="emit('today')"
     >
+      <template v-if="$slots['header-start']" #header-start>
+        <slot name="header-start" />
+      </template>
       <template v-if="$slots['header-end']" #header-end>
         <slot name="header-end" />
       </template>
@@ -421,6 +424,9 @@ onBeforeUnmount(card.close)
 
     <!-- Month View -->
     <CroutonCalendarMonth v-else v-model:date="date" @select="onMonthSelect" @today="emit('today')">
+      <template v-if="$slots['header-start']" #header-start>
+        <slot name="header-start" />
+      </template>
       <template v-if="$slots['header-end']" #header-end>
         <slot name="header-end" />
       </template>

@@ -1,7 +1,7 @@
 /**
  * #4516 — the panel's top row is the calendar's own month/week label row, with the
- * full-screen close (`#toolbar-end`) at its right end, and a fold handle sits under
- * the calendar. Reads the real .vue templates (the SFCs need the Nuxt UI runtime to
+ * full-screen close (`#toolbar-end`) at its right end and the month ↔ week toggle
+ * at its left end (`#header-start`); no row under the calendar. Reads the real .vue templates (the SFCs need the Nuxt UI runtime to
  * mount), same style as location-tabs-template.test.ts.
  */
 import { describe, it, expect } from 'vitest'
@@ -45,10 +45,12 @@ describe('panel header row + fold handle (#4516)', () => {
       const [node] = find(calendar.ast, tag)
       expect(node, tag).toBeTruthy()
       expect(directive(node, 'on', 'today')).toBe(`emit('today')`)
-      const tpl = slotTemplate(node, 'header-end')
-      expect(tpl, `${tag} #header-end`).toBeTruthy()
-      expect(directive(tpl, 'if')).toContain(`$slots['header-end']`)
-      expect(find(tpl, 'slot').some(s => (s.props ?? []).some((p: Node) => p.name === 'name' && p.value?.content === 'header-end'))).toBe(true)
+      for (const name of ['header-start', 'header-end']) {
+        const tpl = slotTemplate(node, name)
+        expect(tpl, `${tag} #${name}`).toBeTruthy()
+        expect(directive(tpl, 'if')).toContain(`$slots['${name}']`)
+        expect(find(tpl, 'slot').some(s => (s.props ?? []).some((p: Node) => p.name === 'name' && p.value?.content === name))).toBe(true)
+      }
     }
     expect(calendar.source).toMatch(/'today':\s*\[\]/)
   })
@@ -66,14 +68,16 @@ describe('panel header row + fold handle (#4516)', () => {
     expect(panel.source).toMatch(/const onGoToToday = store\.goToToday/)
   })
 
-  it('the fold handle sits after the calendar and before the location tabs, bound to calendarView', () => {
-    const t = panel.template
-    const cal = t.indexOf('<CroutonBookingsCalendar\n')
-    const handle = t.indexOf('<CroutonBookingsCalendarFoldHandle v-model="calendarView"')
-    const tabs = t.indexOf('<CroutonBookingsLocationTabs')
-    expect(cal).toBeGreaterThan(-1)
-    expect(handle).toBeGreaterThan(cal)
-    expect(tabs).toBeGreaterThan(handle)
+  it('the month ↔ week toggle sits in the calendar\'s #header-start (left of the label), bound to calendarView; no row under the calendar', () => {
+    const [cal] = find(panel.ast, 'CroutonBookingsCalendar')
+    const start = slotTemplate(cal, 'header-start')
+    expect(start).toBeTruthy()
+    const [toggle] = find(start, 'CroutonBookingsCalendarFoldHandle')
+    expect(toggle).toBeTruthy()
+    expect(directive(toggle, 'model')).toBe('calendarView')
+    // exactly one toggle in the panel, so nothing is left under the calendar
+    expect(find(panel.ast, 'CroutonBookingsCalendarFoldHandle')).toHaveLength(1)
+    expect(panel.template).not.toMatch(/Drag\/tap handle/)
   })
 
   it('the handle label exists in every locale', () => {

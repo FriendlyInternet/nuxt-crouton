@@ -300,7 +300,7 @@ defineExpose({
           />
         </div>
 
-        <!-- Calendar: its label row is the panel's top row; #toolbar-end (the close X) sits at its right end (#4516) -->
+        <!-- Calendar: its label row is the panel's top row; the month ↔ week toggle sits at its left end, #toolbar-end (the close X) at its right end (#4516) -->
         <div class="px-2">
           <CroutonBookingsCalendar
             v-model:filters="filterState"
@@ -318,15 +318,13 @@ defineExpose({
             @hover-booking="(id) => hoveredBookingId = id"
             @today="onGoToToday"
           >
+            <template #header-start>
+              <CroutonBookingsCalendarFoldHandle v-model="calendarView" />
+            </template>
             <template v-if="$slots['toolbar-end']" #header-end>
               <slot name="toolbar-end" />
             </template>
           </CroutonBookingsCalendar>
-        </div>
-
-        <!-- Drag/tap handle: folds month ↔ week (#4516) -->
-        <div class="px-2" :class="{ 'pb-1': resolvedLocations.length === 0 }">
-          <CroutonBookingsCalendarFoldHandle v-model="calendarView" />
         </div>
 
         <!-- Location tabs: one row under the calendar, stays when it folds (#4471); the block's own border-b is the one line under it -->

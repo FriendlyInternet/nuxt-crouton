@@ -20,6 +20,7 @@ File: `app/components/Month.vue`
 | Slot | Props |
 | --- | --- |
 | `day` | `{ day: DateValue; jsDate: Date; neighbour: boolean; }` |
+| `header-start` | `any` |
 | `header-end` | `any` |
 
 ## CroutonCalendarWeek
@@ -47,6 +48,7 @@ File: `app/components/Week.vue`
 
 | Slot | Props |
 | --- | --- |
+| `header-start` | `{}` |
 | `header-end` | `{}` |
 | `day` | `{ day: any; jsDate: any; }` |
 | `day-action` | `{ day: any; jsDate: any; weekday: any; dayNumber: any; }` |

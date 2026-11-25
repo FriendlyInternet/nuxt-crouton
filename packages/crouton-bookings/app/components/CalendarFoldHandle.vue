@@ -2,9 +2,10 @@
 /**
  * CroutonBookingsCalendarFoldHandle
  *
- * The small chevron button under the panel calendar (#4516). In week view it
- * points down (opens the month); in month view it points up (folds to the
- * week). A tap, Enter or Space toggles.
+ * The icon-only month ↔ week toggle at the left end of the panel calendar's
+ * label row (#4516), mirroring the close X on the right. In week view it shows
+ * `calendar-days` (tap → month); in month view `calendar-minus` (tap → week).
+ * A tap, Enter or Space toggles.
  */
 const view = defineModel<'week' | 'month'>({ required: true })
 
@@ -16,15 +17,13 @@ function toggle() {
 </script>
 
 <template>
-  <div class="flex justify-center">
-    <UButton
-      color="neutral"
-      variant="ghost"
-      size="xs"
-      :icon="view === 'month' ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
-      :aria-expanded="view === 'month'"
-      :aria-label="t('bookings.panel.calendarHandle')"
-      @click="toggle"
-    />
-  </div>
+  <UButton
+    color="neutral"
+    variant="ghost"
+    size="sm"
+    :icon="view === 'month' ? 'i-lucide-calendar-minus' : 'i-lucide-calendar-days'"
+    :aria-expanded="view === 'month'"
+    :aria-label="t('bookings.panel.calendarHandle')"
+    @click="toggle"
+  />
 </template>

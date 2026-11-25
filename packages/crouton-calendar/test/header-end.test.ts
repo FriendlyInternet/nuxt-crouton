@@ -52,7 +52,12 @@ function mountIt(comp: Component, withSlot: boolean) {
     props: { 'date': new Date(2020, 0, 15), 'onUpdate:date': (d: Date) => dates.push(d) },
     slots: {
       day: () => h('span'),
-      ...(withSlot ? { 'header-end': () => h('button', { 'data-close': '' }, 'X') } : {}),
+      ...(withSlot
+        ? {
+            'header-start': () => h('button', { 'data-toggle': '' }, 'T'),
+            'header-end': () => h('button', { 'data-close': '' }, 'X'),
+          }
+        : {}),
     },
     global: { stubs },
   })
@@ -77,6 +82,16 @@ describe('calendar label row: #header-end + today (#4516)', () => {
       wrapper.unmount()
     })
 
+    it(`${c.name}: #header-start renders in the label's own row, at its left end`, () => {
+      const { wrapper } = mountIt(c.comp(), true)
+      const label = wrapper.element.querySelector(c.label)!
+      const toggle = wrapper.element.querySelector('[data-toggle]')!
+      expect(toggle).toBeTruthy()
+      const row = label.parentElement!.parentElement!
+      expect(row.firstElementChild!.contains(toggle)).toBe(true)
+      wrapper.unmount()
+    })
+
     it(`${c.name}: without the slot the row still renders the centred label`, () => {
       const { wrapper } = mountIt(c.comp(), false)
       const label = wrapper.element.querySelector(c.label)!
@@ -85,6 +100,7 @@ describe('calendar label row: #header-end + today (#4516)', () => {
       expect(row.className).toContain('grid-cols-[1fr_auto_1fr]')
       expect(row.children).toHaveLength(3)
       expect(row.lastElementChild!.children).toHaveLength(0)
+      expect(row.firstElementChild!.children).toHaveLength(0)
       wrapper.unmount()
     })
 

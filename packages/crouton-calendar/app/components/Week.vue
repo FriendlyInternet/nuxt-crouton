@@ -176,9 +176,11 @@ const sizeClasses = computed(() => {
 
 <template>
   <div class="flex flex-col touch-pan-y">
-    <!-- Header: Nav + Month Label (calendar style); #header-end sits at the right edge (#4516) -->
+    <!-- Header: Nav + Month Label (calendar style); #header-start / #header-end sit at the edges (#4516) -->
     <div class="grid grid-cols-[1fr_auto_1fr] items-center">
-      <span />
+      <div class="flex justify-start">
+        <slot name="header-start" />
+      </div>
       <div class="flex items-center gap-1">
         <UButton
           icon="i-lucide-chevrons-left"

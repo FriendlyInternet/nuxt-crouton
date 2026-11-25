@@ -213,7 +213,7 @@ test.describe(FIXTURE === 'with-bookings' ? 'bookings full screen' : 'bookings f
     expect(fits).toBe(true)
   })
 
-  // covers: T4 — #4516: one top row (label + X) and a chevron button that folds month ↔ week
+  // covers: T4 — #4516: one top row (toggle + label + X); the toggle at the left folds month ↔ week
   test('phone: the month label and the close share the top row; tapping the chevron folds and unfolds', async ({ page, baseURL }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await openPage(page, baseURL)
@@ -225,8 +225,13 @@ test.describe(FIXTURE === 'with-bookings' ? 'bookings full screen' : 'bookings f
 
     const closeBox = (await close.boundingBox())!
     const labelBox = (await label.boundingBox())!
+    const toggleBox = (await handleOf(dialog).boundingBox())!
     const panelBox = (await panel.boundingBox())!
     expect(Math.abs(centreY(closeBox) - centreY(labelBox))).toBeLessThanOrEqual(4)
+    // the toggle is on the same row, at the left of the label (mirroring the X)
+    expect(Math.abs(centreY(toggleBox) - centreY(labelBox))).toBeLessThanOrEqual(4)
+    expect(toggleBox.x + toggleBox.width).toBeLessThanOrEqual(labelBox.x)
+    expect(Math.abs(toggleBox.height - closeBox.height)).toBeLessThanOrEqual(1)
     expect(labelBox.y - panelBox.y).toBeLessThanOrEqual(16)
 
     const scroll = dialog.locator('.booking-panel > :nth-child(2)')
@@ -236,7 +241,7 @@ test.describe(FIXTURE === 'with-bookings' ? 'bookings full screen' : 'bookings f
     })
     const before = await positions()
 
-    // week → month: the chevron points down and opens the month
+    // week → month: the toggle opens the month
     await expect(handleOf(dialog)).toHaveAttribute('aria-expanded', 'false')
     await handleOf(dialog).click()
     await expect(handleOf(dialog)).toHaveAttribute('aria-expanded', 'true')
@@ -244,7 +249,7 @@ test.describe(FIXTURE === 'with-bookings' ? 'bookings full screen' : 'bookings f
     await expect(dialog.getByRole('button', { name: 'Next week' })).toHaveCount(0)
     expect(await positions()).toEqual(before)
 
-    // month → week: the chevron points up and folds to one week row
+    // month → week: the toggle folds to one week row
     await handleOf(dialog).click()
     await expect(handleOf(dialog)).toHaveAttribute('aria-expanded', 'false')
     await expect(dialog.getByRole('button', { name: 'Next week' })).toBeVisible()

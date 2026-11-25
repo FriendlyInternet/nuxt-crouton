@@ -22,6 +22,8 @@ const date = defineModel<Date>('date', { required: true })
 
 defineSlots<{
   'day'(props: { day: DateValue, jsDate: Date, neighbour: boolean }): any
+  /** Left end of the label row (e.g. a month ↔ week toggle) */
+  'header-start'?(): any
   /** Right end of the label row (e.g. a close button) */
   'header-end'?(): any
 }>()
@@ -105,9 +107,11 @@ function onActivate(value: any) {
 
 <template>
   <div class="flex flex-col w-full touch-pan-y">
-    <!-- Label row; #header-end sits at the right edge, the label stays centred (#4516) -->
+    <!-- Label row; #header-start / #header-end sit at the edges, the label stays centred (#4516) -->
     <div class="grid grid-cols-[1fr_auto_1fr] items-center">
-      <span />
+      <div class="flex justify-start">
+        <slot name="header-start" />
+      </div>
       <div class="flex items-center gap-1">
         <UButton
           icon="i-lucide-chevrons-left"

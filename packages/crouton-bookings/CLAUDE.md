@@ -36,7 +36,7 @@ Booking system layer for Nuxt applications: bookings for locations with or witho
 CroutonBooking
 ├── Slot/
 │   └── Indicator.vue   - Visual slot indicator; its hover highlight (hoverBooking) reacts to mouse/pen only — touch is ignored (#4302)
-├── Panel.vue           - Main booking sidebar (CroutonBookingsPanel; self-fetches via useBookingsList); forwards a `#toolbar-end` slot onto the calendar's month/week label row (`#header-end`, the admin full-screen close); the month label also runs `store.goToToday`; `CalendarFoldHandle` under the calendar folds month ↔ week (#4516)
+├── Panel.vue           - Main booking sidebar (CroutonBookingsPanel; self-fetches via useBookingsList); forwards a `#toolbar-end` slot onto the calendar's month/week label row (`#header-end`, the admin full-screen close); the month label also runs `store.goToToday`; `CalendarFoldHandle` at the left end of that row (`#header-start`) folds month ↔ week (#4516)
 ├── LayoutCalendar.vue  - CroutonBookingsLayoutCalendar: the calendar as a placeable layout block (#709), registered in croutonLayoutBlocks as `bookings-calendar` (compound, minWidth 520, minHeight 480, fill). Wraps CroutonBookingsPanel; the deterministic layout pass picks it → calendar-primary.
 ├── Layout/             - ATOMIC layout blocks (#924, "bookings-from-blocks" gap test) — the Panel's sub-surfaces broken out so a user can reassemble the native layout from `croutonLayoutBlocks`. Each self-fetches (shared useFetch key per team + `dedupe: 'defer'` ⇒ one call per key; see *useFetch keys carry the team* below) + coordinates cross-pane via useBookingsLayoutFilters.
 │   ├── List.vue         - CroutonBookingsLayoutList (`bookings-list`) — the list, shared-filter aware
@@ -44,7 +44,7 @@ CroutonBooking
 │   ├── Locations.vue    - CroutonBookingsLayoutLocations (`bookings-locations`) — selectable location list → shared location filter (one location at a time, #4471) (a robust list, NOT the geo/maplibre PanelMap — see #924 gap notes)
 │   └── Filters.vue      - CroutonBookingsLayoutFilters (`bookings-filters`) — status/location/cancelled → shared store (Panel-only view controls hidden via `PanelFilters` `view-toggles=false`, #2563)
 ├── Calendar.vue        - Calendar date picker
-├── CalendarFoldHandle.vue - chevron button (down in week, up in month; tap/Enter/Space) that switches calendarView month ↔ week (#4516)
+├── CalendarFoldHandle.vue - icon-only toggle (`calendar-days` in week, `calendar-minus` in month; tap/Enter/Space) that switches calendarView month ↔ week (#4516)
 ├── List.vue            - Bookings list; `listToggles` (Panel only) puts Show cancelled / Map (Map only with coordinates) on the first month label, or atop a loading/error/empty list (#4492)
 ├── ListToggles.vue     - the Show cancelled / Map text toggles List.vue renders (internal)
 ├── BookingCard.vue     - Individual booking card

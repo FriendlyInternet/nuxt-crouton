@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 /**
- * #4516 — the chevron button under the panel calendar folds month ↔ week.
+ * #4516 — the icon-only toggle at the left of the panel calendar's label row folds month ↔ week.
  * Compiles and mounts the real CalendarFoldHandle.vue (same way as
  * slot-indicator-touch.test.ts). The `useT` auto-import is stubbed to return the key.
  */
@@ -17,7 +17,7 @@ const source = readFileSync(file, 'utf8')
 let Handle: Component
 
 // A plain <button> that passes attrs (aria-*, class) and the click through,
-// and exposes the `icon` prop as data-icon so the chevron can be checked
+// and exposes the `icon` prop as data-icon so the icon can be checked
 const UButton = defineComponent({
   inheritAttrs: false,
   props: { icon: { type: String, default: undefined } },
@@ -86,11 +86,19 @@ describe('CalendarFoldHandle (#4516)', () => {
     expect(w.find('button').attributes('aria-expanded')).toBe('false')
   })
 
-  it('shows a down chevron in week and an up chevron in month', async () => {
+  it('shows calendar-days in week and calendar-minus in month', async () => {
     const { w } = mountHandle('week')
-    expect(w.find('button').attributes('data-icon')).toBe('i-lucide-chevron-down')
+    expect(w.find('button').attributes('data-icon')).toBe('i-lucide-calendar-days')
     await click(w)
-    expect(w.find('button').attributes('data-icon')).toBe('i-lucide-chevron-up')
+    expect(w.find('button').attributes('data-icon')).toBe('i-lucide-calendar-minus')
+  })
+
+  it('is icon-only: no text, ghost/neutral, same size as the close X (sm)', () => {
+    const { w } = mountHandle('week')
+    expect(w.find('button').text()).toBe('')
+    expect(source).toMatch(/variant="ghost"/)
+    expect(source).toMatch(/color="neutral"/)
+    expect(source).toMatch(/size="sm"/)
   })
 
   it('has no drag code and no touch-action: none any more', () => {
