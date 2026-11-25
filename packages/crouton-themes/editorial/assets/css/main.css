@@ -46,7 +46,10 @@
   /* Base geometry token (#1594): cards get 2× = 12px, like the callouts. */
   --ui-radius: 0.375rem;
   color: var(--editorial-ink);
-  font: 400 17px/1.6 var(--editorial-serif);
+  /* Family only — a font-size here lands on <html> and inflates every rem in
+     the app (text-sm became 14.9px), which broke tight rows at phone width.
+     The 17px reading size lives on body below. */
+  font-family: var(--editorial-serif);
 }
 
 [data-theme="editorial"] body,
@@ -105,15 +108,17 @@ body.theme-editorial,
   line-height: 1.35;
 }
 
-/* Prose links — grey with a faint underline */
-:is([data-theme="editorial"], .theme-editorial) :is(p, li, blockquote, td) a {
+/* Prose links — grey with a faint underline. Running text only: links that
+   are chrome (nav tabs, menus, buttons rendered as <a>) carry a data-slot or
+   sit in a nav/tablist and get no underline. */
+:is([data-theme="editorial"], .theme-editorial) :is(p, li, blockquote, td) a:not([data-slot], [role="tab"], [role="button"], [role="menuitem"], :where(nav, [role="tablist"], [role="menu"]) a) {
   color: var(--editorial-link);
   text-decoration: underline;
   text-decoration-color: rgb(103 103 103 / .3);
   text-underline-offset: 3px;
 }
 
-:is([data-theme="editorial"], .theme-editorial) :is(p, li, blockquote, td) a:hover {
+:is([data-theme="editorial"], .theme-editorial) :is(p, li, blockquote, td) a:not([data-slot], [role="tab"], [role="button"], [role="menuitem"], :where(nav, [role="tablist"], [role="menu"]) a):hover {
   color: var(--editorial-ink);
   text-decoration-color: currentColor;
 }
@@ -214,6 +219,7 @@ body.theme-editorial,
   border-radius: 100px;
   min-height: 2.5rem;
   padding-inline: 1.125rem;
+  white-space: nowrap; /* a pill never breaks its label over two lines */
   transition: background-color 120ms ease, color 120ms ease;
 }
 
@@ -305,6 +311,32 @@ body.theme-editorial,
 .editorial-link:hover {
   color: var(--editorial-ink);
   text-decoration-color: currentColor;
+}
+
+/* ============================================
+   STICKY ACTION BAR — text left, buttons right (e.g. the
+   unsaved-changes bar). Editorial's wider sans pills don't fit
+   beside the label on a phone, so the row wraps (label on its
+   own line, buttons right-aligned below) instead of squeezing
+   the label to one word per line; and it is opaque, so content
+   scrolling underneath doesn't show through as a second box.
+   ============================================ */
+
+:is([data-theme="editorial"], .theme-editorial) .sticky.justify-between:has(> :last-child button) {
+  flex-wrap: wrap;
+  row-gap: 0.5rem;
+  background-color: var(--editorial-paper);
+  border: 1px solid var(--editorial-hairline);
+  font-family: var(--editorial-sans);
+}
+
+:is([data-theme="editorial"], .theme-editorial) .sticky.justify-between:has(> :last-child button) > :last-child {
+  margin-inline-start: auto;
+}
+
+:is([data-theme="editorial"], .theme-editorial) .sticky.justify-between:has(> :last-child button) button {
+  font-family: var(--editorial-sans);
+  white-space: nowrap;
 }
 
 /* ============================================
