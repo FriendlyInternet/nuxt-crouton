@@ -290,6 +290,7 @@
   },
   "themeSettings": {
     "title": "Thema-instellingen",
+    "loadFailed": "De thema-instellingen konden niet worden geladen",
     "description": "Pas het uiterlijk van je team aan. Wijzigingen worden direct weergegeven.",
     "allowUserThemes": "Laat gebruikers hun eigen thema kiezen",
     "allowUserThemesDescription": "Indien uit, kunnen alleen beheerders thema's wisselen.",

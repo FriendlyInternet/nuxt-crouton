@@ -214,6 +214,10 @@ export function applyThemeSettings(settings: TeamThemeSettings, colorMode?: { pr
   }
 }
 
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err)
+}
+
 export function useTeamTheme() {
   const { teamId } = useTeamContext()
   const colorMode = useColorMode()
@@ -222,6 +226,9 @@ export function useTeamTheme() {
   const themeData = useState<TeamThemeSettings>('team-theme-data', () => ({}))
   // Tracks whether the initial fetch has completed (avoids re-fetch on hydration)
   const themeFetched = useState<boolean>('team-theme-fetched', () => false)
+  // Shared across callers so several useTeamTheme() users never each fetch (#4551)
+  const themeError = useState<string | null>('team-theme-error', () => null)
+  const themePending = useState<boolean>('team-theme-pending', () => false)
 
   // Computed theme with defaults applied
   const theme = computed<Required<TeamThemeSettings>>(() => ({
@@ -242,6 +249,8 @@ export function useTeamTheme() {
   // Refresh theme from API
   async function refresh() {
     if (!teamId.value) return
+    themePending.value = true
+    themeError.value = null
     try {
       const data = await $fetch<TeamThemeSettings>(
         `/api/teams/${teamId.value}/settings/theme`
@@ -250,10 +259,24 @@ export function useTeamTheme() {
       themeFetched.value = true
       applyThemeSettings(theme.value, colorMode)
     }
-    catch {
+    catch (err) {
+      themeError.value = errorMessage(err)
       themeFetched.value = true
     }
+    finally {
+      themePending.value = false
+    }
   }
+
+  // Self-load when the plugin could not (#4551): the team-theme plugin runs
+  // once per app boot, so an app that boots on a page with no team (e.g. the
+  // sign-in page) never loads the theme. Load once the team is known, unless
+  // the plugin (or another caller) already did or is doing it.
+  const needsLoad = computed(() => !!teamId.value && !themeFetched.value && !themePending.value)
+  function ensureLoaded() {
+    if (!import.meta.server && needsLoad.value) refresh()
+  }
+  watch(teamId, ensureLoaded, { immediate: true })
 
   // Update theme (for admin UI)
   async function updateTheme(settings: Partial<TeamThemeSettings>) {
@@ -286,6 +309,8 @@ export function useTeamTheme() {
   return {
     theme: readonly(theme),
     isLoading,
+    /** Message of the last failed load, or null */
+    error: readonly(themeError),
     teamId,
     updateTheme,
     resetTheme,
