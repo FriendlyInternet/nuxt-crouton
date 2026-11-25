@@ -11,6 +11,11 @@ const h = vi.hoisted(() => ({ create: null as any, update: null as any }))
 vi.mock('@fyit/crouton-auth/server/utils/team', () => ({
   resolveTeamAndCheckMembership: async () => ({ team: { id: 't1' }, user: { id: 'u1' }, membership: { role: 'member' } }),
 }))
+// can() (#4108): a member has no action with no site config, so writes stay owner-scoped
+vi.mock('@fyit/crouton-auth/server/utils/team-auth', () => ({
+  can: async () => false,
+  requireCan: async () => { throw Object.assign(new Error('Forbidden'), { status: 403 }) },
+}))
 vi.mock('../collections/products/server/database/queries', async (orig) => ({
   ...(await orig() as object),
   createSalesProduct: (d: any) => h.create(d),

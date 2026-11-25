@@ -2,6 +2,7 @@
 // The resolveTeamAndCheckMembership utility handles team resolution and auth
 import { updatePositionPagesPage } from '../../../../../database/queries'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { can } from '@fyit/crouton-auth/server/utils/team-auth'
 
 export default defineEventHandler(async (event) => {
   const timing = useServerTiming(event)
@@ -12,7 +13,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const authTimer = timing.start('auth')
-  const { team, user, membership } = await resolveTeamAndCheckMembership(event)
+  const { team, user } = await resolveTeamAndCheckMembership(event)
   authTimer.end()
 
   const body = await readBody(event)
@@ -26,7 +27,7 @@ export default defineEventHandler(async (event) => {
   const parentId = body.parentId ?? null
 
   const dbTimer = timing.start('db')
-  const result = await updatePositionPagesPage(team.id, pageId, parentId, body.order, user.id, { role: membership.role })
+  const result = await updatePositionPagesPage(team.id, pageId, parentId, body.order, user.id, { seesAll: await can(team.id, user.id, 'pages:edit', event) })
   dbTimer.end()
   return result
 })

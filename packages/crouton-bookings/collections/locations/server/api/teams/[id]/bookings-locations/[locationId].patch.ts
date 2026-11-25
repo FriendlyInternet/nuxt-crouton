@@ -1,8 +1,8 @@
 // Team-based endpoint - requires @fyit/crouton-auth package
-// The requireTeamAdmin utility handles team resolution and auth
+// The requireCan utility handles team resolution and auth
 import { z } from 'zod'
 import { assertBookingsLocationReferences, updateBookingsLocation, getBookingsLocationsByIds } from '../../../../database/queries'
-import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
+import { requireCan, can } from '@fyit/crouton-auth/server/utils/team-auth'
 import { ensureLocationProducts } from '../../../../../../../server/utils/location-products'
 
 // A location lists each team product once, with a whole-number stock of at least 1 (#3967)
@@ -45,7 +45,7 @@ export default defineEventHandler(async (event) => {
   if (!locationId) {
     throw createError({ status: 400, statusText: 'Missing location ID' })
   }
-  const { team, user, membership } = await requireTeamAdmin(event)
+  const { team, user } = await requireCan(event, 'bookings:manage')
 
   const body = await readValidatedBody(event, bodySchema.parse)
   await assertBookingsLocationReferences(team.id, body)
@@ -80,7 +80,7 @@ export default defineEventHandler(async (event) => {
     blockedDates: body.blockedDates,
     maxBookingsPerMonth: body.maxBookingsPerMonth,
     translations: body.translations
-  } as Parameters<typeof updateBookingsLocation>[3], { role: membership.role })
+  } as Parameters<typeof updateBookingsLocation>[3], { seesAll: await can(team.id, user.id, 'bookings:manage', event) })
 
   // A PATCH that leaves products NULL (e.g. sends `products: null`) gets the own product back (#4044)
   return (await ensureLocationProducts(useDB(), team.id, location.id)) ?? location

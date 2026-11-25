@@ -3,6 +3,7 @@
 import { z } from 'zod'
 import { updateCroutonAsset } from '../../../../database/queries'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { can } from '@fyit/crouton-auth/server/utils/team-auth'
 
 // Hand-added body validation (#3377)
 const bodySchema = z.object({
@@ -22,7 +23,7 @@ export default defineEventHandler(async (event) => {
   if (!assetId) {
     throw createError({ status: 400, statusText: 'Missing asset ID' })
   }
-  const { team, user, membership } = await resolveTeamAndCheckMembership(event)
+  const { team, user } = await resolveTeamAndCheckMembership(event)
 
   const body = await readValidatedBody(event, bodySchema.parse)
 
@@ -38,5 +39,5 @@ export default defineEventHandler(async (event) => {
     height: body.height,
     alt: body.alt,
     uploadedAt: body.uploadedAt
-  } as Parameters<typeof updateCroutonAsset>[3], { role: membership.role })
+  } as Parameters<typeof updateCroutonAsset>[3], { seesAll: await can(team.id, user.id, 'collections:manage', event) })
 })

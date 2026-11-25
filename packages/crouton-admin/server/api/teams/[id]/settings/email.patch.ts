@@ -2,10 +2,10 @@
  * PATCH /api/teams/[id]/settings/email
  *
  * Update team email template overrides.
- * Requires team admin or owner role.
+ * Requires the `team:manage` action (owner/admin by default).
  */
 import { z } from 'zod'
-import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
+import { requireCan } from '@fyit/crouton-auth/server/utils/team-auth'
 import { useDB, eq } from '@fyit/crouton-auth/server/utils/database'
 import { teamSettings, type TeamEmailSettings } from '@fyit/crouton-auth/server/database/schema/auth'
 
@@ -26,7 +26,7 @@ const emailSettingsSchema = z.object({
 }).strict()
 
 export default defineEventHandler(async (event) => {
-  const { team } = await requireTeamAdmin(event)
+  const { team } = await requireCan(event, 'team:manage')
 
   const body = await readBody(event)
   const result = emailSettingsSchema.safeParse(body)

@@ -7,9 +7,14 @@
  *
  * @route /admin/[team]/team/email-templates
  */
-const { teamSlug, teamId } = useTeamContext()
+definePageMeta({
+  middleware: ['auth', 'can'],
+  can: 'team:manage'
+})
+
+const { teamId } = useTeamContext()
 const { t } = useT()
-const { isAdmin } = useTeam()
+const canManage = useCan('team:manage')
 const notify = useNotify()
 
 // Email types with metadata
@@ -178,25 +183,7 @@ onMounted(loadSettings)
 
 <template>
   <div class="p-4 sm:p-6">
-    <!-- Not a team admin -->
-    <div
-      v-if="!isAdmin"
-      class="text-center py-8"
-    >
-      <UIcon
-        name="i-lucide-shield-alert"
-        class="size-12 mx-auto mb-4 text-muted opacity-50"
-      />
-      <h3 class="text-lg font-medium">{{ $t('common.accessRestricted') }}</h3>
-      <p class="text-muted mt-2 max-w-md mx-auto">{{ $t('teams.adminAccessRequired') }}</p>
-      <NuxtLink :to="`/admin/${teamSlug}/team`">
-        <UButton
-          :label="$t('navigation.backToTeam')"
-          variant="outline"
-          class="mt-4"
-        />
-      </NuxtLink>
-    </div>
+    <TeamAccessRestricted v-if="!canManage" />
 
     <div v-else-if="isLoading" class="flex items-center justify-center py-8">
       <UIcon name="i-lucide-loader-2" class="size-6 animate-spin text-muted" />

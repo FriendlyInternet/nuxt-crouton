@@ -1,4 +1,8 @@
 {
+  "permissions": {
+    "bookingsCreate": "Create bookings",
+    "bookingsManage": "Manage all bookings"
+  },
   "bookings": {
     "title": "Bookings",
     "booking": "Booking",

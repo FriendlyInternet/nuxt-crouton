@@ -4,6 +4,8 @@
  *
  *   node scripts/lib/signoff-route.mjs <issue-file> <comments-json-file> [--route]
  *     → {"route":"signoff"|"none","reason":"..."}   (comments: [{body}] in thread order)
+ *   node scripts/lib/signoff-route.mjs <issue-file> <comments-json-file> --mockup
+ *     → none | posted | waived | missing   (was the mockup the ticket asked for posted? #4524)
  *
  * All decisions are PURE and tested (signoff-route.test.mjs). Used by label-router.yml,
  * apply-decompose-plan.mjs and on-comment.yml.
@@ -11,7 +13,8 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
-export const SIGNOFF_PATTERN = /hold for (a )?design sign-?off/i
+// Every phrase a ticket uses to ask for a mockup before the build (#4524 — "Mockup first" was missed).
+export const SIGNOFF_PATTERN = /hold for (a |the )?design sign-?off|\bmock-?up first\b|hold for (a |the )?mock-?up|design sign-?off (first|before)|show (me )?a mock-?up (first|before)/i
 export const SIGNOFF_MARKER = '<!-- design-signoff-hold -->'
 export const HOLD_HEADING = '## 🎨 Design sign-off needed before building'
 const HEADING_OWN_LINE = new RegExp(`^${HOLD_HEADING}\\s*$`, 'm')
@@ -32,12 +35,13 @@ export function isHoldComment(body = '') {
   return b.split('\n')[0].trim() === SIGNOFF_MARKER || HEADING_OWN_LINE.test(b)
 }
 
-/** Drop quoted material (blockquote lines, "…" / “…” spans, `code`) — a ticket that merely mentions the phrase isn't asking. */
+/** Drop quoted material (blockquote lines, "…" / “…” spans, `code`, [link text](url)) — a ticket that merely mentions the phrase isn't asking. */
 const unquoted = (text = '') =>
   String(text)
     .split('\n').filter((l) => !l.trim().startsWith('>')).join('\n')
     .replace(/```[\s\S]*?```/g, '').replace(/`[^`\n]*`/g, '')
     .replace(/"[^"\n]*"/g, '').replace(/“[^”\n]*”/g, '')
+    .replace(/\[[^\]\n]*\]\([^)\n]*\)/g, '')
 
 export const signoffRequested = (text = '') => SIGNOFF_PATTERN.test(unquoted(text))
 export const signoffAsked = (comments = []) => comments.some((c) => isHoldComment(c?.body))
@@ -47,6 +51,18 @@ export function signoffRoute({ text = '', comments = [] } = {}) {
   if (!signoffRequested(text)) return { route: 'none', reason: 'ticket does not ask for a design sign-off' }
   if (signoffAsked(comments)) return { route: 'none', reason: 'design sign-off already asked' }
   return { route: 'signoff', reason: 'ticket asks for a design sign-off first and none was posted' }
+}
+
+/** The plan review's own question when a requested mockup is missing (#4524). Plain text, no backticks:
+ *  the owner's `ok` writes it word for word into `## Decisions`, which is how `mockupState` sees the waiver. */
+export const MOCKUP_MISSING_QUESTION = 'this ticket asked for a mockup, but no mockup was posted — reply ok to build without one, or reply asking for the mockup'
+
+/** PURE. Was the mockup the ticket asked for posted? 'none' (not asked) | 'posted' | 'waived' (owner ok'd building without) | 'missing'. */
+export function mockupState({ text = '', comments = [] } = {}) {
+  if (!signoffRequested(text)) return 'none'
+  if (signoffAsked(comments)) return 'posted'
+  if (String(text).includes(MOCKUP_MISSING_QUESTION)) return 'waived'
+  return 'missing'
 }
 
 /** Which kind of question to the owner is this comment? 'hold' | 'plan' | 'verdict' | null (bot notes). */
@@ -71,6 +87,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (!issueFile) { console.error('usage: signoff-route.mjs <issue-file> <comments-json-file>'); process.exit(2) }
   let comments = []
   try { comments = JSON.parse(readFileSync(commentsFile, 'utf8')) } catch { /* no comments file → none */ }
-  const r = signoffRoute({ text: readFileSync(issueFile, 'utf8'), comments })
-  console.log(flag === '--route' ? r.route : JSON.stringify(r))
+  const text = readFileSync(issueFile, 'utf8')
+  if (flag === '--mockup') console.log(mockupState({ text, comments }))
+  else {
+    const r = signoffRoute({ text, comments })
+    console.log(flag === '--route' ? r.route : JSON.stringify(r))
+  }
 }

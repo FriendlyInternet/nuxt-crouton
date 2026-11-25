@@ -12,6 +12,7 @@
 import { z } from 'zod'
 import { eq, and } from 'drizzle-orm'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { can } from '@fyit/crouton-auth/server/utils/team-auth'
 import { requiredLocale } from '@fyit/crouton-catalog/required-locale'
 import {
   isBookingEmailEnabled,
@@ -38,7 +39,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const { team, user, membership } = await resolveTeamAndCheckMembership(event)
+  const { team, user } = await resolveTeamAndCheckMembership(event)
   const { bookingId } = getRouterParams(event)
 
   // Validate request body
@@ -110,8 +111,8 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  // Members may only resend for their own bookings (#3135)
-  if (membership?.role !== 'admin' && membership?.role !== 'owner' && booking.owner !== user.id) {
+  // Members may only resend for their own bookings (#3135), unless they have bookings:manage (#4108)
+  if (booking.owner !== user.id && !(await can(team.id, user.id, 'bookings:manage', event))) {
     throw createError({ status: 403, statusText: 'Not your booking' })
   }
 

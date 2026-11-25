@@ -1,28 +1,22 @@
 import { eq } from 'drizzle-orm'
 import { teamSettings } from '@fyit/crouton-core/server/database/schema/teamSettings'
 import { nanoid } from 'nanoid'
+import { requireCan } from '@fyit/crouton-auth/server/utils/team-auth'
 
 export default defineEventHandler(async (event) => {
-  const { id: teamId } = getRouterParams(event)
-  if (!teamId) {
+  const { id: routeTeamId } = getRouterParams(event)
+  if (!routeTeamId) {
     throw createError({
       status: 400,
       statusText: 'Team ID is required'
     })
   }
-  // @ts-expect-error Nitro auto-import from crouton-auth
-  const { user } = await requireUserSession(event)
+  // Resolves the team (id or slug), checks membership, then 403 unless the
+  // member may `translations:manage` (owner/admin by default). Replaces a call
+  // to an undefined helper that made every request a 500 (#4108).
+  const { team } = await requireCan(event, 'translations:manage')
+  const teamId = team.id
   const body = await readBody(event)
-
-  // Check if user is team admin or owner
-  // @ts-expect-error Nitro auto-import from crouton-auth
-  const hasAccess = await isTeamAdmin(teamId, user.id)
-  if (!hasAccess) {
-    throw createError({
-      status: 403,
-      statusText: 'Unauthorized - only team admins can modify translations'
-    })
-  }
 
   // Validate the translations structure
   if (body.translations && typeof body.translations !== 'object') {

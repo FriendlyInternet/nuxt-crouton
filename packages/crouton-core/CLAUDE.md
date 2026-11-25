@@ -87,7 +87,7 @@ export default defineNuxtConfig({
 | `app/components/QrCode.vue` | `CroutonQrCode` — renders any string (usually a URL) as an inline SVG QR code via `uqr` (zero-dep, SSR-safe). Props: `data`, `size?` (px). |
 | `app/components/DeleteButton.vue` | `CroutonDeleteButton` — two-step pill delete (click arms "sure?", click again emits `confirm`; mouseleave disarms). Props: `loading?`, `expanded?` (always show the label; collapsed mode is an icon pill that expands on hover — pointer-only, so forms/touch surfaces pass `expanded`). Parent performs the delete. A `UButton` (soft, neutral→error) so themes reach it (#1410); free height + `min-h-7`: stretches to match neighbors in a `flex items-stretch` row (sales form footers pair it with `CroutonFormActionButton class="flex-1"`). |
 | `server/api/upload-image.post.ts` | Authenticated file upload to blob storage. Type allow-list (`server/utils/upload-types.ts`): raster images + PDF/Office/text; SVG allowed (served sandboxed); HTML and video are refused (400). An empty `allowedTypes` falls back to the defaults. |
-| `server/api/upload-image.delete.ts` | Authenticated file deletion. Team-scoped: only `users/<self>/` or `teams/<activeTeam>/` (owner/admin); `..` refused (403). Legacy un-prefixed files can't be deleted here. |
+| `server/api/upload-image.delete.ts` | Authenticated file deletion. Team-scoped: only `users/<self>/` or `teams/<activeTeam>/` (`collections:manage`; owner/admin by default, #4108); `..` refused (403). Legacy un-prefixed files can't be deleted here. |
 | `server/routes/images/[pathname].get.ts` | Image serving with cache headers; always `nosniff`, and SVG gets `CSP: sandbox…` + `attachment`; anything else non-raster is sent as `attachment` |
 | `app/components/stubs/` | No-op stubs (`priority: -1`) for optional package components |
 | `app/composables/useCroutonApps.ts` | App registry — `hasApp('assets')` for optional package detection |
@@ -110,7 +110,7 @@ export default defineNuxtConfig({
 | `server/utils/redirectCache.ts` | In-memory redirect cache with thundering herd protection |
 | `server/database/schema/redirects.ts` | Drizzle schema for `crouton_redirects` table |
 | `server/database/queries/redirects.ts` | CRUD queries + `getActiveCroutonRedirects()` for cache |
-| `server/api/teams/[id]/crouton-redirects/` | Team-scoped CRUD API — admin-only (`requireTeamAdmin`); input validated by `server/utils/redirectValidation.ts` (status 301/302/307/308, same-site `toPath`) |
+| `server/api/teams/[id]/crouton-redirects/` | Team-scoped CRUD API — `requireCan(event, 'site:manage')` (#4108; queries take `{ seesAll }`, not a role); input validated by `server/utils/redirectValidation.ts` (status 301/302/307/308, same-site `toPath`) |
 | `types/redirects.ts` | `CroutonRedirect`, `CroutonRedirectFormData`, `NewCroutonRedirect` types |
 
 ## Architecture

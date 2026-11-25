@@ -2,7 +2,7 @@
 // The resolveTeamAndCheckMembership utility handles team resolution and auth
 import { createMainAdmindoc, getMainAdmindocsByIds } from '../../../../database/queries'
 import { nanoid } from 'nanoid'
-import { requireTeamRole } from '@fyit/crouton-auth/server/utils/team'
+import { requireCan } from '@fyit/crouton-auth/server/utils/team-auth'
 import { z } from 'zod'
 
 const bodySchema = z.object({
@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
   const timing = useServerTiming(event)
 
   const authTimer = timing.start('auth')
-  const { team, user } = await requireTeamRole(event, 'admin')
+  const { team, user } = await requireCan(event, 'collections:manage')
   authTimer.end()
 
   const body = await readValidatedBody(event, bodySchema.parse)

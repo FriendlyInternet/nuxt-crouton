@@ -61,7 +61,8 @@ export default defineNuxtPlugin(() => {
 function buildClientPlugins(config?: CroutonAuthConfig) {
   const plugins: BetterAuthClientPlugin[] = [
     // Organization client is always enabled
-    organizationClient(),
+    // dynamicAccessControl: team roles — listRoles/createRole/updateRole/deleteRole (#4106)
+    organizationClient({ dynamicAccessControl: { enabled: true } }),
     // Admin client for user management (ban, impersonate, etc.)
     adminClient()
   ]

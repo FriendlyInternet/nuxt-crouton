@@ -140,7 +140,12 @@ export function matchesAudience(
     if (roles.length > 0) {
       // Logged in but the role is unknown → show rather than lock out.
       if (!ctx.role) return true
-      return roles.some(required => ROLE_SATISFIES[required].includes(ctx.role!))
+      return roles.some((required) => {
+        // `admin` is the `admin:access` action once its answer is known (#4105);
+        // `owner` (ownership) and `member` (any member) stay role-based.
+        if (required === 'admin' && typeof ctx.canAdmin === 'boolean') return ctx.canAdmin
+        return ROLE_SATISFIES[required].includes(ctx.role!)
+      })
     }
   }
 

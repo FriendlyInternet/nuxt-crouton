@@ -167,7 +167,10 @@ re-runs the pi worker only when it carries a line starting `**Worker:** <what to
 the revision loop, and a plain human comment is feedback as before. The one exception is the owner's
 first answer to a worker's open question (a `worker-question` reply record, #4192): it re-runs the worker
 whether typed or relayed by a chat — but a relayed answer's header must say `_owner answer …_` (or
-`owner decision`), or it is read as a status note.
+`owner decision`), or it is read as a status note. The same holds on a held plan question (#4531): a
+relayed `ok` counts as the owner's yes, a chat's `**Worker:**` line still asks for a re-plan, and any other
+chat comment (a header that is not `owner answer`/`owner decision`, or says it is *not* the owner's answer)
+is a status note and starts nothing.
 
 **And a type that needs nothing back must NOT @mention** — a mention is a request for action, so a ✅ carrying one is refused. Careful: a mention notifies from inside a blockquote **and** from inside `<details>`; only code spans and fenced blocks are exempt. That is why the provenance disclaimer above backticks the handle (`` `@pmcp` ``) — unbackticked it pinged on *every* interactive comment, which was **17 of the last 29 notifications, 59% of all pings, carrying no ask at all**.
 

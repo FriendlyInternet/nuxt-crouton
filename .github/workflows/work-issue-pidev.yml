@@ -540,7 +540,7 @@ jobs:
         if: ${{ inputs.mode != 'plan' }}
         env:
           JOB_START: ${{ steps.job-start.outputs.ts }}
-        run: node scripts/lib/pi-time-budget.mjs minutes --start "$JOB_START" >> "$GITHUB_OUTPUT"
+        run: node "$RUNNER_TEMP/scripts/lib/pi-time-budget.mjs" minutes --start "$JOB_START" >> "$GITHUB_OUTPUT"
 
       - id: pi
         timeout-minutes: ${{ inputs.mode == 'plan' && 45 || fromJSON(steps.budget.outputs.pi_minutes || '40') }}
@@ -751,7 +751,7 @@ jobs:
             echo "ok=0" >> "$GITHUB_OUTPUT"; echo "explained=1" >> "$GITHUB_OUTPUT"; exit 1
           fi
           echo "ok=1" >> "$GITHUB_OUTPUT"
-          # #3210 — tick "Plan + mockup posted" (cosmetic; never fails the run).
+          # #3210 — tick "Plan posted" (the Mockup line is derived from the thread, #4524; cosmetic; never fails the run).
           PLAN_URL="$(gh api --paginate "repos/${{ github.repository }}/issues/${ISSUE}/comments?since=${SINCE}&per_page=100" \
             --jq '[.[] | select(.body | contains("<!-- pipeline-plan:v1 -->"))] | last | .html_url // empty' | tail -n 1)"
           GITHUB_REPOSITORY="${{ github.repository }}" node scripts/flow-checklist.mjs "$ISSUE" plan --link "$PLAN_URL" || true

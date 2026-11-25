@@ -8,7 +8,7 @@
  *
  * CLI (used by preview-screenshot.yml):
  *   node scripts/lib/screenshot-verdict.mjs count <jobs.json...>   -> prints the total
- *   node scripts/lib/screenshot-verdict.mjs verdict                -> reads EXPECTED/RECORDS/RESULT/SUMMARY
+ *   node scripts/lib/screenshot-verdict.mjs verdict                -> reads EXPECTED/RECORDS/RESULT/SUMMARY/MISSING
  */
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -24,9 +24,11 @@ export function countExpectedRecords(jobs) {
   ).length
 }
 
-export function screenshotVerdict({ expected, records, result, summary }) {
+export function screenshotVerdict({ expected, records, result, summary, missing }) {
   const rec = Number(records) || 0
   if (result === 'ok') return { conclusion: 'success', summary }
+  // A declared review-surface app whose preview never came (#4535): red, whatever the counts say.
+  if (missing) return { conclusion: 'failure', summary: missing }
   if (rec > 0) {
     return { conclusion: 'failure', summary: `preview deployed, but no screenshot captured — ${summary || 'capture step did not finish'}` }
   }
@@ -52,6 +54,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       records: process.env.RECORDS,
       result: process.env.RESULT,
       summary: process.env.SUMMARY,
+      missing: process.env.MISSING,
     })
     console.log(`conclusion=${v.conclusion}`)
     console.log(`summary=${v.summary.replace(/\n/g, ' ')}`)

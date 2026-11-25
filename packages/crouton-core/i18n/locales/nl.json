@@ -1,4 +1,8 @@
 {
+  "permissions": {
+    "siteManage": "Site beheren: info, uiterlijk, doorverwijzingen",
+    "collectionsManage": "Alle collectie-items en teambestanden beheren"
+  },
   "form": {
     "collapse": "Samenvouwen naar zijbalk",
     "expand": "Uitbreiden naar volledig scherm",

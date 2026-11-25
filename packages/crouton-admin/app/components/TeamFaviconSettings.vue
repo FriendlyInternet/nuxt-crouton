@@ -6,7 +6,9 @@
  * (auto-generated or custom) with upload/remove controls.
  */
 const { teamId } = useTeamContext()
-const { currentTeam, isAdmin } = useTeam()
+const { currentTeam } = useTeam()
+// Changing the favicon is the `site:manage` action (#4105)
+const isAdmin = useCan('site:manage')
 const { theme } = useTeamTheme()
 const { faviconHref } = useTeamFavicon()
 const { t } = useT()

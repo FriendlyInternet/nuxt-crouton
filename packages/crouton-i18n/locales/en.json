@@ -1,4 +1,7 @@
 {
+  "permissions": {
+    "translationsManage": "Manage translations"
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",

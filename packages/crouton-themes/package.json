@@ -33,7 +33,9 @@
     "./eink": "./eink/nuxt.config.ts",
     "./eink/*": "./eink/*",
     "./blueprint": "./blueprint/nuxt.config.ts",
-    "./blueprint/*": "./blueprint/*"
+    "./blueprint/*": "./blueprint/*",
+    "./editorial": "./editorial/nuxt.config.ts",
+    "./editorial/*": "./editorial/*"
   },
   "files": [
     "themes",
@@ -49,6 +51,7 @@
     "riso",
     "eink",
     "blueprint",
+    "editorial",
     "lib",
     "docs/llms.txt",
     "docs/components.md"
@@ -62,7 +65,8 @@
     "minimal",
     "minimalist",
     "korg",
-    "drum-machine"
+    "drum-machine",
+    "editorial"
   ],
   "author": "FYIT",
   "license": "MIT",
