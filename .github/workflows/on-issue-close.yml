@@ -8,12 +8,24 @@ name: On issue close
 #   refresh-blocked  refresh-blocked-on-close.yml  (#2112)
 #   epic-ready-pr    epic-ready-pr.yml             (#1815)
 #   cleanup-epic-branch  cleanup-epic-branches.yml (issue path, #2788)
-#   release          schedule-waves.yml (issue path) + traffic-release.yml (#2786)
+#   release          schedule-waves.yml (issue path) — `Blocked-by:` dependents
+#   release-traffic  traffic-release.yml (#2786) → release-waiting.yml (reusable, #3086)
 #   postmortem       NEW (#3425) → postmortem.yml (reusable; also dispatchable by hand)
 #
-# `release` is the ONE place that lifts a wait: `Blocked-by:` lines (scripts/wave-release.mjs) and
-# the scope-label traffic check (scripts/traffic-control.mjs) are evaluated together. Together with
-# on-pr-close.yml's clear-blocked job those are the only two places that remove `status:blocked`.
+# `release` lifts `Blocked-by:` waits (scripts/wave-release.mjs) on a close. The scope-label traffic
+# walk (`releaseWaiting`, scripts/traffic-control.mjs) lives in release-waiting.yml, one walk at a
+# time; `release-traffic` calls it.
+#
+# Code that removes `status:blocked` by name, each tied to a kind of hold (#3086):
+#   on-pr-close.yml `clear-blocked`            review hold (held PR closed unmerged)
+#   on-comment.yml (owner `ok` un-drafts)       review hold
+#   on-comment.yml (pi design-hold resume)      worker question / design hold
+#   scripts/traffic-control.mjs releaseOne      queue (traffic wait)
+#   scripts/lib/pr-merge-gate-io.mjs finish     review hold (owner-ok gate merge)
+#   scripts/plan-held.mjs (owner override)      owner park / plan-review hold
+# plus two close-time strippers of every `status:*` label: `strip-status` below and
+# scripts/epic-auto-close.mjs. scripts/status-blocked-removers.test.mjs fails if a new remover
+# lacks the `status:blocked remover (#3086)` marker.
 #
 # Token rule unchanged: `release` and `epic-ready-pr` use the Harness App token (their writes must
 # trigger downstream workflows); the cleanups use GITHUB_TOKEN. Permissions live at job level.
@@ -22,8 +34,9 @@ name: On issue close
 on:
   issues:
     # `unlabeled`: a blocker with no PR (closed or unlabelled issue) would otherwise never
-    # release its waiter. Only `release` runs for it.
-    # `edited`: adding `Unblocks: #n` to a parked ticket frees it at once (#3280); the release job
+    # release its waiter. Only `release-traffic` runs for it, and only for a label in
+    # `RELEASE_ON_UNLABEL` (scripts/traffic-control.mjs) or a pkg:/app:/poc: label (#3086).
+    # `edited`: adding `Unblocks: #n` to a parked ticket frees it at once (#3280); release-traffic
     # only runs for an edit when the issue carries `status:blocked`.
     types: [closed, unlabeled, edited]
   workflow_dispatch:
@@ -188,11 +201,8 @@ jobs:
 
   release:
     # Lift a wait: every dependent whose `Blocked-by:` blockers are now all closed (gated on the
-    # epic branch not being red), then every ticket parked by the scope-label traffic check.
-    if: >-
-      github.event_name == 'issues' &&
-      (github.event.action != 'edited' ||
-       contains(github.event.issue.labels.*.name, 'status:blocked'))
+    # epic branch not being red). The traffic walk is `release-traffic` below (#3086).
+    if: github.event_name == 'issues' && github.event.action == 'closed'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -216,15 +226,29 @@ jobs:
           script: |
             const ws = process.env.GITHUB_WORKSPACE
             const { releaseReady } = await import(`${ws}/scripts/wave-release.mjs`)
-            const { releaseWaiting } = await import(`${ws}/scripts/traffic-control.mjs`)
+            core.info(`Completed workstream: #${context.payload.issue.number}`)
+            await releaseReady({ github, context, core }, { onlyBlockedBy: context.payload.issue.number })
 
-            // Blocked-by: dependents only react to a CLOSE; unlabelled only frees traffic.
-            if (context.payload.action === 'closed') {
-              core.info(`Completed workstream: #${context.payload.issue.number}`)
-              await releaseReady({ github, context, core }, { onlyBlockedBy: context.payload.issue.number })
-            }
-            const released = await releaseWaiting({ github, context })
-            core.info(released.length ? `traffic released: ${released.map((n) => '#' + n).join(', ')}` : 'traffic: nothing to release')
+  release-traffic:
+    # (#2786, #3086) Re-check every ticket parked by the scope-label traffic check, through the one
+    # serialised walk. Runs on a close; on an edit of a parked (`status:blocked`) ticket; and on a
+    # label removal that can free a waiter — the list below is a copy of RELEASE_ON_UNLABEL in
+    # scripts/traffic-control.mjs (an `if:` cannot import JS), plus any pkg:/app:/poc: label.
+    # scripts/release-waiting-wiring.test.mjs fails if the copy drifts.
+    if: >-
+      github.event_name == 'issues' &&
+      (github.event.action == 'closed' ||
+       (github.event.action == 'edited' && contains(github.event.issue.labels.*.name, 'status:blocked')) ||
+       (github.event.action == 'unlabeled' &&
+        (contains(fromJSON('["status:blocked","traffic:waiting","status:in-progress","delegate","delegate-pi","work-this","plan:approved"]'), github.event.label.name) ||
+         startsWith(github.event.label.name, 'pkg:') ||
+         startsWith(github.event.label.name, 'app:') ||
+         startsWith(github.event.label.name, 'poc:'))))
+    permissions:
+      contents: read
+      issues: write
+    uses: ./.github/workflows/release-waiting.yml
+    secrets: inherit
 
   postmortem:
     # (#3425) A sub-issue closed: if it was its epic's last open one, the pipeline writes the

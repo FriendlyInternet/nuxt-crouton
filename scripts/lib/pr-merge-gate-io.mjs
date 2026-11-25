@@ -98,6 +98,7 @@ async function mergePr({ github, context, core }, pr, how) {
 // Clear the block ONLY on a real merge (#1665): a miss must keep status:blocked so a re-approval still triggers.
 async function finish({ github, context, core }, issue_number, merged, checkSkips) {
   if (merged) {
+    // status:blocked remover (#3086): review hold (owner-ok gate merge)
     try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: 'status:blocked' }) } catch { /* already gone */ }
     return core.info('Gate PR merged — schedule-waves will advance the chain.')
   }

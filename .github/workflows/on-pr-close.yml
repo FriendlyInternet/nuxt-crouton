@@ -12,8 +12,22 @@ name: On PR close
 #   owner-quiz           NEW (#3715) → owner-quiz.yml (reusable; also dispatchable by hand)
 #   postmortem           NEW (#3425) → postmortem.yml (reusable; also dispatchable by hand)
 #
-# `clear-blocked` and on-issue-close.yml's `release` are the only two places that remove
-# `status:blocked`. Token rule unchanged: jobs whose writes must cascade use the Harness App
+# `release-traffic` calls release-waiting.yml (the one serialised `releaseWaiting` walk, #3086) —
+# unless `close-linked-issues` closed an issue itself: that close starts on-issue-close.yml, which
+# walks instead, so one merge walks once.
+#
+# Code that removes `status:blocked` by name, each tied to a kind of hold (#3086):
+#   on-pr-close.yml `clear-blocked`            review hold (held PR closed unmerged)
+#   on-comment.yml (owner `ok` un-drafts)       review hold
+#   on-comment.yml (pi design-hold resume)      worker question / design hold
+#   scripts/traffic-control.mjs releaseOne      queue (traffic wait)
+#   scripts/lib/pr-merge-gate-io.mjs finish     review hold (owner-ok gate merge)
+#   scripts/plan-held.mjs (owner override)      owner park / plan-review hold
+# plus two close-time strippers of every `status:*` label: on-issue-close.yml `strip-status` and
+# scripts/epic-auto-close.mjs. scripts/status-blocked-removers.test.mjs fails if a new remover
+# lacks the `status:blocked remover (#3086)` marker.
+#
+# Token rule unchanged: jobs whose writes must cascade use the Harness App
 # token; the cleanups use GITHUB_TOKEN. Permissions live at job level.
 # scripts/workflow-listeners.test.mjs fails CI if any other workflow listens for PR close.
 
@@ -43,6 +57,7 @@ jobs:
             if (!m) { core.info(`head ${head} is not a work-<issue> branch — nothing to clear.`); return }
             const issue_number = Number(m[1])
             try {
+              // status:blocked remover (#3086): review hold (held PR closed unmerged)
               await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: 'status:blocked' })
               core.info(`Cleared status:blocked from #${issue_number} (PR #${context.payload.pull_request.number} closed unmerged).`)
             } catch (e) {
@@ -120,9 +135,12 @@ jobs:
   close-linked-issues:
     # A merged PR closes its `Closes #NN` issues (GitHub only auto-closes on the default branch,
     # not on an epic branch). App token: the close must cascade into on-issue-close.yml's release.
+    # Output `closed`: how many issues it closed itself — release-traffic skips its walk when > 0.
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      closed: ${{ steps.close.outputs.closed }}
     permissions:
       contents: read
       issues: read
@@ -136,13 +154,14 @@ jobs:
         with:
           fetch-depth: 1
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        id: close
         env:
           OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
             const { closeLinkedIssues } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/wave-release.mjs`)
-            await closeLinkedIssues({ github, context, core })
+            core.setOutput('closed', String(await closeLinkedIssues({ github, context, core })))
       - name: Tick Merged for v1 PRs
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
@@ -197,27 +216,21 @@ jobs:
 
   release-traffic:
     # (#2786) A pipeline PR (`work-<n>`) closing frees a slot: re-check every ticket parked by the
-    # start-of-run traffic check. App token so the released label cascades into work-issue-pidev.
-    if: ${{ !github.event.pull_request.head.repo.fork && startsWith(github.event.pull_request.head.ref, 'work-') }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # start-of-run traffic check, through the one serialised walk (release-waiting.yml, #3086).
+    # Skipped ONLY when close-linked-issues succeeded and closed >= 1 issue itself (that close
+    # starts on-issue-close.yml, which walks). An unmerged close, a merge whose issue stays open,
+    # a failed close job or an empty output still walk here. `always()`: close-linked-issues is
+    # skipped on an unmerged close.
+    needs: close-linked-issues
+    if: >-
+      always() &&
+      !github.event.pull_request.head.repo.fork &&
+      startsWith(github.event.pull_request.head.ref, 'work-') &&
+      !(needs.close-linked-issues.result == 'success' &&
+        needs.close-linked-issues.outputs.closed != '' &&
+        needs.close-linked-issues.outputs.closed != '0')
     permissions:
       contents: read
       issues: write
-    steps:
-      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        id: app-token
-        with:
-          app-id: ${{ secrets.HARNESS_APP_ID }}
-          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
-          owner: FriendlyInternet
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 1
-      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          github-token: ${{ steps.app-token.outputs.token }}
-          script: |
-            const { releaseWaiting } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/traffic-control.mjs`)
-            const released = await releaseWaiting({ github, context })
-            core.info(released.length ? `released: ${released.map((n) => '#' + n).join(', ')}` : 'nothing to release')
+    uses: ./.github/workflows/release-waiting.yml
+    secrets: inherit

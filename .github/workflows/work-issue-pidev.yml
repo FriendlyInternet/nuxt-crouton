@@ -1594,36 +1594,14 @@ jobs:
     name: Release parked tickets
     needs: [work-pi]
     if: ${{ always() && needs.work-pi.outputs.held == '1' }}
-    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
-    timeout-minutes: 5
+    # (#3086) the one serialised walk; `soft` keeps this run green if the walk errors.
     permissions:
       contents: read
       issues: write
-    steps:
-      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        id: app-token
-        with:
-          app-id: ${{ secrets.HARNESS_APP_ID }}
-          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
-          owner: FriendlyInternet
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.repository.default_branch }}
-          sparse-checkout: |
-            scripts
-            .claude
-          persist-credentials: false
-      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          github-token: ${{ steps.app-token.outputs.token }}
-          script: |
-            try {
-              const { releaseWaiting } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/traffic-control.mjs`)
-              const released = await releaseWaiting({ github, context })
-              core.info(released.length ? `traffic released: ${released.map((n) => '#' + n).join(', ')}` : 'traffic: nothing to release')
-            } catch (e) {
-              core.warning(`traffic release failed: ${e.message}`)
-            }
+    uses: ./.github/workflows/release-waiting.yml
+    with:
+      soft: true
+    secrets: inherit
 
   # ── Run record (#3251) ─────────────────────────────────────────────────────────────────
   # One record per workflow RUN, written after every other job finished (`needs:` all, always()).

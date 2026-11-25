@@ -7,14 +7,19 @@
  *
  * THE RULE. Before a worker starts, look at the ticket's scope labels (`pkg:*`, `app:*`,
  * `poc:*`). If another open pipeline ticket with a shared scope label is already being worked
- * (`status:in-progress`, or an open `work-<n>` PR), the new ticket waits for it. The decision
+ * (`status:in-progress`, or an open `work-<n>` PR), the new ticket waits — except a held PR
+ * (draft, or its ticket `status:blocked`), which waits on the owner and does not block unless this
+ * ticket says `Blocked-by: #n` on it (#3583). The decision
  * is `decideTraffic` — pure, no I/O — so the shipped guard IS the tested function. The
  * workflow steps only gather facts (`gatherTrafficFacts`) and apply the verdict.
  *
  * RELEASE. `work-issue-pidev.yml` parks a ticket with `status:blocked` + `traffic:waiting` (the walk
  * lists only those, so held tickets traffic did not park are never read) and `WAIT_MARKER` in its
  * comment (the ownership/dedup check, #3311).
- * When any `work-*` PR closes (or an issue closes / loses a label), `releaseWaiting` re-checks each waiting ticket and, if clear,
+ * `release-waiting.yml` runs `releaseWaiting`, one walk at a time (#3086). It runs when a `work-*` PR
+ * closes, when an issue closes or loses a label in `RELEASE_ON_UNLABEL`, when a parked ticket is
+ * edited, and when a PR becomes held (build-review / work-issue-pidev, #3583). The walk re-checks
+ * each waiting ticket and, if clear,
  * removes `status:blocked` and does REMOVE-then-ADD of `work-this` — adding a label the issue
  * already carries fires no event (#1750).
  */
@@ -35,6 +40,20 @@ export function scopeLabels(labels) {
 }
 
 export const PIPELINE_LABELS = ['delegate', 'delegate-pi', 'work-this']
+
+/**
+ * Labels whose removal can free a waiting ticket (#3086): the hold/wait labels plus every non-scope
+ * label `isBlocker` / `gatherTrafficFacts` reads. Any scope label (`SCOPE_PREFIXES`) also counts.
+ * on-issue-close.yml's `release-traffic` `if:` holds a copy (an `if:` cannot import JS);
+ * scripts/release-waiting-wiring.test.mjs fails if the two drift apart.
+ */
+export const RELEASE_ON_UNLABEL = ['status:blocked', WAITING_LABEL, 'status:in-progress', ...PIPELINE_LABELS, 'plan:approved']
+
+/** Does removing this label start a release walk? (#3086) */
+export function releasesOnUnlabel(name) {
+  const n = String(name || '')
+  return RELEASE_ON_UNLABEL.includes(n) || SCOPE_PREFIXES.some((p) => n.startsWith(p))
+}
 
 /**
  * Does this ticket count as open pipeline work? Never an epic; otherwise an open `work-<n>` PR,
@@ -194,6 +213,7 @@ async function releaseOne({ github, context, it }) {
   if (decideTraffic({ issue: it.number, labels, body: it.body, others }).action !== 'proceed') return null
   const ref = { owner, repo, issue_number: it.number }
   // 404 = a peer release run already took this ticket (#3323): skip it, don't release twice.
+  // status:blocked remover (#3086): queue (traffic wait)
   if (!(await removeLabelIfPresent(github, { ...ref, name: 'status:blocked' }))) return scopeLabels(labels)
   await removeLabelIfPresent(github, { ...ref, name: WAITING_LABEL })
   await removeLabelIfPresent(github, { ...ref, name: 'work-this' })

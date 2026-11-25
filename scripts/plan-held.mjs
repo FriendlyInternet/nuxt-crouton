@@ -134,6 +134,7 @@ export async function approvePlan({ github, context, core, handoffGuard = defaul
     const next = appendDecision(e.body, line, c.html_url)
     if (next !== e.body) await github.rest.issues.update({ ...context.repo, issue_number: epic, body: next })
   }
+  // status:blocked remover (#3086): owner park / plan-review hold (owner `ok: <reason>` override)
   for (const name of ['status:blocked', 'plan:approved']) {
     try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name }) } catch {}
   }

@@ -141,6 +141,47 @@ test('closeLinkedIssues: unmerged PR does nothing', async () => {
   assert.equal(w.calls.updates.length, 0)
 })
 
+// #3086: the count tells on-pr-close whether on-issue-close will walk instead.
+// covers: T3
+test('closeLinkedIssues returns 0: unmerged PR', async () => {
+  const w = prWorld('Closes #5', { 5: { state: 'open', labels: [] } })
+  w.context.payload.pull_request.merged = false
+  assert.equal(await closeLinkedIssues(w), 0)
+})
+// covers: T3
+test('closeLinkedIssues returns 0: no Closes line', async () => {
+  assert.equal(await closeLinkedIssues(prWorld('just prose', {})), 0)
+})
+// covers: T3
+test('closeLinkedIssues returns 0: base is not main/epic', async () => {
+  const w = prWorld('Closes #5', { 5: { state: 'open', labels: [] } })
+  w.context.payload.pull_request.base.ref = 'feature/x'
+  assert.equal(await closeLinkedIssues(w), 0)
+  assert.equal(w.calls.updates.length, 0)
+})
+// covers: T3
+test('closeLinkedIssues returns 1 when it closes its one issue', async () => {
+  assert.equal(await closeLinkedIssues(prWorld('Closes #5', { 5: { state: 'open', labels: [] } })), 1)
+})
+// covers: T3
+test('closeLinkedIssues returns 0 for an issue that was already closed', async () => {
+  assert.equal(await closeLinkedIssues(prWorld('Closes #6', { 6: { state: 'closed', labels: [] } })), 0)
+})
+// covers: T3
+test('closeLinkedIssues returns 0 for a held issue it left open', async () => {
+  const w = prWorld('Closes #7', { 7: { state: 'open', labels: lbl(['status:blocked']) } })
+  w.context.payload.pull_request.merged_by = { login: 'nuxt-harness[bot]' }
+  w.github.paginate = async () => []
+  assert.equal(await closeLinkedIssues(w), 0)
+  assert.equal(w.calls.updates.length, 0)
+})
+// covers: T3
+test('closeLinkedIssues returns 0 when issues.update throws', async () => {
+  const w = prWorld('Closes #5', { 5: { state: 'open', labels: [] } })
+  w.github.rest.issues.update = async () => { throw new Error('boom') }
+  assert.equal(await closeLinkedIssues(w), 0)
+})
+
 const held = [{ name: 'status:blocked' }]
 const may = (o) => mayCloseHeldIssue({ labels: [], prLabels: [], mergedBy: 'bot', owner: 'pmcp', ...o })
 test('mayCloseHeldIssue: unheld issue closes', () => assert.equal(may({}), true))

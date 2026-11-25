@@ -153,26 +153,29 @@ async function ownerOkOnPr({ github, context, core }, pr, n, ownerLogin) {
 /**
  * A merged PR closes its `Closes #NN` issues. Sub-PRs merge into the EPIC branch, so GitHub does
  * NOT auto-close them (auto-close is default-branch only) — close them here; the resulting
- * `issues: closed` event drives the release path (one release codepath).
+ * `issues: closed` event drives the release path (one release codepath). Returns how many issues
+ * it closed itself, so on-pr-close skips its own walk when it closed one (#3086). An issue that was
+ * already closed (e.g. by GitHub's auto-close, which may start no workflow) does not count.
  */
 export async function closeLinkedIssues(ctx) {
   const { github, context, core } = ctx
   const { owner, repo } = context.repo
   const pr = context.payload.pull_request
-  if (!pr.merged) { core.info('PR closed unmerged — nothing to do.'); return }
+  if (!pr.merged) { core.info('PR closed unmerged — nothing to do.'); return 0 }
 
   // #1021 defence-in-depth: only act on merges into the default branch or an epic/* branch.
   const base = pr.base.ref
   const defaultBranch = context.payload.repository.default_branch
   if (base !== defaultBranch && !/^epic\//.test(base)) {
-    core.info(`PR merged into '${base}' (not ${defaultBranch}/epic/*) — not a close-driving merge.`); return
+    core.info(`PR merged into '${base}' (not ${defaultBranch}/epic/*) — not a close-driving merge.`); return 0
   }
 
   // #1021 root fix: match `Closes #NN` the way GitHub's native auto-close does — NEVER inside
   // code (the #839 incident: a quoted example closed a real issue).
   const prose = (pr.body || '').replace(/```[\s\S]*?```/g, '').replace(/`[^`\n]*`/g, '')
   const closes = [...prose.matchAll(/\bCloses\s+#(\d+)/gi)].map(x => Number(x[1]))
-  if (!closes.length) { core.info('Merged PR has no `Closes #NN` (in prose) — nothing to do.'); return }
+  if (!closes.length) { core.info('Merged PR has no `Closes #NN` (in prose) — nothing to do.'); return 0 }
+  let closed = 0
   for (const n of closes) {
     try {
       const gi = await github.rest.issues.get({ owner, repo, issue_number: n })
@@ -185,7 +188,9 @@ export async function closeLinkedIssues(ctx) {
         core.info(`#${n} is status:blocked (held for a human) — NOT auto-closing.`); continue
       }
       await github.rest.issues.update({ owner, repo, issue_number: n, state: 'closed', state_reason: 'completed' })
+      closed++
       core.info(`Closed #${n} (its PR merged into ${base}) — release runs on the issues:closed event.`)
     } catch (e) { core.warning(`Could not close #${n}: ${e.message}`) }
   }
+  return closed
 }
