@@ -12,7 +12,13 @@
  *   - a claim is void when the issue is closed or the chat said nothing there for 24 h;
  *   - the guard refuses `work-this`, removing `status:blocked`, and `**Worker:**` comments on a
  *     ticket another live chat claimed (directly or through its parent epic), and `work-this`
- *     on a ticket whose `Blocked-by:` issue is still open.
+ *     on a ticket whose `Blocked-by:` issue is still open;
+ *   - the `adopt` check (#4517) refuses putting a ticket under an epic (`gh issue edit --parent`,
+ *     `--add-sub-issue`, REST `sub_issues`, GraphQL `addSubIssue`, MCP `sub_issue_write`) when
+ *     the ticket is already being built (`work-this` / `plan:approved` / `status:blocked`, or an
+ *     open `work-<n>` PR), unless this chat holds its claim. It runs ALONGSIDE the label rule,
+ *     never instead of it: `detectAdopts` + `decideAdoptGuard` are separate from
+ *     `detectGuardedAction` + `decideClaimGuard`, and the hook refuses if either refuses.
  * `scripts/claim.mjs` (CLI + GitHub lookups) and `.claude/hooks/require-unclaimed.mjs` gather the
  * facts and call these.
  *
@@ -310,6 +316,191 @@ const TOOL_DETECTORS = {
 export function detectGuardedAction(toolName, toolInput = {}) {
   const detector = TOOL_DETECTORS[toolName]
   return detector ? detector(toolInput || {}) : null
+}
+
+// ── Detecting an adopt (putting a ticket under an epic, #4517) ──────────────────────────
+
+// `gh issue edit` flags that take a value (gh 2.104.0 `gh issue edit --help`, FLAGS + INHERITED).
+// Any other `-…` word (`--remove-parent`, `--remove-milestone`, `--remove-type`) is a switch.
+const ISSUE_EDIT_VALUE_FLAGS = new Set([
+  '--add-assignee', '--add-blocked-by', '--add-blocking', '--add-label', '--add-project', '--add-sub-issue',
+  '--attach', '-b', '--body', '-F', '--body-file', '-m', '--milestone', '--parent', '--remove-assignee',
+  '--remove-blocked-by', '--remove-blocking', '--remove-label', '--remove-project', '--remove-sub-issue',
+  '-t', '--title', '--type', '-R', '--repo',
+])
+
+/** The positional words (the issues being edited) of a `gh issue edit` argument list. */
+export function issueEditTargets(rest = []) {
+  const out = []
+  for (let i = 0; i < rest.length; i++) {
+    const w = rest[i]
+    if (!w.startsWith('-')) out.push(w)
+    else if (ISSUE_EDIT_VALUE_FLAGS.has(w)) i++ // `--x v` uses up the value; `--x=v` is one word
+  }
+  return out
+}
+
+export const ADOPT_HINT = /--parent|--add-sub-issue|sub_issues|addSubIssue/
+
+const hasVar = (w) => /\$|\{\}/.test(String(w))
+
+/** An adopt whose child can't be read from the call — refused without a lookup. */
+function adoptUnresolved(epic, words) {
+  return { kind: 'adopt', epic: epic ?? null, children: [], unresolved: words.find(hasVar) || '(no number)' }
+}
+
+/** `gh issue edit <child…> --parent <epic>` and `gh issue edit <epic> --add-sub-issue <child,…>`. */
+function adoptsInIssueEdit(rest) {
+  const out = []
+  const targets = issueEditTargets(rest)
+  const parents = flagValues(rest, ['--parent'])
+  if (parents.length) {
+    const epic = numberOf(parents[parents.length - 1])
+    const children = targets.map(numberOf)
+    out.push(!children.length || children.some(c => !c)
+      ? adoptUnresolved(epic, targets)
+      : { kind: 'adopt', epic, children: children.map(number => ({ number })) })
+  }
+  const subs = labelList(flagValues(rest, ['--add-sub-issue']))
+  if (subs.length) {
+    const epic = numberOf(targets[0])
+    const children = subs.map(numberOf)
+    out.push(children.some(c => !c)
+      ? adoptUnresolved(epic, subs)
+      : { kind: 'adopt', epic, children: children.map(number => ({ number })) })
+  }
+  return out
+}
+
+const FIELD_FLAGS = ['-f', '-F', '--field', '--raw-field']
+
+/** `gh api …/issues/<epic>/sub_issues -F sub_issue_id=<db id>` (POST). */
+function adoptsInRestApi(all) {
+  const path = all.find(w => /(?:^|\/)issues\/[^/\s]+\/sub_issues$/.test(w))
+  if (!path) return []
+  const method = (flagValues(all, ['-X', '--method'])[0] || '').toUpperCase()
+  const fields = flagValues(all, FIELD_FLAGS)
+  if (method === 'GET' || method === 'DELETE' || (!method && !fields.length)) return []
+  const epic = numberOf(path.match(/issues\/([^/\s]+)\/sub_issues$/)[1])
+  const ids = fields.filter(f => f.startsWith('sub_issue_id=')).map(f => f.slice('sub_issue_id='.length))
+  if (!ids.length) return []
+  // `$x`, `{}` or `$(…)` (the tokenizer leaves `sub_issue_id=$`) — not a literal id.
+  const bad = ids.find(v => !/^\d+$/.test(v))
+  if (bad !== undefined) return [{ kind: 'adopt', epic, children: [], unresolved: `sub_issue_id=${bad}` }]
+  return [{ kind: 'adopt', epic, children: ids.map(v => ({ childId: Number(v) })) }]
+}
+
+/** `gh api graphql -f query='mutation{addSubIssue(input:{issueId, subIssueUrl|subIssueId})…}'`. */
+function adoptsInGraphql(all) {
+  if (!all.includes('graphql')) return []
+  const text = all.filter(w => w.includes('addSubIssue')).join('\n')
+  if (!text) return []
+  const children = []
+  let bad = null
+  for (const call of text.split(/addSubIssue/).slice(1)) {
+    const url = call.match(/subIssueUrl\s*:\s*"([^"]*)"/)
+    const node = call.match(/subIssueId\s*:\s*"([^"$]+)"/)
+    const n = url && numberOf(url[1])
+    if (n) children.push({ number: n })
+    else if (node) children.push({ childNode: node[1] })
+    else bad = call.match(/\$\w+/)?.[0] || '(no literal subIssueId/subIssueUrl)'
+  }
+  if (bad || !children.length) return [{ kind: 'adopt', epic: null, children: [], unresolved: bad || '(no child)' }]
+  return [{ kind: 'adopt', epic: null, children }]
+}
+
+function adoptsInSegment(segment) {
+  const { words, xargs } = commandWords(segment)
+  if (['bash', 'sh', 'zsh'].includes(words[0]) && words[1] === '-c') return adoptsInBash(words[2])
+  if (words[0]?.split('/').pop() !== 'gh') return []
+  let found = []
+  if (words[1] === 'issue' && words[2] === 'edit') found = adoptsInIssueEdit(words.slice(3))
+  else if (words[1] === 'api') found = [...adoptsInRestApi(words.slice(2)), ...adoptsInGraphql(words.slice(2))]
+  return xargs ? found.map(a => (a.unresolved ? a : { ...a, children: [], unresolved: 'xargs' })) : found
+}
+
+function adoptsInBash(cmd) {
+  if (!ADOPT_HINT.test(String(cmd || ''))) return []
+  return segments(cmd).flatMap(adoptsInSegment)
+}
+
+function adoptsInSubIssueWrite(input) {
+  const epic = Number(input.issue_number)
+  const childId = Number(input.sub_issue_id)
+  if (input.method !== 'add' || !epic || !childId) return []
+  return [{ kind: 'adopt', epic, children: [{ childId }] }]
+}
+
+/**
+ * Every "put this ticket under an epic" in a tool call — across EVERY segment of a Bash command.
+ * → [{ kind: 'adopt', epic|null, children: [{ number } | { childId } | { childNode }], unresolved? }]
+ * `childId` is a database id (REST, MCP), `childNode` a GraphQL node id; the hook turns both into
+ * numbers. `unresolved` means a child isn't written out (`$n`, `{}`, xargs) — refuse, no lookup.
+ */
+export function detectAdopts(toolName, toolInput = {}) {
+  const input = toolInput || {}
+  if (toolName === 'Bash') return adoptsInBash(input.command)
+  if (toolName === 'mcp__github__sub_issue_write') return adoptsInSubIssueWrite(input)
+  return []
+}
+
+/** Smallest msgpack uint for n (fixint / cc / cd / ce / cf). */
+function msgpackUint(n) {
+  const v = BigInt(n)
+  if (v < 128n) return Buffer.from([Number(v)])
+  const sizes = [[0xcc, 1], [0xcd, 2], [0xce, 4], [0xcf, 8]]
+  const [tag, bytes] = sizes.find(([, b]) => v < 1n << BigInt(8 * b))
+  const buf = Buffer.alloc(1 + bytes)
+  buf[0] = tag
+  for (let i = 0; i < bytes; i++) buf[bytes - i] = Number((v >> BigInt(8 * i)) & 0xffn)
+  return buf
+}
+
+/**
+ * The GitHub node id of an issue from its repo + issue database ids: `I_` + base64url of the
+ * msgpack array [0, repoId, issueId]. Undocumented — the hook calls it inside its try/catch, so if
+ * GitHub changes the encoding the node lookup fails and the guard fails open.
+ */
+export function issueNodeId(repoDbId, issueDbId) {
+  const body = Buffer.concat([Buffer.from([0x93, 0x00]), msgpackUint(repoDbId), msgpackUint(issueDbId)])
+  return 'I_' + body.toString('base64url')
+}
+
+/** The ticket's three "already being built" labels (#4517) — exactly the ticket's list. */
+export const ADOPT_IN_PROGRESS_LABELS = ['work-this', 'plan:approved', 'status:blocked']
+
+/** The first open PR on a `work-<n>` head branch (`pi/work-<n>` counts too), or null. */
+export function prForTicket(prs = [], n) {
+  const re = new RegExp(`(^|/)work-${n}$`)
+  return prs.find(p => re.test(String(p.headRefName || ''))) || null
+}
+
+/**
+ * May this chat put ticket `child` under an epic?
+ *   child   — the ticket number
+ *   issue   — { state, labels } of the child
+ *   claims  — claimChain for the child (nearest first)
+ *   openPrs — [{ number, headRefName }]
+ * → { allow, reason }. The way through with the owner's yes is the claim: this chat claims the
+ * child (`node scripts/claim.mjs claim <child>`), the guard's only "let this chat through".
+ */
+export function decideAdoptGuard({ child, issue = {}, myChat = '', claims = [], openPrs = [] } = {}) {
+  const nearest = claims.find(c => c && c.claim)
+  if (nearest) {
+    if (myChat && nearest.claim.chat === String(myChat).toLowerCase()) return { allow: true, reason: '' }
+    const via = nearest.issue !== child ? ` via epic #${nearest.issue}` : ''
+    return { allow: false, reason: `Blocked: #${child} is claimed by ${who(nearest.claim)}${via} — ask the owner` }
+  }
+  if (String(issue.state || '').toLowerCase() === 'closed') return { allow: true, reason: '' }
+  const labels = (issue.labels || []).map(l => (typeof l === 'string' ? l : l.name))
+  const state = ADOPT_IN_PROGRESS_LABELS.filter(l => labels.includes(l))
+  const pr = prForTicket(openPrs, child)
+  if (pr) state.push(`open PR #${pr.number}`)
+  if (!state.length) return { allow: true, reason: '' }
+  return {
+    allow: false,
+    reason: `Blocked: #${child} is already being built (${state.join(', ')}) — leave it where it is, or ask the owner; with their yes, claim it first: node scripts/claim.mjs claim ${child}`,
+  }
 }
 
 /** For a label REPLACE (MCP update): did it really add work-this / drop status:blocked? */
