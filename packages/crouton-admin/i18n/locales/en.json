@@ -290,6 +290,7 @@
   },
   "themeSettings": {
     "title": "Theme Settings",
+    "loadFailed": "Couldn't load the theme settings",
     "description": "Customize your team's visual appearance. Changes preview in real-time.",
     "allowUserThemes": "Let users change their own theme",
     "allowUserThemesDescription": "When off, only admins can switch themes.",
