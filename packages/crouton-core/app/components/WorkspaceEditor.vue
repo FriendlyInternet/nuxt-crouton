@@ -112,8 +112,7 @@ watch(
 )
 
 // Listen for crouton mutation events to detect saves/deletes from within the form
-const nuxtApp = useNuxtApp()
-nuxtApp.hook('crouton:mutation', ({ operation, collection, itemId }) => {
+useMutationListener(({ operation, collection, itemId }) => {
   if (collection !== props.collection) return
 
   if (operation === 'create' || operation === 'update') {
