@@ -32,7 +32,9 @@
     "@fyit/crouton-editor": "workspace:*",
     "@fyit/crouton-pages": "workspace:*",
     "@fyit/crouton-assets": "workspace:*",
-    "@fyit/crouton-layout": "workspace:*"
+    "@fyit/crouton-layout": "workspace:*",
+    "@fyit/crouton-collab": "workspace:*",
+    "@fyit/crouton-mcp-toolkit": "workspace:*"
   },
   "devDependencies": {
     "@fyit/crouton-cli": "workspace:*",

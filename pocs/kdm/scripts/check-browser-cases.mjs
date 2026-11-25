@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Checks kdm check cases 5–6 of #4526 in a real browser (Playwright) — the ones a status
-// code cannot prove.
+// code cannot prove — and case 8 of #4493 (signed in, get-consents answers 200).
+//   --case 5|6|8 runs one.
 //
 //   REVIEW_SEED_SECRET=… node pocs/kdm/scripts/check-browser-cases.mjs <baseUrl> --key pr<N> [--case 5|6]
 //   KDM_REVIEW_EMAIL=… KDM_REVIEW_PASSWORD=… node pocs/kdm/scripts/check-browser-cases.mjs <baseUrl>
@@ -39,8 +40,10 @@ const viewport = { width: 1280, height: 900 }
 // for a dev server's first compile of a route.
 const NAV_TIMEOUT = 120000
 
-const browser = await launchChromium(msg => console.error(`browser: ${msg}`))
-if (!browser) { console.log('FAIL  no launchable browser — cases 5–6 not run'); process.exit(1) }
+// Cases 5–6 need a browser; case 8 is a plain signed-in request, so only start one when asked.
+const needsBrowser = !only || only === '5' || only === '6'
+const browser = needsBrowser ? await launchChromium(msg => console.error(`browser: ${msg}`)) : null
+if (needsBrowser && !browser) { console.log('FAIL  no launchable browser — cases 5–6 not run'); process.exit(1) }
 
 /** Slug of the signed-in session's active team (activating the first team if none is set). */
 async function activeTeamSlug(jar) {
@@ -125,6 +128,13 @@ const cases = [
     await shot(page, 6)
     await ctx.close()
     return caseSixResult(teamOk, adminOk, reportEditorBody(body))
+  }],
+  // covers: T8 (#4493) — signed in, the sign-in tables exist on this deploy: get-consents is 200, not a 500
+  ['8', '8 signed in, GET /api/auth/oauth2/get-consents → 200', async () => {
+    const { loggedIn, jar } = await signIn(base, email, password)
+    if (!loggedIn) return { ok: false, detail: `sign-in as ${email || '(no login: pass --key or KDM_REVIEW_*)'} failed` }
+    const r = await fetch(`${base}/api/auth/oauth2/get-consents`, { headers: { origin: base, cookie: cookieHeader(jar) } })
+    return { ok: r.status === 200, detail: `status ${r.status}` }
   }]
 ]
 
@@ -142,7 +152,7 @@ for (const [, name, check] of run) {
     console.log(`FAIL  ${name}  (${e.message.split('\n')[0]})`)
   }
 }
-await browser.close()
+await browser?.close()
 console.log(failed ? `\n${failed} of ${run.length} failed` : `\nnone of ${run.length} failed`)
 if (last) console.log(last)
 process.exit(failed ? 1 : 0)

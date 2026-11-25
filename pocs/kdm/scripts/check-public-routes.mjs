@@ -6,7 +6,8 @@
 //   node pocs/kdm/scripts/check-public-routes.mjs http://localhost:3000
 //
 // Needs the crouton-pages demo page `welcome` ("Welkom") in team `kdm` — the preview seed
-// (reviewTeam: kdm) or `crouton-seed --db kdm-db` adds it. Cases 5–6 need a browser:
+// (reviewTeam: kdm) or `crouton-seed --db kdm-db` adds it. Cases 7a–7c (#4493) check that
+// Claude's sign-in door at /mcp is shut to unsigned requests. Cases 5, 6 and 8 need a browser/login:
 // see check-browser-cases.mjs. Prints one line per case; exits 1 on any failure.
 
 const base = (process.argv[2] || 'http://localhost:3000').replace(/\/$/, '')
@@ -48,6 +49,25 @@ const cases = [
     const r = await get('/'); const html = await r.text()
     const ok = r.status === 200 && titleH1s(html).length === 0 && !/Page not found/i.test(html)
     return [ok, `status ${r.status}, site title present ${titleH1s(html).length > 0}`]
+  }],
+  // covers: T7 (#4493) — /mcp refuses a request with no sign-in, and says where to sign in
+  ['7a GET /mcp with no token → 401 with WWW-Authenticate', async () => {
+    const r = await get('/mcp')
+    const www = r.headers.get('www-authenticate')
+    return [r.status === 401 && !!www, `status ${r.status}, WWW-Authenticate ${www ? `"${www.slice(0, 80)}"` : 'missing'}`]
+  }],
+  // covers: T7 (#4493) — a made-up bearer token is refused the same way
+  ['7b GET /mcp with Authorization: Bearer x → 401 with WWW-Authenticate', async () => {
+    const r = await fetch(base + '/mcp', { redirect: 'manual', headers: { authorization: 'Bearer x' } })
+    const www = r.headers.get('www-authenticate')
+    return [r.status === 401 && !!www, `status ${r.status}, WWW-Authenticate ${www ? 'present' : 'missing'}`]
+  }],
+  // covers: T7 (#4493) — the sign-in discovery document names this site's /mcp
+  ['7c GET /.well-known/oauth-protected-resource → 200 JSON naming <origin>/mcp', async () => {
+    const r = await get('/.well-known/oauth-protected-resource')
+    const body = await r.json().catch(() => ({}))
+    const want = `${new URL(base).origin}/mcp`
+    return [r.status === 200 && body.resource === want, `status ${r.status}, resource ${JSON.stringify(body.resource)} (want ${want})`]
   }]
 ]
 

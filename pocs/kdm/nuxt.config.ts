@@ -14,8 +14,19 @@ export default defineNuxtConfig({
     '@fyit/crouton-editor',
     '@fyit/crouton-pages',
     '@fyit/crouton-assets',
-    '@fyit/crouton-layout'
+    '@fyit/crouton-layout',
+    '@fyit/crouton-collab',
+    '@fyit/crouton-mcp-toolkit'
   ],
+
+  // Claude edits Kasper's pages live (#4493, the way velo does it): only the
+  // page tools, never the generic collection CRUD + token tools. Served at
+  // <origin>/mcp (croutonAuth.mcpOAuth is on below); Claude signs in there, no key.
+  croutonMcpToolkit: {
+    enabled: true,
+    genericTools: false,
+    pages: true
+  },
   hub: {
     db: 'sqlite',
     kv: true,
@@ -38,7 +49,9 @@ export default defineNuxtConfig({
       allowCreate: false,
       showSwitcher: false,
       showManagement: false
-    }
+    },
+    // Claude / ChatGPT sign in to <origin>/mcp (#4493)
+    mcpOAuth: true
   },
   // Kasper's site is light only (#4526).
   colorMode: {

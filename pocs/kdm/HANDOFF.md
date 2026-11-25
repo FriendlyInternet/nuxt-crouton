@@ -85,6 +85,34 @@ node pocs/kdm/scripts/check-public-routes.mjs https://kdm.pmcp.dev
 REVIEW_SEED_SECRET=… node pocs/kdm/scripts/check-browser-cases.mjs https://kdm.pmcp.dev --key pr<N>
 ```
 
+## Connect Claude (#4493)
+
+Claude edits Kasper's pages through the same page tools velo has (`croutonMcpToolkit:
+{ enabled: true, genericTools: false, pages: true }` — page tools only, no generic
+collection or token tools). Claude signs in, no key (`croutonAuth.mcpOAuth: true`).
+
+1. In the Claude app: Settings → Connectors → **Add custom connector**.
+2. Paste `<preview origin>/mcp` (for example `https://kdm.pmcp.dev/mcp`, or the PR preview's address).
+3. Claude opens the kdm sign-in page; sign in and allow access.
+4. Ask Claude to list the pages of team `kdm` and change the demo page's text. With the page
+   open in the editor, the change shows up live (live sync: `"collab": true` in
+   `deploy.config.json` deploys the sync worker).
+
+What changed for this (#4493): `@fyit/crouton-collab` + `@fyit/crouton-mcp-toolkit` added
+(package.json, `extends`, `layerPackages` incl. `@fyit/crouton-auth`), the two settings above,
+`global_fetch_strictly_public` in `wrangler.jsonc` (so the app can reach the sync worker), and
+the deploy smoke reads for `/mcp` (401), `/mcp/pages` (404), both `/.well-known/oauth-*`,
+`/api/auth/oauth2/get-consents` and the collab token. **No new migration:** the CLI's first
+migration (`0000_*`) already creates the sign-in tables (`jwks`, `oauth*`), so
+`pnpm db:generate` reports "No schema changes".
+
+| Case (#4493) | Result (25 Nov, local `pnpm preview kdm`) | Tool |
+|---|---|---|
+| T6 config: page tools only, sign-in on, collab, flag, smoke reads, sign-in tables migrated | pass (8/8) | `pnpm --filter kdm exec vitest run tests/mcp-config.test.ts` |
+| T7 `/mcp` no token and `Bearer x` → 401 with `WWW-Authenticate`; protected-resource names `<origin>/mcp` | pass | `check-public-routes.mjs` cases 7a–7c |
+| T8 signed in, `/api/auth/oauth2/get-consents` → 200 | pass | `check-browser-cases.mjs --case 8` (no browser needed) |
+| T9 Claude connects and edits a page live | manual, open | a person with a Claude account |
+
 ## Known package gaps
 
 - **The seeded demo page opens with an empty editor body** — not passed, waits on
@@ -102,4 +130,7 @@ REVIEW_SEED_SECRET=… node pocs/kdm/scripts/check-browser-cases.mjs https://kdm
   site during the manual look check.
 - Locally, `pnpm preview kdm` on a brand-new database tried to seed before the dev server
   had migrated it; re-running `pnpm --filter kdm exec crouton-seed --db kdm-db --team kdm`
-  and `scripts/seed-review-login.mjs` once the server was up fixed it.
+  and `scripts/seed-review-login.mjs` once the server was up fixed it. (Seen again 25 Nov,
+  #4493: the review login got HTTP 503; re-running `seed-review-login.mjs` fixed it.)
+- Locally, `/mcp` and `/.well-known/oauth-*` answer 500 unless `BETTER_AUTH_SECRET` is set
+  for `pnpm preview kdm` (deploys set it).

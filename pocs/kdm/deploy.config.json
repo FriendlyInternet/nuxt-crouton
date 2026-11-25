@@ -1,5 +1,20 @@
 {
+  "collab": true,
   "stagingUrl": "https://kdm.pmcp.dev",
   "reviewTeam": "kdm",
-  "layerPackages": "@fyit/crouton-core @fyit/crouton-i18n @fyit/crouton-editor @fyit/crouton-pages @fyit/crouton-assets @fyit/crouton-layout"
+  "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-i18n @fyit/crouton-editor @fyit/crouton-pages @fyit/crouton-assets @fyit/crouton-layout @fyit/crouton-collab @fyit/crouton-mcp-toolkit",
+  "smoke": {
+    "reads": [
+      { "path": "/api/teams/{teamId}/pages-pages" },
+      {
+        "path": "/api/collab/token?teamId={teamId}&room={teamId}:pagesPages:smoke",
+        "expectIncludes": "token"
+      },
+      { "path": "/mcp/pages", "expectStatus": 404 },
+      { "path": "/mcp", "expectStatus": 401 },
+      { "path": "/.well-known/oauth-authorization-server" },
+      { "path": "/.well-known/oauth-protected-resource" },
+      { "path": "/api/auth/oauth2/get-consents" }
+    ]
+  }
 }

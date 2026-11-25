@@ -168,3 +168,4 @@ packages/crouton-core/tests/nuxt-runtime/.nuxt
 
 pocs/status/.data
 fixtures/with-mcp-oauth/.data
+pocs/kdm/.data
