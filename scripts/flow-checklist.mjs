@@ -12,15 +12,26 @@
 // run, so it does not race that worker's "routed" tick. There is still no retry loop.
 import { pathToFileURL } from 'node:url'
 import { execFileSync } from 'node:child_process'
+import { mockupState } from './lib/signoff-route.mjs'
 
 export const STEPS = [
   ['routed', 'Routed'],
-  ['plan', 'Plan + mockup posted'],
+  ['plan', 'Plan posted'],
   ['ok', 'Owner ok'],
   ['pr', 'Build PR opened'],
   ['review', 'Build review'],
   ['merged', 'Merged']
 ]
+
+/** Labels an older checklist used for a step; parse() still reads them so old ticks survive (#4524). */
+const LEGACY_LABELS = { plan: ['Plan + mockup posted'] }
+
+/** The Mockup line is never ticked by hand: it is worked out from the thread (`mockupState`, #4524). */
+export const MOCKUP_LINES = {
+  posted: '- [x] Mockup posted',
+  missing: '- [ ] Mockup posted',
+  waived: '- [x] Mockup skipped — owner ok to build without one'
+}
 
 export const REVIEWS = [['plan', 'Plan review'], ['build', 'Build review']]
 export const VERDICTS = ['go', 'no-go', 'needs-owner']
@@ -53,8 +64,10 @@ export const marker = issue => `<!-- flow-checklist:${issue} -->`
 export function parse(body = '') {
   const state = {}
   for (const [key, label] of STEPS) {
-    const m = body.match(new RegExp(`^- \\[x\\] ${label.replace(/[+]/g, "\\$&")}(?: — (.*))?$`, 'm'))
-    if (m) state[key] = m[1] || ''
+    for (const l of [label, ...(LEGACY_LABELS[key] || [])]) {
+      const m = body.match(new RegExp(`^- \\[x\\] ${l.replace(/[+]/g, "\\$&")}(?: — (.*))?$`, 'm'))
+      if (m) { state[key] = m[1] || ''; break }
+    }
   }
   const reviews = {}
   for (const [kind, label] of REVIEWS) {
@@ -65,25 +78,27 @@ export function parse(body = '') {
   return state
 }
 
-export function render(issue, state) {
-  const lines = STEPS.map(([key, label]) =>
-    key in state ? `- [x] ${label}${state[key] ? ` — ${state[key]}` : ''}` : `- [ ] ${label}`)
+export function render(issue, state, { mockup = 'none' } = {}) {
+  const lines = STEPS.flatMap(([key, label]) => {
+    const line = key in state ? `- [x] ${label}${state[key] ? ` — ${state[key]}` : ''}` : `- [ ] ${label}`
+    return key === 'plan' && MOCKUP_LINES[mockup] ? [line, MOCKUP_LINES[mockup]] : [line]
+  })
   const rev = REVIEWS.map(([k]) => state.reviews?.[k]).filter(Boolean)
   const block = rev.length ? ['**Latest reviews**', ...rev, ''] : []
   return [marker(issue), '> 🤖 **pi.dev harness** · ticket flow · _edited in place_', '', ...block, ...lines].join('\n')
 }
 
-export function review(body, issue, kind, verdict, round, { route, link } = {}) {
+export function review(body, issue, kind, verdict, round, { route, link, mockup } = {}) {
   const state = parse(body)
   state.reviews = { ...state.reviews, [kind]: reviewLine(kind, verdict, round, { route, link }) }
-  return render(issue, state)
+  return render(issue, state, { mockup })
 }
 
-export function tick(body, issue, step, { link, note } = {}) {
+export function tick(body, issue, step, { link, note, mockup } = {}) {
   if (!STEPS.some(([k]) => k === step)) throw new Error(`unknown step "${step}"`)
   const state = parse(body)
   state[step] = [note, link].filter(Boolean).join(' · ')
-  return render(issue, state)
+  return render(issue, state, { mockup })
 }
 
 function gh(args, input) {
@@ -97,9 +112,15 @@ export function apply({ repo, issue, step, link, note, verdict, createIfMissing 
   // Only our own bot comments count: the marker must open the body.
   const existing = comments.find(c => (c.body || '').startsWith(marker(issue)) && (!c.user || c.user.type === 'Bot'))
   if (!existing && !createIfMissing) { console.error(`no checklist comment on #${issue}; skip`); return 'skipped' }
+  // The Mockup line comes from the live thread on every edit; any error → no line (#4524).
+  let mockup = 'none'
+  try {
+    const iss = JSON.parse(run(['api', `repos/${repo}/issues/${issue}`]))
+    mockup = mockupState({ text: `${iss.title || ''}\n${iss.body || ''}`, comments })
+  } catch { mockup = 'none' }
   let body = existing?.body || ''
-  if (step) body = tick(body, issue, step, { link, note })
-  if (verdict) body = review(body, issue, verdict.kind, verdict.verdict, verdict.round, { route: verdict.route, link })
+  if (step) body = tick(body, issue, step, { link, note, mockup })
+  if (verdict) body = review(body, issue, verdict.kind, verdict.verdict, verdict.round, { route: verdict.route, link, mockup })
   if (existing) run(['api', '-X', 'PATCH', `repos/${repo}/issues/comments/${existing.id}`, '-F', 'body=@-'], body)
   else run(['api', `repos/${repo}/issues/${issue}/comments`, '-F', 'body=@-'], body)
   return existing ? 'edited' : 'created'
