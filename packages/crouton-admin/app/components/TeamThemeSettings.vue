@@ -68,6 +68,13 @@ const isCustom = computed(() =>
 // Saving state
 const isSaving = ref(false)
 
+// Buttons of the unsaved-changes bar (UAlert actions). `size: 'md'` because
+// UAlert defaults action buttons to `xs`.
+const saveBarActions = computed(() => [
+  { label: t('themeSettings.undo'), color: 'neutral' as const, variant: 'ghost' as const, size: 'md' as const, disabled: isSaving.value, onClick: revertChanges },
+  { label: t('common.saveChanges'), color: 'primary' as const, size: 'md' as const, loading: isSaving.value, disabled: !isAdmin.value, onClick: handleSave }
+])
+
 // Apply live preview whenever local theme changes
 watch(localTheme, (newTheme) => {
   applyTheme(newTheme)
@@ -345,32 +352,20 @@ function presetDescription(key: ThemePreset, preset: (typeof THEME_PRESETS)['cus
       </div>
 
       <!-- Unsaved-changes bar: only while something differs from the saved theme -->
-      <div
+      <UAlert
         v-if="hasChanges"
-        class="flex items-center justify-between gap-3 p-3 rounded-lg border border-primary/40 bg-primary/5 sticky bottom-4"
-      >
-        <p class="text-sm font-medium text-default">
-          {{ t('themeSettings.unsavedChanges') }}
-        </p>
-        <div class="flex gap-2">
-          <UButton
-            variant="ghost"
-            color="neutral"
-            :disabled="isSaving"
-            @click="revertChanges"
-          >
-            {{ t('themeSettings.undo') }}
-          </UButton>
-          <UButton
-            color="primary"
-            :loading="isSaving"
-            :disabled="!isAdmin"
-            @click="handleSave"
-          >
-            {{ $t('common.saveChanges') }}
-          </UButton>
-        </div>
-      </div>
+        color="primary"
+        variant="outline"
+        orientation="horizontal"
+        :title="t('themeSettings.unsavedChanges')"
+        :actions="saveBarActions"
+        class="sticky bottom-4 bg-default p-3"
+        :ui="{
+          root: 'flex-col items-stretch sm:flex-row sm:items-center',
+          title: 'text-default font-sans',
+          actions: 'justify-end gap-2'
+        }"
+      />
 
       <!-- Admin Warning -->
       <UAlert
