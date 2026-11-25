@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync, writeFileSync, mkdtempSync, mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { namedTickets, codeRules, hintNotes, ghStateOf, CAP } from './ticket-hints.mjs'
 
@@ -100,9 +100,30 @@ test('T8: no hits → "nothing found" under both lists; the CLI exits 0 and fall
   assert.match(out, /- #8200 \(outside this epic, state unknown\)/)
   assert.doesNotMatch(out, /#12 /)
   assert.match(out, /- src\/rule\.ts:1 — #8100 — /)
-  // unreadable inputs still print the block and exit 0
-  const bad = execFileSync(process.execPath, [CLI, 'notes', join(dir, 'missing.json'), join(dir, 'missing2.json'), '--epic', '10'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
-  assert.match(bad, /## Automatic hint check[\s\S]*- nothing found/)
+  // valid input with no hits → "nothing found" (the check ran)
+  writeFileSync(join(dir, 'empty.json'), JSON.stringify([{ number: 13, body: 'Nothing to see.' }]))
+  const clean = execFileSync(process.execPath, [CLI, 'notes', join(dir, 'empty.json'), join(dir, 'subs.json'), '--epic', '10', '--root', dir],
+    { encoding: 'utf8', env: { PATH: '/nonexistent' } })
+  assert.match(clean, /## Automatic hint check[\s\S]*- nothing found/)
+  assert.doesNotMatch(clean, /could not run/)
+})
+
+test('T10: when the CLI cannot run, the block says "could not run" (never "nothing found") and still exits 0', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ticket-hints-'))
+  writeFileSync(join(dir, 'subs.json'), '[]')
+  const run = (args) => spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8', env: { PATH: '/nonexistent' } })
+  // missing tickets.json
+  const missing = run(['notes', join(dir, 'missing.json'), join(dir, 'subs.json'), '--epic', '10'])
+  assert.equal(missing.status, 0)
+  assert.match(missing.stdout, /## Automatic hint check[\s\S]*could not run — could not read .*missing\.json/)
+  assert.doesNotMatch(missing.stdout, /nothing found/)
+  assert.match(missing.stderr, /ticket-hints: could not read/)
+  // wrong mode
+  const wrong = run(['bogus', join(dir, 'subs.json')])
+  assert.equal(wrong.status, 0)
+  assert.match(wrong.stdout, /## Automatic hint check[\s\S]*could not run — usage: ticket-hints\.mjs notes/)
+  assert.doesNotMatch(wrong.stdout, /nothing found/)
+  assert.match(wrong.stderr, /usage:/)
 })
 
 test('ghStateOf caps lookups, de-duplicates, and maps errors to unknown', () => {

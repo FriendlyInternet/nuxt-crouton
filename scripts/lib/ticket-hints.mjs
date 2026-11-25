@@ -10,7 +10,8 @@
  *   • codeRules — ticket numbers in the comments of the repo files a ticket names.
  *
  *   node scripts/lib/ticket-hints.mjs notes <tickets.json> <subs.json> --epic <n> --root <dir>
- *     → a markdown "## Automatic hint check" block; always exits 0 (the Gather step runs under set -e).
+ *     → a markdown "## Automatic hint check" block; always exits 0 (the Gather step runs under set -e);
+ *     on any error the block says `could not run — <first line of the error>` instead of the lists.
  */
 import { readFileSync, existsSync, statSync } from 'node:fs'
 import { resolve, sep } from 'node:path'
@@ -168,10 +169,15 @@ export function ghStateOf({ repo = process.env.GITHUB_REPOSITORY, max = MAX_LOOK
   }
 }
 
+/** The block printed when the check itself failed — never the "nothing found" block, which means it ran. */
+export function couldNotRunNotes(err) {
+  const first = String(err?.message ?? err ?? 'unknown error').split('\n')[0].trim() || 'unknown error'
+  return ['', '## Automatic hint check', '', `could not run — ${first}`].join('\n') + '\n'
+}
+
 function readJson(file) {
   try { return JSON.parse(readFileSync(file, 'utf8')) } catch (e) {
-    console.error(`ticket-hints: could not read ${file}: ${e.message}`)
-    return []
+    throw new Error(`could not read ${file}: ${e.message}`)
   }
 }
 
@@ -179,18 +185,14 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2)
   const flag = (name) => { const i = args.indexOf(name); return i === -1 ? undefined : args[i + 1] }
   const [mode, ticketsFile, subsFile] = args
-  if (mode !== 'notes' || !ticketsFile) {
-    console.error('usage: ticket-hints.mjs notes <tickets.json> <subs.json> --epic <n> --root <dir>')
-    console.log(hintNotes([]))
-  } else {
-    try {
-      const tickets = readJson(ticketsFile)
-      const siblings = subsFile && !subsFile.startsWith('--') ? readJson(subsFile) : []
-      console.log(hintNotes(tickets, { epic: flag('--epic'), root: flag('--root') || '.', siblings: Array.isArray(siblings) ? siblings : [], stateOf: ghStateOf() }))
-    } catch (e) {
-      console.error(`ticket-hints: ${e.message}`)
-      console.log(hintNotes([]))
-    }
+  try {
+    if (mode !== 'notes' || !ticketsFile) throw new Error('usage: ticket-hints.mjs notes <tickets.json> <subs.json> --epic <n> --root <dir>')
+    const tickets = readJson(ticketsFile)
+    const siblings = subsFile && !subsFile.startsWith('--') ? readJson(subsFile) : []
+    console.log(hintNotes(tickets, { epic: flag('--epic'), root: flag('--root') || '.', siblings: Array.isArray(siblings) ? siblings : [], stateOf: ghStateOf() }))
+  } catch (e) {
+    console.error(`ticket-hints: ${e.message}`)
+    console.log(couldNotRunNotes(e))
   }
   process.exit(0)
 }

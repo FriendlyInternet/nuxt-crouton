@@ -27,7 +27,7 @@ If a ticket shows the STEP LIST itself is wrong (a missing step, a wrong order, 
 
 TITLES (#4353): the epic file carries an *Automatic title check*. For each ticket it lists, write ONE line `Suggested title: …` directly under that ticket's `## Ticket #N` heading, before `### Verdict`. Keep it to at most 140 characters, plain words, about what the owner will notice, with no app/package/commit-type prefix (the component label already shows the area). A title never affects the verdict or any rubric item.
 
-HINTS (#4529): the epic file also ends with an *Automatic hint check*: per ticket, open tickets it names that are not on its `Blocked-by:` line, and ticket numbers in comments of the files it names. They are hints — you decide; `nothing found` means the check ran and found nothing.
+HINTS (#4529): the epic file also ends with an *Automatic hint check*: per ticket, open tickets it names that are not on its `Blocked-by:` line, and ticket numbers in comments of the files it names. They are hints — you decide; `nothing found` means the check ran and found nothing. `could not run` means there are no hints for this review; grade as you would without them.
 
 Verdict per ticket: `no-go` if any of 3–6, 8 or 9 is FAIL; else `needs-owner` if 7 is FAIL; else `no-go` if 10 is FAIL; else `go` — or `plan-wrong` as above. Write the file in EXACTLY this shape, one section per ticket in the file, plain language for the owner, no insider jargon:
 
