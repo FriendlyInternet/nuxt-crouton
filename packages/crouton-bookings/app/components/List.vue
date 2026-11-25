@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { useIntersectionObserver } from '@vueuse/core'
+import { defaultWindow, useEventListener, useIntersectionObserver } from '@vueuse/core'
 import { toDateKey, isSameDay } from '@fyit/crouton-core/shared/utils/date'
 import type { Booking } from '../types/booking'
 
@@ -246,11 +246,17 @@ function getWeekKey(date: Date): string {
   return `${d.getFullYear()}-W${weekNum}`
 }
 
-// Report the top visible day to the calendar when its week changes
+// Report the top visible day to the calendar when its week changes — only after the list really
+// scrolled. The observer also fires when the list mounts (e.g. full screen reopens) or its days
+// change; following those would replace the week the user picked with the list's first day (#4516).
 let lastEmittedWeek: string | null = null
+let scrolled = false
+useEventListener(() => props.scrollRoot ?? defaultWindow, 'scroll', () => { scrolled = true }, { passive: true })
 useIntersectionObserver(
   () => [...dateElementRefs.value.values()],
   (entries) => {
+    if (!scrolled) return
+    scrolled = false
     // Find topmost visible date group
     let topEntry: IntersectionObserverEntry | null = null
     let topY = Infinity
