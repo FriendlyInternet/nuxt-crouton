@@ -461,7 +461,9 @@ onBeforeUnmount(card.close)
           <!-- Presentation only — day activation (mouse + keyboard) arrives via
                CroutonCalendarMonth's cellTrigger button → onMonthSelect.
                `transition`, not `transition-all`: a min-height change must not animate,
-               or the month's held height is re-measured mid-shrink and keeps the old height (#4516). -->
+               or the month's held height is re-measured mid-shrink and keeps the old height (#4516).
+               A day with bookings gets no background of its own (#4516): a permanent tint read as
+               "still highlighted" after another day was tapped, and it hid the selected background. -->
           <div
             v-else
             class="group relative w-full flex flex-col items-center justify-start pt-1 pb-1 rounded-md transition duration-200"
@@ -475,7 +477,7 @@ onBeforeUnmount(card.close)
                     ? 'bg-elevated shadow-sm'
                     : 'hover:bg-elevated/80',
               hasBookings(jsDate) && !isDayUnavailable(jsDate)
-                ? 'bg-muted/30 cursor-pointer'
+                ? 'cursor-pointer'
                 : '',
             ]"
             :title="getDayBlockedReason(jsDate) || undefined"

@@ -73,6 +73,29 @@ async function ensureCancelledBooking(page: Page, baseURL: string | undefined) {
   expect(res.ok(), `create booking failed: ${res.status()} ${await res.text()}`).toBeTruthy()
 }
 
+/** One booking at "e2e loc 1" on `day` (YYYY-MM-DD), slot s1-0 (re-runnable: creates it only when missing). */
+async function ensureBookingOn(page: Page, baseURL: string | undefined, day: string) {
+  const base = baseURL || 'http://localhost:3000'
+  await ensureBookingLocations(page, baseURL, 1)
+  const { teamId, headers } = await team(page, base)
+  const locRes = await page.request.get(`${base}/api/teams/${teamId}/bookings-locations`, { headers })
+  const locData = await locRes.json()
+  const locs: any[] = Array.isArray(locData) ? locData : (locData?.items ?? [])
+  const loc1 = locs.find(l => l.title === 'e2e loc 1')
+  expect(loc1, 'e2e loc 1 exists').toBeTruthy()
+  const listRes = await page.request.get(`${base}/api/teams/${teamId}/bookings-bookings`, { headers })
+  expect(listRes.ok(), `list bookings failed: ${listRes.status()}`).toBeTruthy()
+  const listData = await listRes.json()
+  const existing: any[] = Array.isArray(listData) ? listData : (listData?.items ?? [])
+  const dayOf = (d: unknown) => new Date(d as string).toLocaleDateString('en-CA', { timeZone: 'Europe/Brussels' })
+  if (existing.some(b => b.location === loc1.id && dayOf(b.date) === day && b.status !== 'cancelled')) return
+  const res = await page.request.post(`${base}/api/teams/${teamId}/bookings-bookings`, {
+    headers,
+    data: { location: loc1.id, date: day, slot: ['s1-0'], quantity: 1, status: 'confirmed' }
+  })
+  expect(res.ok(), `create booking failed: ${res.status()} ${await res.text()}`).toBeTruthy()
+}
+
 async function openPage(page: Page, baseURL: string | undefined) {
   const base = baseURL || 'http://localhost:3000'
   const slug = JSON.parse(readFileSync(TEAM_FILE, 'utf8')).slug
@@ -367,6 +390,47 @@ test.describe(FIXTURE === 'with-bookings' ? 'bookings full screen' : 'bookings f
       await expect(dialog.getByText('New booking for')).toHaveCount(0)
       // the strip is not drawn at all on touch (no invisible hit area)
       await expect(day.locator('button')).toBeHidden()
+    })
+
+    // #4516 (owner, 25 Nov, iPhone): tap a day with bookings, then another day — only the
+    // second is highlighted. Reproduced in WebKit (iPhone 13): nothing hover/focus-only stayed on
+    // the booked day; it was its permanent "has bookings" tint, which also hid the selected look.
+    test('phone (touch): a tapped day with bookings is not left highlighted after tapping another day', async ({ page, baseURL }) => {
+      const now = new Date()
+      const ymd = (d: number) => `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+      await ensureBookingOn(page, baseURL, ymd(12))
+      await openPage(page, baseURL)
+      const dialog = await openFullScreen(page)
+      await handleOf(dialog).tap()
+      await expect(dialog.getByRole('button', { name: 'Next month' })).toBeVisible({ timeout: FIRST_HIT })
+      await page.waitForTimeout(500)
+      // days 7–25 have a unique number in the month grid
+      const cell = (n: number) => dialog.locator('div.group[style*="min-height"]')
+        .filter({ has: page.locator('> span', { hasText: new RegExp(`^${n}$`) }) })
+      const booked = cell(12)
+      const other = cell(13)
+      const plain = cell(14)
+      await expect(booked).toHaveCount(1)
+      await expect(booked).toHaveClass(/cursor-pointer/)
+      // start from neither selected (the shared store may hold a day from an earlier test)
+      await cell(20).tap()
+      await expect(cell(20)).toHaveClass(/bg-elevated/)
+      await page.waitForTimeout(300)
+      const bg = (l: Locator) => l.evaluate(el => getComputedStyle(el).backgroundColor)
+
+      await booked.tap()
+      await expect(booked).toHaveClass(/bg-elevated/)
+      await page.waitForTimeout(300)
+      const selectedBg = await bg(booked)
+      await other.tap()
+      await expect(other).toHaveClass(/bg-elevated/)
+      await page.waitForTimeout(300)
+
+      // the selected look is the same with or without bookings
+      expect(await bg(other)).toBe(selectedBg)
+      // the booked day now looks like any unselected day: no background left on it
+      await expect(booked).not.toHaveClass(/(^|\s)bg-elevated(\s|$)/)
+      expect(await bg(booked)).toBe(await bg(plain))
     })
   })
 
