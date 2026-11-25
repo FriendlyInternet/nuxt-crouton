@@ -15,7 +15,10 @@
  * only talks to GitHub. `CLAIM_FACTS_FILE=<json>` replaces every GitHub lookup with a fixture
  * (tests and dry runs):
  *   { "issues": { "3988": { "state", "body", "labels", "comments": [{ body, createdAt }], "parent": 3897|null } },
- *     "prs": { "12": { "body", "headRefName" } }, "now": "<iso>" }
+ *     "prs": { "12": { "body", "headRefName", "state"?: "OPEN"|"MERGED"|"CLOSED" } },
+ *     "repoId": 1063412456, "nodes": { "<issue node id>": <number> }, "now": "<iso>" }
+ * (`repoId` + `nodes` turn a sub-issue database id into its number for the adopt check, #4517;
+ * a PR's `state` defaults to OPEN.)
  */
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
@@ -57,6 +60,19 @@ export function ghFacts() {
         throw e
       }
     },
+    repoId() {
+      return Number(gh(['api', 'repos/{owner}/{repo}', '--jq', '.id']).trim())
+    },
+    numberOfNode(id) {
+      const query = 'query($id:ID!){node(id:$id){... on Issue{number}}}'
+      const j = JSON.parse(gh(['api', 'graphql', '-f', `query=${query}`, '-f', `id=${id}`]))
+      const n = j && j.data && j.data.node && j.data.node.number
+      if (!n) throw new Error(`no issue for node ${id}`)
+      return n
+    },
+    openPrs() {
+      return JSON.parse(gh(['pr', 'list', '--state', 'open', '--json', 'number,headRefName', '--limit', '200']))
+    },
   }
 }
 
@@ -73,6 +89,18 @@ export function fixtureFacts(file) {
     },
     parent: (n) => (issues[n] && issues[n].parent) || null,
     pr: (n) => (f.prs && f.prs[n]) || null,
+    repoId() {
+      if (!f.repoId) throw new Error('fixture: no repoId')
+      return f.repoId
+    },
+    numberOfNode(id) {
+      const n = f.nodes && f.nodes[id]
+      if (!n) throw new Error(`fixture: no node ${id}`)
+      return n
+    },
+    openPrs: () => Object.entries(f.prs || {})
+      .filter(([, p]) => String(p.state || 'OPEN').toUpperCase() === 'OPEN')
+      .map(([number, p]) => ({ number: Number(number), headRefName: p.headRefName || '' })),
   }
 }
 
