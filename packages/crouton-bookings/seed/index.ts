@@ -143,7 +143,9 @@ const BOOKINGS: SeedBooking[] = [
   { locationKey: 'park-court', slotIds: ['slot-1400'], inDays: 2, quantity: 1, status: 'pending', group: 'adults' },
   { locationKey: 'kayak-rental', slotIds: [], inDays: 3, quantity: 2, status: 'confirmed', group: null },
   // appended last: booking ids include the list index
-  { locationKey: 'bike-shed', slotIds: ['slot-morning'], inDays: 1, quantity: 2, status: 'confirmed', group: 'adults', product: 'cargo-bike' }
+  { locationKey: 'bike-shed', slotIds: ['slot-morning'], inDays: 1, quantity: 2, status: 'confirmed', group: 'adults', product: 'cargo-bike' },
+  // one cancelled booking so "Show cancelled" has something to show (#4562)
+  { locationKey: 'park-court', slotIds: ['slot-1500'], inDays: 4, quantity: 1, status: 'cancelled', group: 'adults' }
 ]
 
 function locationId(ctx: SeedContext, key: string): string {
