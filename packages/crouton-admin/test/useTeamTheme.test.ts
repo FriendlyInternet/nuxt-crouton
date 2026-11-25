@@ -53,6 +53,7 @@ describe('useTeamTheme loading (#4551)', () => {
 
   it('T2: does not fetch again when the plugin already loaded the theme', async () => {
     state.set('team-theme-fetched', ref(true))
+    state.set('team-theme-team-id', ref('team-1'))
     teamId.value = 'team-1'
     const useTeamTheme = await load()
     const { isLoading, error } = useTeamTheme()
