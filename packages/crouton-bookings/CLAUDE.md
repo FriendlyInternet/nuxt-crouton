@@ -44,7 +44,7 @@ CroutonBooking
 │   ├── Locations.vue    - CroutonBookingsLayoutLocations (`bookings-locations`) — selectable location list → shared location filter (one location at a time, #4471) (a robust list, NOT the geo/maplibre PanelMap — see #924 gap notes)
 │   └── Filters.vue      - CroutonBookingsLayoutFilters (`bookings-filters`) — status/location/cancelled → shared store (Panel-only view controls hidden via `PanelFilters` `view-toggles=false`, #2563)
 ├── Calendar.vue        - Calendar date picker
-├── CalendarFoldHandle.vue - drag/tap/keyboard handle that switches calendarView month ↔ week (#4516)
+├── CalendarFoldHandle.vue - chevron button (down in week, up in month; tap/Enter/Space) that switches calendarView month ↔ week (#4516)
 ├── List.vue            - Bookings list; `listToggles` (Panel only) puts Show cancelled / Map (Map only with coordinates) on the first month label, or atop a loading/error/empty list (#4492)
 ├── ListToggles.vue     - the Show cancelled / Map text toggles List.vue renders (internal)
 ├── BookingCard.vue     - Individual booking card

@@ -10,7 +10,7 @@
  * ends in a single labelled close. Month view leaves room for the booking list.
  * Desktop keeps the inline calendar.
  *
- * #4516 — the top row is the calendar's month label plus the close X; a drag handle
+ * #4516 — the top row is the calendar's month label plus the close X; a chevron button
  * under the calendar folds month ↔ week; tapping the label selects today; the
  * location tab row has one full-width line with the green underline on it.
  *
@@ -92,18 +92,6 @@ async function openFullScreen(page: Page): Promise<Locator> {
 }
 
 const handleOf = (dialog: Locator) => dialog.getByRole('button', { name: 'Switch between week and month' })
-
-/** Drag the handle with the mouse: down, move `dy` px in 6 steps, up. */
-async function dragHandle(page: Page, dialog: Locator, dy: number) {
-  const box = await handleOf(dialog).boundingBox()
-  expect(box, 'handle box').toBeTruthy()
-  const x = box!.x + box!.width / 2
-  const y = box!.y + box!.height / 2
-  await page.mouse.move(x, y)
-  await page.mouse.down()
-  await page.mouse.move(x, y + dy, { steps: 6 })
-  await page.mouse.up()
-}
 
 const centreY = (b: { y: number, height: number }) => b.y + b.height / 2
 
@@ -225,8 +213,8 @@ test.describe(FIXTURE === 'with-bookings' ? 'bookings full screen' : 'bookings f
     expect(fits).toBe(true)
   })
 
-  // covers: T4 — #4516: one top row (label + X) and a drag handle that folds month ↔ week
-  test('phone: the month label and the close share the top row; dragging the handle folds and unfolds', async ({ page, baseURL }) => {
+  // covers: T4 — #4516: one top row (label + X) and a chevron button that folds month ↔ week
+  test('phone: the month label and the close share the top row; tapping the chevron folds and unfolds', async ({ page, baseURL }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await openPage(page, baseURL)
     const dialog = await openFullScreen(page)
@@ -248,14 +236,17 @@ test.describe(FIXTURE === 'with-bookings' ? 'bookings full screen' : 'bookings f
     })
     const before = await positions()
 
-    // down: unfold to the month
-    await dragHandle(page, dialog, 60)
+    // week → month: the chevron points down and opens the month
+    await expect(handleOf(dialog)).toHaveAttribute('aria-expanded', 'false')
+    await handleOf(dialog).click()
+    await expect(handleOf(dialog)).toHaveAttribute('aria-expanded', 'true')
     await expect(dialog.getByRole('button', { name: 'Next month' })).toBeVisible()
     await expect(dialog.getByRole('button', { name: 'Next week' })).toHaveCount(0)
     expect(await positions()).toEqual(before)
 
-    // up: fold to one week row
-    await dragHandle(page, dialog, -60)
+    // month → week: the chevron points up and folds to one week row
+    await handleOf(dialog).click()
+    await expect(handleOf(dialog)).toHaveAttribute('aria-expanded', 'false')
     await expect(dialog.getByRole('button', { name: 'Next week' })).toBeVisible()
     await expect(dialog.getByRole('button', { name: 'Next month' })).toHaveCount(0)
     expect(await positions()).toEqual(before)

@@ -1,9 +1,8 @@
 // @vitest-environment happy-dom
 /**
- * #4516 — the drag handle under the panel calendar folds month ↔ week.
+ * #4516 — the chevron button under the panel calendar folds month ↔ week.
  * Compiles and mounts the real CalendarFoldHandle.vue (same way as
- * slot-indicator-touch.test.ts). The auto-imports are stubbed: `usePointerSwipe`
- * captures its options so the test can fire a swipe end, `useT` returns the key.
+ * slot-indicator-touch.test.ts). The `useT` auto-import is stubbed to return the key.
  */
 import { describe, it, expect, beforeAll } from 'vitest'
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
@@ -16,13 +15,14 @@ import ts from 'typescript'
 const file = resolve(__dirname, '../app/components/CalendarFoldHandle.vue')
 const source = readFileSync(file, 'utf8')
 let Handle: Component
-let swipe: { target: unknown, options: any } | null = null
 
-// A plain <button> that passes attrs (aria-*, class) and the click through
+// A plain <button> that passes attrs (aria-*, class) and the click through,
+// and exposes the `icon` prop as data-icon so the chevron can be checked
 const UButton = defineComponent({
   inheritAttrs: false,
-  setup(_, { attrs, slots }) {
-    return () => h('button', { type: 'button', ...attrs }, slots.default?.())
+  props: { icon: { type: String, default: undefined } },
+  setup(props, { attrs, slots }) {
+    return () => h('button', { 'type': 'button', 'data-icon': props.icon, ...attrs }, slots.default?.())
   },
 })
 
@@ -40,10 +40,6 @@ beforeAll(async () => {
   const g = globalThis as any
   g.ref = ref
   g.useT = () => ({ t: (k: string) => k })
-  g.usePointerSwipe = (target: unknown, options: any) => {
-    swipe = { target, options }
-    return {}
-  }
   Handle = (await import(/* @vite-ignore */ out)).default
 })
 
@@ -90,33 +86,14 @@ describe('CalendarFoldHandle (#4516)', () => {
     expect(w.find('button').attributes('aria-expanded')).toBe('false')
   })
 
-  it('swipe up folds to week, swipe down unfolds to month', async () => {
-    const { w, state } = mountHandle('month')
-    expect(swipe).not.toBeNull()
-    swipe!.options.onSwipeStart?.(new Event('pointerdown'))
-    swipe!.options.onSwipeEnd(new Event('pointerup'), 'up')
-    await w.vm.$nextTick()
-    expect(state.value).toBe('week')
-    swipe!.options.onSwipeStart?.(new Event('pointerdown'))
-    swipe!.options.onSwipeEnd(new Event('pointerup'), 'down')
-    await w.vm.$nextTick()
-    expect(state.value).toBe('month')
-  })
-
-  it('the click right after a drag does not undo it; the next tap toggles again', async () => {
-    const { w, state } = mountHandle('month')
-    swipe!.options.onSwipeStart?.(new Event('pointerdown'))
-    swipe!.options.onSwipeEnd(new Event('pointerup'), 'up')
-    await w.vm.$nextTick()
-    await click(w)
-    expect(state.value).toBe('week')
-    await click(w)
-    expect(state.value).toBe('month')
-  })
-
-  it('the swipe target is the handle wrapper and it blocks page scroll with touch-none!', () => {
+  it('shows a down chevron in week and an up chevron in month', async () => {
     const { w } = mountHandle('week')
-    expect((swipe!.target as any).value).toBe(w.element)
-    expect(source).toMatch(/<div ref="handleEl" class="[^"]*\btouch-none!/)
+    expect(w.find('button').attributes('data-icon')).toBe('i-lucide-chevron-down')
+    await click(w)
+    expect(w.find('button').attributes('data-icon')).toBe('i-lucide-chevron-up')
+  })
+
+  it('has no drag code and no touch-action: none any more', () => {
+    expect(source).not.toMatch(/usePointerSwipe|touch-none/)
   })
 })
