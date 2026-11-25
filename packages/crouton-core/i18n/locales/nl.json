@@ -58,6 +58,7 @@
     "creationFailed": "Aanmaken mislukt",
     "updateFailed": "Bijwerken mislukt",
     "deleteFailed": "Verwijderen mislukt",
+    "deletePartial": "{done} van {total} verwijderd. {failed} kon niet worden verwijderd: {error}",
     "moveFailed": "Verplaatsen mislukt",
     "reorderFailed": "Herordenen mislukt"
   },
@@ -86,7 +87,11 @@
     "percentComplete": "{percent}% voltooid",
     "itemsCreated": "{count} items aangemaakt",
     "itemsFailed": "{count} items mislukt",
-    "rowsSkipped": "{count} rijen overgeslagen (validatiefouten)"
+    "rowsSkipped": "{count} rijen overgeslagen (validatiefouten)",
+    "readFailed": "Het bestand kon niet worden gelezen",
+    "noFields": "Deze collectie heeft geen velden om in te importeren",
+    "rowFailed": "Rij {row}: {error}",
+    "moreFailed": "…en nog {count}"
   },
   "errors": {
     "checkConnection": "Controleer je verbindingsstatus.",

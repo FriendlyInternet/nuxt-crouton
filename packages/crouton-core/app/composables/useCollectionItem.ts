@@ -34,14 +34,16 @@ export async function useCollectionItem<T = any>(
   collection: string,
   id: string | Ref<string> | (() => string)
 ): Promise<CollectionItemReturn<T>> {
-  const route = useRoute()
   const collections = useCollections()
   const config = collections.getConfig(collection)
-  const { getTeamId } = useTeamContext()
 
   if (!config) {
     throw new Error(`Collection "${collection}" not registered`)
   }
+
+  // Team part, super-admin flag and the item key all come from the one
+  // builder, resolved once at setup (#4506).
+  const { teamPart, isSuperAdmin, itemKey } = useCollectionCacheKeys(collection)
 
   const apiPath = config.apiPath || collection
 
@@ -52,15 +54,13 @@ export async function useCollectionItem<T = any>(
   })
 
   const strategy = config.fetchStrategy || 'query'
-  const isSuperAdmin = route.path.includes('/super-admin/')
-
   // Build API path based on collection's fetch strategy
   // - 'restful': Uses /{id} pattern (e.g., /api/teams/123/members/456)
   // - 'query': Uses ?ids= pattern (e.g., /api/teams/123/bookings?ids=456)
-  const buildApiPath = (teamId: string | undefined) => {
-    const basePath = isSuperAdmin
+  const buildApiPath = () => {
+    const basePath = isSuperAdmin.value
       ? `/api/super-admin/${apiPath}`
-      : `/api/teams/${teamId}/${apiPath}`
+      : `/api/teams/${teamPart.value}/${apiPath}`
 
     return strategy === 'restful'
       ? `${basePath}/${itemId.value}`
@@ -70,27 +70,28 @@ export async function useCollectionItem<T = any>(
   // Skip server-side fetch when team context isn't available yet.
   // useAsyncData with server:false automatically fetches on client mount,
   // replacing the manual onMounted retry pattern.
-  const canFetchOnServer = !!getTeamId() || isSuperAdmin
+  const canFetchOnServer = !!teamPart.value || isSuperAdmin.value
 
   // Forward the browser's auth cookie during SSR so team-scoped endpoints
   // see the user's better-auth session. On the client this is undefined.
   const requestHeaders = import.meta.server ? useRequestHeaders(['cookie']) : undefined
 
+  // Getter key: changing the id or the team moves this view to its own cache
+  // slot (and refetches), so two views never share a slot for different
+  // records/teams. Collection stays right after the prefix — crouton-collab
+  // and useCollectionMutation match on `collection-item:<collection>:`.
   const { data, pending, error, refresh } = await useAsyncData(
-    `collection-item:${collection}:${itemId.value}`,
+    () => itemKey(itemId.value),
     () => {
       if (!itemId.value) return Promise.resolve(null)
+      if (!isSuperAdmin.value && !teamPart.value) return Promise.resolve(null)
 
-      const currentTeamId = getTeamId()
-      if (!currentTeamId && !isSuperAdmin) return Promise.resolve(null)
-
-      return $fetch<any>(buildApiPath(currentTeamId), {
+      return $fetch<any>(buildApiPath(), {
         headers: requestHeaders,
       })
     },
     {
       server: canFetchOnServer,
-      watch: [itemId],
       default: () => null,
     }
   )

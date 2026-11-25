@@ -27,6 +27,8 @@ const {
   progress
 } = useCollectionImport(props.collection)
 
+const SKIP = '__skip__'
+
 type Step = 'mapping' | 'preview' | 'importing' | 'complete'
 const step = ref<Step>('mapping')
 
@@ -38,6 +40,11 @@ const mappings = ref<ImportColumnMapping[]>([])
 const validationResults = ref<ImportRowValidation[]>([])
 const skipInvalid = ref(true)
 const importResult = ref<ImportResult | null>(null)
+const readError = ref<string | null>(null)
+const noFields = ref(false)
+const importError = ref<string | null>(null)
+
+const failedRows = computed(() => importResult.value?.errors ?? [])
 
 const validCount = computed(() => validationResults.value.filter(r => r.valid).length)
 const invalidCount = computed(() => validationResults.value.filter(r => !r.valid).length)
@@ -48,7 +55,8 @@ const fieldOptions = computed(() => {
     label: `${f.label}${f.required ? ' *' : ''}`,
     value: f.key
   }))
-  return [{ label: t('import.skipColumn'), value: '' }, ...opts]
+  // A select item may not have an empty-string value, so skip gets a sentinel
+  return [{ label: t('import.skipColumn'), value: SKIP }, ...opts]
 })
 
 // Table columns for preview
@@ -76,22 +84,32 @@ const previewRows = computed(() => {
 // Parse file on open
 watch(() => props.file, async (file) => {
   if (!file) return
+  readError.value = null
+  noFields.value = false
+  importError.value = null
   try {
     const parsed = await parseFile(file)
     rows.value = parsed.rows
     csvColumns.value = parsed.columns
     fields.value = getCollectionFields()
-    mappings.value = autoMapColumns(parsed.columns, fields.value)
+    if (fields.value.length === 0) {
+      noFields.value = true
+      mappings.value = []
+    } else {
+      mappings.value = autoMapColumns(parsed.columns, fields.value)
+    }
     step.value = 'mapping'
   } catch (error: any) {
     console.error('[ImportPreviewModal] Parse error:', error)
+    readError.value = error?.message || String(error)
+    step.value = 'mapping'
   }
 }, { immediate: true })
 
 function updateMapping(index: number, fieldKey: string) {
   mappings.value[index] = {
     ...mappings.value[index]!,
-    fieldKey: fieldKey || null
+    fieldKey: fieldKey && fieldKey !== SKIP ? fieldKey : null
   }
 }
 
@@ -102,16 +120,18 @@ function goToPreview() {
 
 async function startImport() {
   step.value = 'importing'
-  const rowsToImport = skipInvalid.value
-    ? validationResults.value.filter(r => r.valid).map(r => r.data)
-    : validationResults.value.map(r => r.data)
+  importError.value = null
+  const list = skipInvalid.value
+    ? validationResults.value.filter(r => r.valid)
+    : validationResults.value
 
   try {
-    const result = await executeImport(rowsToImport)
+    const result = await executeImport(list.map(r => r.data), list.map(r => r.rowIndex))
     importResult.value = result
     step.value = 'complete'
     emit('import-complete', result)
-  } catch {
+  } catch (e: any) {
+    importError.value = e?.message || String(e)
     step.value = 'preview'
   }
 }
@@ -120,7 +140,11 @@ const { start: startResetState } = useTimeoutFn(() => {
   step.value = 'mapping'
   rows.value = []
   csvColumns.value = []
+  fields.value = []
   mappings.value = []
+  readError.value = null
+  noFields.value = false
+  importError.value = null
   validationResults.value = []
   importResult.value = null
 }, 300, { immediate: false })
@@ -160,6 +184,19 @@ function close() {
 
         <!-- Step 1: Column Mapping -->
         <div v-if="step === 'mapping'" class="space-y-4">
+          <UAlert
+            v-if="readError"
+            color="error"
+            variant="subtle"
+            :title="t('import.readFailed')"
+            :description="readError"
+          />
+          <UAlert
+            v-if="noFields"
+            color="error"
+            variant="subtle"
+            :title="t('import.noFields')"
+          />
           <p class="text-sm text-muted">
             {{ t('import.mapColumnsHint') }}
           </p>
@@ -176,7 +213,7 @@ function close() {
               <UIcon name="i-lucide-arrow-right" class="shrink-0 text-muted" />
               <div class="w-1/2">
                 <USelect
-                  :model-value="mapping.fieldKey || ''"
+                  :model-value="mapping.fieldKey || SKIP"
                   :items="fieldOptions"
                   value-key="value"
                   size="sm"
@@ -207,6 +244,13 @@ function close() {
 
         <!-- Step 2: Preview & Validation -->
         <div v-if="step === 'preview'" class="space-y-4">
+          <UAlert
+            v-if="importError"
+            color="error"
+            variant="subtle"
+            :title="t('import.failed')"
+            :description="importError"
+          />
           <!-- Summary bar -->
           <div class="flex items-center gap-4 p-3 rounded-lg bg-muted/50">
             <UBadge color="success" variant="subtle">
@@ -320,6 +364,14 @@ function close() {
               <p v-if="importResult?.failed">{{ t('import.itemsFailed', { count: importResult.failed }) }}</p>
               <p v-if="invalidCount > 0 && skipInvalid">{{ t('import.rowsSkipped', { count: invalidCount }) }}</p>
             </div>
+            <ul v-if="failedRows.length" class="failed-rows mt-4 space-y-1 text-sm text-error text-left max-h-48 overflow-y-auto">
+              <li v-for="e in failedRows.slice(0, 20)" :key="e.rowIndex">
+                {{ t('import.rowFailed', { row: e.rowIndex + 1, error: e.error }) }}
+              </li>
+              <li v-if="failedRows.length > 20" class="text-muted">
+                {{ t('import.moreFailed', { count: failedRows.length - 20 }) }}
+              </li>
+            </ul>
           </div>
 
           <div class="flex justify-center pt-4">
