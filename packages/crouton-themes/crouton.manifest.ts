@@ -51,5 +51,6 @@ export default defineCroutonManifest({
     { id: 'minimal',       name: 'Minimal',     description: 'Super clean, black lines on white background',          subpath: './minimal',      variant: 'minimal' },
     { id: 'kr11',          name: 'KR-11',       description: 'Korg KR-11 rhythm box, tactile pads and LED display',  subpath: './kr11',         variant: 'kr11' },
     { id: 'blackandwhite', name: 'Black & White', description: 'Compact monochrome dashboard theme',                 subpath: './blackandwhite', variant: 'blackandwhite' },
+    { id: 'editorial',     name: 'Editorial',   description: 'Book-style serif on white, sans controls, grey pill buttons', subpath: './editorial', variant: 'editorial' },
   ],
 })
