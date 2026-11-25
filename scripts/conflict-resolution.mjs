@@ -369,6 +369,29 @@ function generateFailure(r) {
   return ok ? null : lines(out).pop() ?? `exit ${r.status}`
 }
 
+/**
+ * #4546: the whitespace hits the resolution itself wrote. Takes the `git diff --check` output against
+ * each parent; a hit is a `<file>:<line>: <message>.` header plus the `+<content>` line after it (none
+ * for `new blank line at EOF.`). Returns, in `headOut` order, the hits whose file|line|message|content
+ * appear in BOTH outputs, each as its original text — a hit in only one came unchanged from the other parent.
+ * Both runs number lines in the same staged post-image, so the line number is a safe part of the key.
+ */
+export function ownWhitespaceHits(headOut, mergeOut) {
+  const parse = (out) => {
+    const hits = []
+    const ls = String(out || '').split('\n')
+    for (let i = 0; i < ls.length; i++) {
+      const m = /^(.+?):(\d+): (.+)$/.exec(ls[i])
+      if (!m) continue
+      const content = ls[i + 1] !== undefined && ls[i + 1].startsWith('+') ? ls[++i] : null
+      hits.push({ key: [m[1], m[2], m[3], content ?? ''].join('|'), text: content === null ? m[0] : `${m[0]}\n${content}` })
+    }
+    return hits
+  }
+  const other = new Set(parse(mergeOut).map((h) => h.key))
+  return parse(headOut).filter((h) => other.has(h.key)).map((h) => h.text)
+}
+
 /** Run the app's generator; it must succeed and write nothing (the resolved migrations already match the schema). */
 function regenerateOk(appDir, dirs) {
   const status = () => sh('git', ['status', '--porcelain', '--untracked-files=all', '--', ...dirs])
@@ -400,7 +423,19 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const stage = resolutionPaths({ modified: lines(sh('git', ['diff', '--name-only'])), conflicted: files, untracked })
     if (stage.length) sh('git', ['add', '--', ...stage])
     // Only the conflicted files: mid-merge the index holds the whole base diff, whose own whitespace is not ours to judge.
-    try { if (files.length) sh('git', ['diff', '--cached', '--check', '--', ...files]) } catch (e) { console.error(`::error::git diff --check: ${e.stdout}`); process.exit(1) }
+    // #4546: inside a conflicted file, check against BOTH parents and keep only hits found in both —
+    // a line one parent already had came in unchanged from it and is not the resolution's own.
+    // (`git diff --check --cc` would be the direct way, but it ignores the combined format and checks nothing.)
+    if (files.length) {
+      const outs = []
+      for (const ref of ['HEAD', 'MERGE_HEAD']) {
+        const r = spawnSync('git', ['diff', '--cached', '--check', ref, '--', ...files], { encoding: 'utf8' })
+        if (r.status !== 0 && r.status !== 2) { console.error(`::error::git diff --check ${ref} failed (exit ${r.status}): ${r.stderr || r.error?.message || ''}`); process.exit(1) }
+        outs.push(r.stdout || '')
+      }
+      const own = ownWhitespaceHits(outs[0], outs[1])
+      if (own.length) { console.error(`::error::git diff --check: ${own.join('\n')}`); process.exit(1) }
+    }
     for (const g of generatorsFor(files)) if (g.check && !run(g.check).ok) { console.error(`::error::${g.name} --check failed after resolution`); process.exit(1) }
     // #4374: the package builds came from PKG_DIST_REF's tree (main), not this merge — rebuild when that differs.
     const since = changedSinceBuild({ distRef: process.env.PKG_DIST_REF })

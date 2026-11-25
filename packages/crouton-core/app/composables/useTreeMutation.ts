@@ -33,6 +33,8 @@ export function useTreeMutation(collection: string) {
   const config = collections.getConfig(collection)
   const { getTeamId } = useTeamContext()
   const { markSaving, markSaved, markError, triggerCountFlash } = useTreeItemState()
+  // The one cache-key builder (#4506): refreshes the current team's lists only
+  const { refreshLists } = useCollectionCacheKeys(collection)
 
   if (!config) {
     console.error(`[useTreeMutation] Collection "${collection}" not found in registry`)
@@ -66,22 +68,13 @@ export function useTreeMutation(collection: string) {
   }
 
   /**
-   * Invalidate cache for this collection (triggers refetch in all views).
-   * Refreshes ALL cache keys for the collection — including scoped queries like
+   * Invalidate cache for this collection in the current team (triggers refetch in its views).
+   * Refreshes the current team's cache keys for the collection — including scoped queries like
    * `{"eventId":...}` — matching useCollectionMutation. Previously this only refreshed
    * the empty-query key (`collection:X:{}`), so a reorder left event-scoped views stale
    * (and effectively pulled the un-scoped, team-wide set).
    */
-  const invalidateCache = async () => {
-    const prefix = `collection:${collection}:`
-    const payloadData = useNuxtApp().payload?.data ?? {}
-    const matchingKeys = new Set(
-      Object.keys(payloadData).filter(key => key.startsWith(prefix))
-    )
-    // Always include the base key as a fallback (client-side entries may not be in payload.data)
-    matchingKeys.add(`${prefix}{}`)
-    await Promise.all([...matchingKeys].map(key => refreshNuxtData(key)))
-  }
+  const invalidateCache = () => refreshLists()
 
   /**
    * Move a node to a new parent and/or position

@@ -562,3 +562,96 @@ test('#4487 verify (lone copy) refuses a leftover tracked branch .sql the base j
 test('this suite never hands an inherited PKG_DIST_REF to the tool it starts', () => {
   assert.equal(process.env.PKG_DIST_REF, undefined)
 })
+
+// ── #4546: whitespace a parent already had, inside a conflicted file, is not the resolution's own ──
+import { ownWhitespaceHits } from './conflict-resolution.mjs'
+
+/** A scratch merge where `file` conflicts; verify runs from the workflow's lone copy. */
+function wsMerge({ file = 'a.md', ancestor, side, base }) {
+  const lone = loneCopy()
+  const dir = mkdtempSync(join(tmpdir(), 'verify-ws-'))
+  const git = (...a) => spawnSync('git', a, { cwd: dir, encoding: 'utf8' })
+  const put = (f, t) => writeFileSync(join(dir, f), t)
+  git('init', '-q', '-b', 'main'); git('config', 'user.email', 't@t'); git('config', 'user.name', 't')
+  put(file, ancestor); git('add', '-A'); git('commit', '-qm', 'b0')
+  git('checkout', '-qb', 'work'); put(file, side); git('commit', '-qam', 'side')
+  git('checkout', '-q', 'main'); put(file, base); git('commit', '-qam', 'base1')
+  git('checkout', '-q', 'work'); git('merge', '--no-edit', 'main')
+  assert.equal(git('diff', '--name-only', '--diff-filter=U').stdout.trim(), file, 'the fixture must conflict')
+  const verify = () => spawnSync('node', [join(lone, 'conflict-resolution.mjs'), 'verify', join(dir, 'none.md')], { cwd: dir, encoding: 'utf8', env: cliEnv() })
+  return { dir, put, verify }
+}
+
+// covers: T1
+test('T1 verify (lone copy): a base whitespace line kept untouched in a conflicted file passes (#4546)', () => {
+  const r = wsMerge({ ancestor: 'one\n', side: 'one\nside\n', base: 'one\nbase\nmain-ws \n' })
+  r.put('a.md', 'one\nbase\nmain-ws \nside\n')
+  const v = r.verify()
+  assert.equal(v.status, 0, v.stderr)
+})
+
+// covers: T2
+test("T2 verify: the PR side's own whitespace line and the base's, both kept, pass (#4546)", () => {
+  const r = wsMerge({ ancestor: 'one\n', side: 'one\npr-ws \nside\n', base: 'one\nbase\nmain-ws \n' })
+  r.put('a.md', 'one\nbase\nmain-ws \npr-ws \nside\n')
+  const v = r.verify()
+  assert.equal(v.status, 0, v.stderr)
+})
+
+// covers: T3
+test('T3 verify: a whitespace line the resolution writes fails, naming only that line (#4546)', () => {
+  const r = wsMerge({ ancestor: 'one\n', side: 'one\nside\n', base: 'one\nbase\nmain-ws \n' })
+  r.put('a.md', 'one\nbase\nmain-ws \nside\nnew-ws \n')
+  const v = r.verify()
+  assert.equal(v.status, 1)
+  assert.match(v.stderr, /::error::git diff --check: a\.md:5: trailing whitespace/)
+  assert.match(v.stderr, /\+new-ws/)
+  assert.doesNotMatch(v.stderr, /a\.md:3:/)
+  assert.doesNotMatch(v.stderr, /main-ws/)
+})
+
+// covers: T4
+test('T4 ownWhitespaceHits: keeps hits in both outputs, drops one-sided ones (#4546)', () => {
+  const head = [
+    'a.md:3: trailing whitespace.', '+main-ws ',
+    'a.md:6: trailing whitespace.', '+new-ws ',
+    'b.md:2: space before tab in indent.', '+ \tx',
+    'b.md:9: new blank line at EOF.',
+    '',
+  ].join('\n')
+  const merge = [
+    'a.md:5: trailing whitespace.', '+pr-ws ',
+    'a.md:6: trailing whitespace.', '+new-ws ',
+    'b.md:2: space before tab in indent.', '+ \tx',
+    'b.md:9: new blank line at EOF.',
+    '',
+  ].join('\n')
+  assert.deepEqual(ownWhitespaceHits(head, merge), [
+    'a.md:6: trailing whitespace.\n+new-ws ',
+    'b.md:2: space before tab in indent.\n+ \tx',
+    'b.md:9: new blank line at EOF.',
+  ])
+  // same file+line, different content: not the same hit
+  assert.deepEqual(ownWhitespaceHits('a.md:6: trailing whitespace.\n+x \n', 'a.md:6: trailing whitespace.\n+y \n'), [])
+  assert.deepEqual(ownWhitespaceHits('', ''), [])
+  assert.deepEqual(ownWhitespaceHits('a.md:3: trailing whitespace.\n+main-ws \n', ''), [])
+})
+
+// covers: T5
+test("T5 verify: a conflicted .gitignore carrying main's old line 110 (trailing space) passes (#4546)", () => {
+  const r = wsMerge({
+    file: '.gitignore',
+    ancestor: 'node_modules\n',
+    side: 'node_modules\n.side-only\n',
+    base: 'node_modules\n# link (#1823, #1825). \n',
+  })
+  r.put('.gitignore', 'node_modules\n# link (#1823, #1825). \n.side-only\n')
+  const v = r.verify()
+  assert.equal(v.status, 0, v.stderr)
+})
+
+// covers: T6
+test('T6 .gitignore line 110 carries no trailing whitespace (#4546)', () => {
+  const line = readFileSync(fileURLToPath(new URL('../.gitignore', import.meta.url)), 'utf8').split('\n')[109]
+  assert.doesNotMatch(line, /\s$/)
+})

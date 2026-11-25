@@ -81,8 +81,7 @@ export function usePageLink(teamSlug?: MaybeRef<string | null>) {
   })
 
   // Refresh when the pages collection is mutated.
-  const nuxtApp = useNuxtApp()
-  nuxtApp.hook('crouton:mutation' as any, (event: any) => {
+  useMutationListener((event) => {
     if (event?.collection === 'pagesPages') refresh()
   })
 

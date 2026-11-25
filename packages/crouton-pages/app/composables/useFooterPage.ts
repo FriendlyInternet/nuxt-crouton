@@ -75,8 +75,7 @@ export function useFooterPage(teamSlug?: MaybeRef<string | null>) {
   })
 
   // Refresh when pages are mutated
-  const nuxtApp = useNuxtApp()
-  nuxtApp.hook('crouton:mutation' as any, (event: any) => {
+  useMutationListener((event) => {
     if (event?.collection === 'pagesPages') {
       refresh()
     }
