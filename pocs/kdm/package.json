@@ -1,0 +1,44 @@
+{
+  "name": "kdm",
+  "type": "module",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "typecheck": "nuxt typecheck",
+    "test": "vitest run",
+    "postinstall": "nuxt prepare 2>/dev/null || true",
+    "cf:deploy": "NITRO_PRESET=cloudflare_module nuxt build && node scripts/sync-wrangler-ids.mjs && node ../../scripts/deploy-order.mjs --deploy \"npx wrangler --cwd .output deploy\" --resync \"node scripts/sync-wrangler-ids.mjs\" --migrate \"npx wrangler d1 migrations apply kdm-db --remote\"",
+    "cf:staging": "NUXT_PUBLIC_CROUTON_REVIEW=true NITRO_PRESET=cloudflare_module nuxt build && node scripts/sync-wrangler-ids.mjs && node scripts/inject-wrangler-env.mjs && node ../../scripts/deploy-order.mjs --env staging --deploy \"npx wrangler deploy --config .output/server/wrangler.json --env staging\" --resync \"node scripts/sync-wrangler-ids.mjs && node scripts/inject-wrangler-env.mjs\" --migrate \"npx wrangler d1 migrations apply kdm-staging-db --env staging --remote\"",
+    "sync:ids": "node scripts/sync-wrangler-ids.mjs",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "npx wrangler d1 migrations apply kdm-db --local",
+    "db:migrate:prod": "npx wrangler d1 migrations apply kdm-db --remote",
+    "db:migrate:staging": "npx wrangler d1 migrations apply kdm-staging-db --env staging --remote",
+    "db:seed": "crouton-seed --db kdm-db",
+    "db:seed:staging": "crouton-seed --db kdm-staging-db --remote"
+  },
+  "dependencies": {
+    "@fyit/crouton-core": "workspace:*",
+    "@fyit/crouton-i18n": "workspace:*",
+    "@libsql/client": "^0.17.0",
+    "drizzle-orm": "^0.45.1",
+    "nuxt": "^4.2.2",
+    "vue": "^3.5.26",
+    "vue-router": "^4.6.4",
+    "@fyit/crouton-editor": "workspace:*",
+    "@fyit/crouton-pages": "workspace:*",
+    "@fyit/crouton-assets": "workspace:*",
+    "@fyit/crouton-layout": "workspace:*"
+  },
+  "devDependencies": {
+    "@fyit/crouton-cli": "workspace:*",
+    "@fyit/crouton-devtools": "workspace:*",
+    "drizzle-kit": "^0.31.0",
+    "vitest": "^2.1.0",
+    "wrangler": "^4.64.0"
+  }
+}
