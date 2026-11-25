@@ -4,7 +4,7 @@
 
 import { THEME_UI_CONFIGS } from '../configs/themeConfigs'
 
-export type ThemeName = 'ko' | 'minimal' | 'kr11' | 'blackandwhite' | 'brutalist' | 'mtv' | 'terminal' | 'braun' | 'gameboy' | 'riso' | 'eink' | 'blueprint' | 'default'
+export type ThemeName = 'ko' | 'minimal' | 'kr11' | 'blackandwhite' | 'brutalist' | 'mtv' | 'terminal' | 'braun' | 'gameboy' | 'riso' | 'eink' | 'blueprint' | 'editorial' | 'default'
 
 type BaseVariant = 'solid' | 'outline' | 'soft' | 'ghost' | 'link'
 
@@ -128,6 +128,14 @@ export const AVAILABLE_THEMES: ThemeConfig[] = [
     colors: ['#123a63', '#dce9f5', '#ffd66b'], // blue, line, pencil
     defaultVariant: 'solid',
     colorMode: 'dark'
+  },
+  {
+    name: 'editorial',
+    label: 'Editorial',
+    description: 'Book-style serif on white, sans controls, grey pill buttons',
+    colors: ['#F3F3F2', '#282828', '#FFFFFF'], // soft grey, ink, paper (#4520)
+    defaultVariant: 'solid',
+    colorMode: 'light' // light-only by design
   }
 ]
 
