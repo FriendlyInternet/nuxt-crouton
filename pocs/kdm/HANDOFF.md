@@ -45,19 +45,24 @@ TypeScript peers across the whole lockfile, so it was redone lockfile-only).
 - `package.json` — `cf:staging` / `cf:deploy` switched to `scripts/deploy-order.mjs`
   (database changes before the new code goes live), copied from `pocs/pins`; the CLI still
   writes the old order (`scripts/deploy-order.test.mjs` T9/T14 refuse it).
+- `package.json` — `test` script is `vitest run --passWithNoTests`, so `pnpm test` stays
+  green on a POC that has no unit tests of its own.
 - `scripts/review-team.test.mjs` — its whole-repo check expected every app on team `test1`;
   it now expects each app's own `reviewTeam` (default `test1`), since kdm is the first app
   that names its own.
+- The CLI writes one first migration that creates every table. Two whole-repo migration
+  checks were written for older apps' upgrade histories and refused that shape for kdm.
+  Owner picked option A on #4526 (25 Nov 13:40): a brand-new app's first migration may
+  create everything at once.
+  - `scripts/team-roles-migrations.test.mjs` — organizationRole no longer has to sit in a
+    migration of its own when an app's first migration creates it together with `member`
+    (`orgRoleProblem`); a later migration that adds it with other tables is still refused.
+  - `scripts/verify-existing-users-migration.test.mjs` — an app whose first migration
+    creates `user` has no older users to mark verified, so it needs no such step or list entry.
+- `packages/crouton-pages/test/public-routes-corpus.test.ts` — skips apps that switch
+  `hideLocaleInUrl` on (owner yes, 25 Nov 13:40).
 
-## Open question (held on #4526)
-
-The CLI writes one first migration that creates every table. Two whole-repo migration
-checks were written for older apps' upgrade histories and refuse that shape for kdm:
-`scripts/team-roles-migrations.test.mjs` (organizationRole must sit in a migration of its
-own) and `scripts/verify-existing-users-migration.test.mjs` (every app needs a
-"mark existing users verified" step and must be in its list). Waiting on the owner's pick.
-
-## Check cases (run 25 Nov, locally on `pnpm preview kdm`)
+## Check cases (run 25 Nov, locally on `pnpm preview kdm`; re-run on the PR #4549 preview — same results)
 
 | Case | Result | Tool |
 |---|---|---|
