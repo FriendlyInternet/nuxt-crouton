@@ -53,6 +53,7 @@ export default defineNuxtConfig({
 | `app/composables/useCrouton.ts` | Modal/slideover state management (nested up to 5 levels) |
 | `app/composables/useCollectionQuery.ts` | Async data fetching with query-based caching |
 | `app/composables/useCollectionMutation.ts` | Create/update/delete with auto cache invalidation |
+| `app/composables/useMutationListener.ts` | Listen to `crouton:mutation`; the listener is removed when the calling component/scope ends — use this in components and per-screen composables, never bare `nuxtApp.hook` |
 | `app/composables/useCollections.ts` | Collection config registry from `app.config.croutonCollections` |
 | `app/theme/disabled-button.ts` | Shared disabled `UButton` look (#4329): `ui.button.compoundVariants` in `app/app.config.ts` make a disabled button of any colour neutral (`bg-elevated`, `text-muted`, grey ring) for the six standard variants only; loading buttons and themes' named variants keep their own look |
 | `app/composables/useCroutonShortcuts.ts` | Keyboard shortcuts for CRUD operations |
@@ -284,11 +285,13 @@ not the number of pages.
 ## Hooks
 
 ```typescript
-// Listen for mutations (for event tracking)
-useNuxtApp().hook('crouton:mutation', ({ operation, collection, itemId, data }) => {
+// Listen for mutations — removed when the component/scope ends
+useMutationListener(({ operation, collection, itemId, data }) => {
   // operation: 'create' | 'update' | 'delete' | 'move' | 'reorder'
 })
 ```
+
+App-lifetime listeners in plugins keep `nuxtApp.hook('crouton:mutation', …)` on purpose.
 
 `update` events carry `beforeData` (the item as it was) **only when `@fyit/crouton-events` is
 installed** (`useCroutonApps().hasApp('events')`): fetching it costs a GET before every PATCH,
