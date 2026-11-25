@@ -511,17 +511,17 @@ when the page type changes.
 
 ### The floating nav pill (`Nav.vue`) — theme quick-select + action slot
 
-The right pill (bottom-left on full-screen pages) hosts `<CroutonUserPill placement="inline" use-modal>` (account/status/sign-in, scoped-visitor sign-out, and a "Manage site" admin submenu passed via `extra-items`, admins only — the pill itself honours `hideAuthControls`) plus:
+The right pill (bottom-left on full-screen pages) hosts `<CroutonUserPill placement="inline" use-modal>` (account/status/sign-in, scoped-visitor sign-out, and a "Manage site" admin submenu passed via `extra-items`, only for people who may `pages:edit` (`useCan('pages:edit', { server: false })`, #4105) — the pill itself honours `hideAuthControls`) plus:
 
 - **Theme quick-select** — a palette `UDropdownMenu` reading the shared
   `crouton:themePreferenceItems` state (filled by the crouton-themes base layer's
   `themeProvider.client` plugin). Rendered only when that state is populated **and**
-  `allowUserThemes || isAdmin`, inside `<ClientOnly>` (no hard dep on crouton-themes;
+  `allowUserThemes` or the reader may `site:manage`, inside `<ClientOnly>` (no hard dep on crouton-themes;
   hidden entirely when the themes layer isn't extended). Dark-mode toggle stays adjacent.
 - **Package action slot** — `useCroutonNavPill().visibleActions` render as ghost icon
   buttons. Any layer contributes via `register()` (see the composable in Key Files). The
   **edit-page pencil** is pages' own contribution: `[...slug].vue` registers it on mount
-  (`show: isAdmin && !isEditing && page.id`, `onSelect: startEditing`) — it **replaced the
+  (`show: canEdit && !isEditing && page.id`, where `canEdit = useCan('pages:edit', { server: false })`; `onSelect: startEditing`) — it **replaced the
   old fixed bottom-right FAB**. Client-only registration, so the button appears just after
   hydration.
 

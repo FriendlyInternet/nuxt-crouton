@@ -1,4 +1,7 @@
 {
+  "permissions": {
+    "translationsManage": "Vertalingen beheren"
+  },
   "common": {
     "save": "Opslaan",
     "cancel": "Annuleren",

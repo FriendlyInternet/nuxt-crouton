@@ -1,4 +1,7 @@
 {
+  "permissions": {
+    "salesManage": "Manage the point of sale"
+  },
   "sales": {
     "title": "Point of Sale",
     "pageTypes": {},

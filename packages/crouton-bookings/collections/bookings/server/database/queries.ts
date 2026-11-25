@@ -99,16 +99,16 @@ export async function deleteBookingsBooking(
   recordId: string,
   teamId: string,
   userId: string,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(tables.bookingsBookings.id, recordId),
     eq(tables.bookingsBookings.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(tables.bookingsBookings.owner, userId))
   }
 

@@ -1,4 +1,8 @@
 {
+  "permissions": {
+    "siteManage": "Gérer le site : infos, apparence, redirections",
+    "collectionsManage": "Gérer tous les éléments des collections et les fichiers de l'équipe"
+  },
   "form": {
     "collapse": "Réduire dans la barre latérale",
     "expand": "Agrandir en plein écran",

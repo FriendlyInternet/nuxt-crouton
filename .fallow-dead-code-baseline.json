@@ -166,6 +166,7 @@
     "package-cycle:packages/crouton-auth|packages/crouton-core|packages/crouton-i18n|pocs/status",
     "package-cycle:packages/crouton-auth|packages/crouton-core|packages/crouton-pages|pocs/status",
     "package-cycle:packages/crouton-auth|packages/crouton-core|pocs/status",
+    "package-cycle:packages/crouton-core|packages/crouton-editor|packages/crouton-pages|pocs/status",
     "package-cycle:packages/crouton-core|packages/crouton-i18n",
     "package-cycle:packages/crouton-core|packages/crouton-i18n|packages/crouton-pages|pocs/status",
     "package-cycle:packages/crouton-core|packages/crouton-i18n|pocs/status",

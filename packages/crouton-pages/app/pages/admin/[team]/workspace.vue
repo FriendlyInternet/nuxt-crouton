@@ -8,7 +8,8 @@
 
 definePageMeta({
   layout: 'admin',
-  middleware: ['auth', 'team-admin']
+  middleware: ['auth', 'can'],
+  can: 'pages:edit'
 })
 
 const { t } = useT()

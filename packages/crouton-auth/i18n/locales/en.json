@@ -1,4 +1,8 @@
 {
+  "permissions": {
+    "teamManage": "Manage the team: settings, members and invitations",
+    "teamDomains": "Manage custom domains"
+  },
   "onboarding": {
     "signOut": "Sign out",
     "noTeamTitle": "You're not in a team yet",

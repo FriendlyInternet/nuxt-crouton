@@ -1,5 +1,5 @@
 import { desc, eq, gte, lte, and } from 'drizzle-orm'
-import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
+import { requireCan } from '@fyit/crouton-auth/server/utils/team-auth'
 import { croutonOperations } from '../../../../database/schema'
 
 /**
@@ -17,7 +17,7 @@ import { croutonOperations } from '../../../../database/schema'
  *   pageSize  — results per page (default 50, max 200)
  */
 export default defineEventHandler(async (event) => {
-  const { team } = await requireTeamAdmin(event)
+  const { team } = await requireCan(event, 'activity:view')
   const db = useDB()
   const q = getQuery(event)
 

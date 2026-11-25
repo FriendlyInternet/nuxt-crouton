@@ -1,4 +1,8 @@
 {
+  "permissions": {
+    "teamManage": "Gérer l'équipe : paramètres, membres et invitations",
+    "teamDomains": "Gérer les domaines personnalisés"
+  },
   "onboarding": {
     "signOut": "Se déconnecter",
     "noTeamTitle": "Vous n'êtes pas encore dans une équipe",
