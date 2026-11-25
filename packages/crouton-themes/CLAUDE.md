@@ -63,7 +63,7 @@ const {
 } = useThemeSwitcher()
 ```
 
-**Theme Names:** `'default' | 'ko' | 'minimal' | 'kr11'`
+**Theme Names:** `'ko' | 'minimal' | 'kr11' | 'blackandwhite' | 'brutalist' | 'mtv' | 'terminal' | 'braun' | 'gameboy' | 'riso' | 'eink' | 'blueprint' | 'editorial' | 'default'`
 
 **Features:**
 - SSR-compatible state via `useState`
@@ -122,6 +122,22 @@ const { variant } = useThemeSwitcher()
 ---
 
 ## Available Themes
+
+### Editorial Theme (`./editorial`) — #4520
+
+A quiet, reading-first look: book-style serif body text on plain white, small
+sans-serif controls, soft-grey pill buttons, grey links with a faint underline.
+
+- **Prefix:** `editorial-` (marker in `lib/subtractive.ts`; strips colour, shape,
+  font family/weight and underlines, keeps spacing/text sizes/transitions + focus ring)
+- **Tokens:** `--editorial-*` in `editorial/assets/css/main.css` (paper/soft/ink/
+  muted/link/faint, `mark` highlight, seven accents, font stacks, `--editorial-measure`)
+- **Fonts:** free OFL stand-ins (Source Serif 4, Inter, JetBrains Mono, Chakra Petch)
+  via `@nuxt/fonts` `fonts.families` in `editorial/nuxt.config.ts` — downloaded at
+  build time and self-hosted at `/_fonts/`; no committed font files
+- **Coverage:** the same 13 components as minimal; badge is a deliberate pass (`solid`)
+- **Light-only** by design (`colorMode: 'light'`) — see Dual scheme below
+- Opt-in layer (not pulled in by `./themes`); kassa and the playground extend it
 
 ### Riso / E-ink / Blueprint Themes (`./riso`, `./eink`, `./blueprint`) — #1311
 
@@ -486,6 +502,7 @@ token so `card = --ui-radius * 2` equals the theme's card/panel radius):
 | minimal, brutalist, gameboy, terminal, eink, blueprint, mtv | `0` | | ko | `calc(var(--ko-wrapper-radius) / 2)` |
 | kr11 | `calc(var(--kr-card-radius) / 2)` | | braun | `calc(var(--braun-radius) / 2)` |
 | riso | `1px` (card 2px) | | blackandwhite | *(unset — deliberate `0.25rem` pass)* |
+| editorial | `0.375rem` (pill buttons set their own 100px) | | | |
 
 **When adding a theme, set `--ui-radius`** — it's a base token, filled in first
 (before the named-variant CSS). ⚠️ The crouton-admin **team-preset** path
@@ -631,6 +648,9 @@ their accents intact, braun/ko/kr11 become their real-world black-unit
 hardware, gameboy gets the backlit mod, eink a night-reading page, terminal
 paper-mode, blueprint pencil-on-white. minimal is the negative; blackandwhite
 was adaptive already.
+
+Exception: editorial (#4520) is light-only by design; its `.dark` block repeats
+the light values so an explicit dark preference still renders a readable white page.
 
 Mechanics (uniform across themes):
 
