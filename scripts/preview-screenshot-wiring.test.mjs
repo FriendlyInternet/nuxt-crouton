@@ -23,6 +23,40 @@ function step(name) {
   return { start, block: lines.slice(start, end).join('\n') }
 }
 
+// covers: T5 (#4535)
+test('capture reads both deploy runs, waits, reuses one check run and shoots the selected list', () => {
+  const jobIf = WF.match(/^    if: (.*)$/m)?.[1]
+  assert.ok(jobIf, 'job has an if:')
+  assert.doesNotMatch(jobIf, /workflow_run\.conclusion == 'success'/, 'a failed deploy still starts a capture')
+  assert.match(jobIf, /workflow_run\.event == 'pull_request'/)
+
+  const target = step('Resolve target').block
+  assert.match(target, /node scripts\/lib\/screenshot-targets\.mjs runs /)
+  assert.match(target, /for wf in deploy-apps\.yml deploy-pocs\.yml/)
+  assert.doesNotMatch(target, /status=success/, 'no status filter: a running deploy must be visible')
+  assert.doesNotMatch(WF, /RUN_ID: \$\{\{ github\.event\.workflow_run\.id \}\}/)
+
+  const lookup = WF.indexOf('check-runs?check_name=Preview%20screenshot')
+  const post = WF.indexOf('gh api -X POST "repos/${GITHUB_REPOSITORY}/check-runs"')
+  assert.ok(lookup >= 0 && post >= 0 && lookup < post, 'existing check is looked up before any POST')
+  const open = step('Open check run').block
+  assert.ok(open.indexOf('-X PATCH') >= 0 && open.indexOf('-X PATCH') < open.indexOf('-X POST'), 'PATCH the existing check first')
+
+  const select = step('Select apps').block
+  assert.match(select, /screenshot-targets\.mjs select .*--out "\$RUNNER_TEMP\/selected\.txt"/)
+  assert.match(select, /if: .*steps\.target\.outputs\.wait != 'true'/)
+  const capture = step('Capture + post review-surface evidence').block
+  assert.match(capture, /done < "\$RUNNER_TEMP\/selected\.txt"/)
+  assert.doesNotMatch(capture, /find "\$RUNNER_TEMP\/records" -name meta\.json/)
+  assert.match(capture, /if: \$\{\{ steps\.select\.outputs\.count != '0'/)
+  assert.match(step('Download preview records').block, /if: .*steps\.target\.outputs\.wait != 'true'/)
+
+  const pub = step('Publish result').block
+  assert.match(pub, /MISSING: \$\{\{ steps\.select\.outputs\.missing \}\}/)
+  assert.match(pub, /if \[ "\$WAIT" = true \]; then[\s\S]*status=in_progress[\s\S]*exit 0/)
+  assert.match(step('Ask the merge step again').block, /if: .*steps\.target\.outputs\.wait != 'true'/)
+})
+
 // covers: T1
 test('Publish result has id: publish and still fails the step on a red verdict', () => {
   const { block } = step('Publish result')
