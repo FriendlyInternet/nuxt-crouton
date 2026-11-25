@@ -9,7 +9,7 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "typecheck": "nuxt typecheck",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "postinstall": "nuxt prepare 2>/dev/null || true",
     "cf:deploy": "NITRO_PRESET=cloudflare_module nuxt build && node scripts/sync-wrangler-ids.mjs && node ../../scripts/deploy-order.mjs --deploy \"npx wrangler --cwd .output deploy\" --resync \"node scripts/sync-wrangler-ids.mjs\" --migrate \"npx wrangler d1 migrations apply kdm-db --remote\"",
     "cf:staging": "NUXT_PUBLIC_CROUTON_REVIEW=true NITRO_PRESET=cloudflare_module nuxt build && node scripts/sync-wrangler-ids.mjs && node scripts/inject-wrangler-env.mjs && node ../../scripts/deploy-order.mjs --env staging --deploy \"npx wrangler deploy --config .output/server/wrangler.json --env staging\" --resync \"node scripts/sync-wrangler-ids.mjs && node scripts/inject-wrangler-env.mjs\" --migrate \"npx wrangler d1 migrations apply kdm-staging-db --env staging --remote\"",

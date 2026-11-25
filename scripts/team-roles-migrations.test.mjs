@@ -52,23 +52,43 @@ test('the scan finds the apps that have a member table', () => {
   assert.ok(withMember.length >= 22, `found only ${withMember.length} apps with a member table`)
 })
 
+/**
+ * Why a migration folder fails the organizationRole rule, or null when it passes.
+ * An existing app adds organizationRole in a migration of its own that creates
+ * nothing else. A brand-new app (#4526, pocs/kdm) may instead create it in its
+ * first migration (journal idx 0) together with `member` and the rest of the
+ * baseline — there is no older database to upgrade.
+ * @param {string} dir  a `server/db/migrations/sqlite` folder
+ * @param {string} label  name used in the messages
+ * @returns {string | null}
+ */
+export function orgRoleProblem(dir, label) {
+  const hits = sqlFiles(dir).filter(f => /CREATE TABLE `organizationRole`/.test(fs.readFileSync(path.join(dir, f), 'utf8')))
+  if (hits.length !== 1) return `${label}: expected exactly one migration creating organizationRole, found ${hits.length}`
+  const file = hits[0]
+
+  const journalPath = path.join(dir, 'meta/_journal.json')
+  const journal = fs.existsSync(journalPath) ? JSON.parse(fs.readFileSync(journalPath, 'utf8')) : { entries: [] }
+  const tag = file.replace(/\.sql$/, '')
+  const entry = journal.entries.find(e => e.tag === tag)
+  if (!entry) return `${label}: ${tag} is not in meta/_journal.json`
+
+  const tables = createdTables(fs.readFileSync(path.join(dir, file), 'utf8'))
+  const freshBaseline = entry.idx === 0 && tables.has('member')
+  if (!freshBaseline && !(tables.size === 1 && tables.has('organizationRole'))) {
+    return `${label}/${file} must create only organizationRole`
+  }
+
+  const snapshot = path.join(dir, `meta/${String(entry.idx).padStart(4, '0')}_snapshot.json`)
+  if (!fs.existsSync(snapshot)) return `${label}: missing ${path.basename(snapshot)}`
+  if (!JSON.parse(fs.readFileSync(snapshot, 'utf8')).tables?.organizationRole) return `${label}: snapshot lacks organizationRole`
+  return null
+}
+
 for (const dir of withMember) {
   const app = path.relative(ROOT, dir).split(path.sep).slice(0, 2).join('/')
   test(`${app} creates organizationRole in its own journaled migration`, () => {
-    const hits = sqlFiles(dir).filter(f => /CREATE TABLE `organizationRole`/.test(fs.readFileSync(path.join(dir, f), 'utf8')))
-    assert.equal(hits.length, 1, `${app}: expected exactly one migration creating organizationRole, found ${hits.length}`)
-    const file = hits[0]
-
-    const tables = createdTables(fs.readFileSync(path.join(dir, file), 'utf8'))
-    assert.deepEqual([...tables], ['organizationRole'], `${app}/${file} must create only organizationRole`)
-
-    const journal = JSON.parse(fs.readFileSync(path.join(dir, 'meta/_journal.json'), 'utf8'))
-    const tag = file.replace(/\.sql$/, '')
-    const entry = journal.entries.find(e => e.tag === tag)
-    assert.ok(entry, `${app}: ${tag} is not in meta/_journal.json`)
-    const snapshot = path.join(dir, `meta/${String(entry.idx).padStart(4, '0')}_snapshot.json`)
-    assert.ok(fs.existsSync(snapshot), `${app}: missing ${path.basename(snapshot)}`)
-    assert.ok(JSON.parse(fs.readFileSync(snapshot, 'utf8')).tables.organizationRole, `${app}: snapshot lacks organizationRole`)
+    assert.equal(orgRoleProblem(dir, app), null)
   })
 }
 
@@ -179,4 +199,23 @@ test('both shapes in one app (the column added twice) is red with found 2', () =
 test('a CREATE-with-column migration missing from meta/_journal.json is red', () => {
   const dir = fixture({ '0000_large_carnage.sql': CREATE_WITH }, [])
   assert.match(removedActionsProblem(dir, 'x') ?? '', /not in meta\/_journal\.json/)
+})
+
+// Fresh app (#4526): one baseline migration creates member, organizationRole and the rest.
+const MEMBER = 'CREATE TABLE `member` (\n\t`id` text PRIMARY KEY NOT NULL\n);'
+const USER = 'CREATE TABLE `user` (\n\t`id` text PRIMARY KEY NOT NULL\n);'
+const BASELINE = [USER, MEMBER, CREATE_WITH].join('\n--> statement-breakpoint\n')
+
+test('a brand-new app creating organizationRole in its first migration, with member, is accepted', () => {
+  assert.equal(orgRoleProblem(fixture({ '0000_petite_joystick.sql': BASELINE }), 'x'), null)
+})
+
+test('an existing app adding organizationRole together with other tables in a later migration is still red', () => {
+  const dir = fixture({ '0000_init.sql': [USER, MEMBER].join('\n--> statement-breakpoint\n'), '0001_team_roles.sql': [CREATE_WITHOUT, 'CREATE TABLE `extra` (`id` text);'].join('\n--> statement-breakpoint\n') })
+  assert.match(orgRoleProblem(dir, 'x') ?? '', /must create only organizationRole/)
+})
+
+test('a first migration that creates organizationRole with other tables but no member is still red', () => {
+  const dir = fixture({ '0000_odd.sql': [USER, CREATE_WITH].join('\n--> statement-breakpoint\n') })
+  assert.match(orgRoleProblem(dir, 'x') ?? '', /must create only organizationRole/)
 })
