@@ -1,9 +1,10 @@
 /**
- * Update a booking - the owner or a team admin (#3135). Other members get 403.
+ * Update a booking - the owner or a member with `bookings:manage` (#3135, #4108). Other members get 403.
  */
 import { z } from 'zod'
 import { eq, and } from 'drizzle-orm'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { can } from '@fyit/crouton-auth/server/utils/team-auth'
 import { patchBookingGuarded } from '../../../../../../utils/booking-capacity'
 import { bookingsBookings } from '../../../../../../../collections/bookings/server/database/schema'
 import { bookingsLocations } from '../../../../../../../collections/locations/server/database/schema'
@@ -21,7 +22,7 @@ const updateSchema = z.object({
 })
 
 export default defineEventHandler(async (event) => {
-  const { team, user, membership } = await resolveTeamAndCheckMembership(event)
+  const { team, user } = await resolveTeamAndCheckMembership(event)
   const db = useDB()
 
   const bookingId = getRouterParam(event, 'bookingId')
@@ -32,7 +33,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const isAdmin = membership?.role === 'admin' || membership?.role === 'owner'
+  const isAdmin = await can(team.id, user.id, 'bookings:manage', event)
   if (!isAdmin) {
     const [existing] = await db.select({ owner: bookingsBookings.owner }).from(bookingsBookings)
       .where(and(eq(bookingsBookings.id as any, bookingId), eq(bookingsBookings.teamId as any, team.id)))

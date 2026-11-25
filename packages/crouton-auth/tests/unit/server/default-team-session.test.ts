@@ -70,7 +70,15 @@ function flatten(query: any): { text: string, params: unknown[] } {
 function fakeDb(seed: { orgs?: Org[], members?: Member[] } = {}, opts: { failMemberInsert?: boolean } = {}) {
   const orgs: Org[] = [...(seed.orgs ?? [])]
   const members: Member[] = [...(seed.members ?? [])]
-  const inserts: Array<{ table: 'organization' | 'member', params: unknown[] }> = []
+  const roles: Array<{ organizationId: string, permission: string }> = []
+  const inserts: Array<{ table: 'organization' | 'organizationRole' | 'member', params: unknown[] }> = []
+
+  function insertMember(params: unknown[]) {
+    if (opts.failMemberInsert) throw new Error('D1_ERROR: database is locked')
+    inserts.push({ table: 'member', params })
+    const [id, organizationId, userId, role, createdAt] = params as string[]
+    members.push({ id: id!, organizationId: organizationId!, userId: userId!, role: role!, createdAt: createdAt! })
+  }
 
   const db = {
     async all(query: unknown) {
@@ -97,22 +105,23 @@ function fakeDb(seed: { orgs?: Org[], members?: Member[] } = {}, opts: { failMem
     },
     async run(query: unknown) {
       const { text, params } = flatten(query)
+      // Checked first: 'INSERT INTO organizationRole' also contains 'INSERT INTO organization' (#4130).
+      if (text.includes('INSERT INTO organizationRole')) {
+        inserts.push({ table: 'organizationRole', params })
+        roles.push({ organizationId: params[1] as string, permission: params[2] as string })
+        return
+      }
       if (text.includes('INSERT INTO organization')) {
         inserts.push({ table: 'organization', params })
         const [id, name, slug] = params as string[]
         orgs.push({ id: id!, name: name!, slug: slug! })
         return
       }
-      if (text.includes('INSERT INTO member')) {
-        if (opts.failMemberInsert) throw new Error('D1_ERROR: database is locked')
-        inserts.push({ table: 'member', params })
-        const [id, organizationId, userId, role, createdAt] = params as string[]
-        members.push({ id: id!, organizationId: organizationId!, userId: userId!, role: role!, createdAt: createdAt! })
-      }
+      if (text.includes('INSERT INTO member')) insertMember(params)
     }
   }
 
-  return { db, orgs, members, inserts }
+  return { db, orgs, members, roles, inserts }
 }
 
 function sessionHook(config: CroutonAuthConfig, db: unknown) {
@@ -147,6 +156,8 @@ describe('session.create.before joins the default team (#3786)', () => {
     expect(memberInserts[0]!.params[1]).toBe('org-acme')
     expect(members.find(m => m.userId === 'old-user')?.role).toBe('member')
     expect(result.data.activeOrganizationId).toBe('org-acme')
+    // The team already existed: no admin row written here (#4130).
+    expect(inserts.filter(i => i.table === 'organizationRole')).toHaveLength(0)
   })
 
   it('does not insert again for a user who is already a member', async () => {
@@ -158,6 +169,7 @@ describe('session.create.before joins the default team (#3786)', () => {
     const result = await sessionHook(oneTeam, db)(session)
 
     expect(inserts.filter(i => i.table === 'member')).toHaveLength(0)
+    expect(inserts.filter(i => i.table === 'organizationRole')).toHaveLength(0)
     expect(result.data.activeOrganizationId).toBe('org-acme')
   })
 
@@ -179,21 +191,29 @@ describe('session.create.before joins the default team (#3786)', () => {
 
     const result = await sessionHook(oneTeam, db)(session)
 
-    expect(inserts.map(i => i.table)).toEqual(['organization', 'member'])
+    // covers: T10 — the new team gets exactly one admin row (#4130).
+    expect(inserts.map(i => i.table)).toEqual(['organization', 'organizationRole', 'member'])
     const created = orgs.find(o => o.slug === 'acme')!
     expect(created).toBeTruthy()
-    expect(inserts[1]!.params[1]).toBe(created.id)
+    expect(orgs).toHaveLength(1)
+    const roleInserts = inserts.filter(i => i.table === 'organizationRole')
+    expect(roleInserts).toHaveLength(1)
+    expect(roleInserts[0]!.params[1]).toBe(created.id)
+    expect(JSON.parse(roleInserts[0]!.params[2] as string).organization).toEqual(['update'])
+    const memberInsert = inserts.find(i => i.table === 'member')!
+    expect(memberInsert.params[1]).toBe(created.id)
     // First member of a fresh default org is its owner (role rule unchanged).
-    expect(inserts[1]!.params[3]).toBe('owner')
+    expect(memberInsert.params[3]).toBe('owner')
     expect(result.data.activeOrganizationId).toBe(created.id)
   })
 
   it('logs and still creates the session when the membership write fails', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const { db } = fakeDb({ orgs: [ACME] }, { failMemberInsert: true })
+    const { db, inserts } = fakeDb({ orgs: [ACME] }, { failMemberInsert: true })
 
     const result = await sessionHook(oneTeam, db)(session)
 
+    expect(inserts.filter(i => i.table === 'organizationRole')).toHaveLength(0)
     expect(errorSpy).toHaveBeenCalled()
     expect(String(errorSpy.mock.calls[0]![0])).toContain('old-user')
     expect(result.data.activeOrganizationId).toBe('org-acme')

@@ -1,4 +1,7 @@
 {
+  "permissions": {
+    "adminAccess": "Ouvrir l'espace d'administration"
+  },
   "teams": {
     "generalSettings": "Général",
     "themeSettings": "Thème",
@@ -72,6 +75,42 @@
       "addFailed": "Impossible d'ajouter le domaine",
       "setPrimaryFailed": "Impossible de définir le domaine principal",
       "deleteFailed": "Impossible de supprimer le domaine"
+    },
+    "rolesScreen": {
+      "tab": "Rôles",
+      "title": "Rôles",
+      "description": "Qui peut faire quoi dans cette équipe.",
+      "new": "Nouveau rôle",
+      "name": "Nom",
+      "fixed": "Fixe",
+      "teamRoles": "Rôles de cette équipe",
+      "empty": "Pas encore de rôle d'équipe.",
+      "noActions": "Aucune action",
+      "allActions": "Toutes les actions",
+      "edit": "Modifier",
+      "delete": "Supprimer",
+      "deleted": "Rôle supprimé",
+      "deleteConfirm": "Supprimer ce rôle ? Cette action est définitive.",
+      "deleteAssigned": "Ce rôle est encore attribué à un membre — retirez-le d'abord",
+      "nameTaken": "Ce nom existe déjà",
+      "nameInvalid": "Donnez un nom de 1 à 40 caractères, sans virgule",
+      "adminAccessHint": "Un rôle avec au moins une action ouvre aussi l'espace d'administration.",
+      "notYoursHint": "Vous ne pouvez donner que les actions que vous avez vous-même",
+      "readOnlyRole": "Ce rôle contient des actions que vous n'avez pas — seul un responsable qui les a peut le modifier",
+      "adminOwnerOnly": "Seul le propriétaire peut modifier ce rôle",
+      "adminCannotDelete": "Le rôle admin ne peut pas être supprimé",
+      "adminCannotRename": "Le rôle admin ne peut pas être renommé",
+      "groups": {
+        "team": "Équipe",
+        "site": "Site",
+        "collections": "Collections",
+        "translations": "Traductions",
+        "pages": "Pages",
+        "media": "Médias",
+        "activity": "Activité",
+        "bookings": "Réservations",
+        "sales": "Ventes"
+      }
     }
   },
   "navigation": {

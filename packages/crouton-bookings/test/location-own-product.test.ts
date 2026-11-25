@@ -13,6 +13,11 @@ vi.mock('~~/server/db/schema', async () => {
 vi.mock('@fyit/crouton-auth/server/utils/team', () => ({
   requireTeamAdmin: async () => ({ team: { id: 't1' }, user: { id: 'u1' }, membership: { role: 'admin' } }),
 }))
+// Location writes check `bookings:manage` via requireCan (#4108); admin may every action
+vi.mock('@fyit/crouton-auth/server/utils/team-auth', async () => {
+  const { teamAuthStub } = await import('./stubs/team-auth')
+  return teamAuthStub(() => ({ team: { id: 't1' }, user: { id: 'u1' }, membership: { role: 'admin' } })).module
+})
 
 const DDL = `
 CREATE TABLE bookings_locations (id text primary key, teamId text not null, owner text not null, "order" integer not null, title text not null, color text, street text, zip text, city text, location text, content text, allowedMemberIds text, slots text, products text, openDays text, slotSchedule text, blockedDates text, offerFullDay integer, maxBookingsPerMonth integer, translations text, createdAt integer not null, updatedAt integer not null, createdBy text not null, updatedBy text not null);

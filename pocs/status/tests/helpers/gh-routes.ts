@@ -20,7 +20,7 @@ export const gh = {
   /** #3880: one open epic (#900) with a bot conflict comment; `behind_by` of the compare. */
   epicBehind: undefined as number | null | undefined,
   /** PR number → its changed files (served 100 per page); unset → no files. */
-  prFiles: {} as Record<number, Array<{ filename: string }>>,
+  prFiles: {} as Record<number, Array<{ filename: string, additions?: number, deletions?: number }>>,
   /** #4233: cards already stored before the sync. */
   existingCards: [] as unknown[],
   /** #4233: quiz search hits, served only to the matching typed search. */
@@ -31,6 +31,12 @@ export const gh = {
   labelled: {} as Record<string, any[]>,
   /** #4349: the `labels=<label>` issue list that answers 500. */
   failList: null as string | null,
+  /** #4501: issue number → its events (default none). */
+  events: {} as Record<number, unknown[]>,
+  /** #4501: hits for the `in:title "Epic #N:"` merged-epic-PR search. */
+  epicPrHits: [] as any[],
+  /** #4501: the epic-PR search answers 500. */
+  failEpicSearch: false,
   /** #4349: the in-memory `pipeline_items` table (see `boardQueries`). */
   board: [] as any[],
   /** #4349: board writes made by the sync, in order. */
@@ -81,6 +87,9 @@ export function resetGh() {
   gh.quizComments = {}
   gh.labelled = {}
   gh.failList = null
+  gh.events = {}
+  gh.epicPrHits = []
+  gh.failEpicSearch = false
   gh.board = []
   gh.boardWrites = []
   for (const f of Object.values(boardQueries)) f.mockClear()
@@ -104,6 +113,7 @@ function searchRoute(url: URL) {
   if (!q.includes('is:issue') && !q.includes('is:pull-request')) {
     return json({ message: "Query must include 'is:issue' or 'is:pull-request'" }, 422)
   }
+  if (q.includes('in:title') && q.includes('base:main')) return gh.failEpicSearch ? json({ message: 'boom' }, 500) : json({ items: gh.epicPrHits })
   if (q.includes('reached main')) return json({ items: q.includes('is:pull-request') ? gh.quizHits.pr : gh.quizHits.issue })
   const epicSearch = q.includes('no longer merges cleanly with main')
   return json({ items: epicSearch && gh.epicBehind !== undefined ? [EPIC_ISSUE] : [] })
@@ -139,7 +149,7 @@ const ROUTES: Array<[RegExp, (url: URL, m: RegExpExecArray) => Response]> = [
   [/\/repos\/[^/]+\/[^/]+\/commits$/, url => mainCommitsRoute(url)],
   [/\/compare\//, url => compareRoute(url)],
   [/\/issues\/(\d+)\/comments$/, (_u, m) => commentsRoute(Number(m[1]))],
-  [/\/issues\/\d+\/events$/, () => json([])],
+  [/\/issues\/(\d+)\/events$/, (_u, m) => json(gh.events[Number(m[1])] ?? [])],
   [/\/pulls\/(\d+)\/commits$/, (_u, m) => prCommitsRoute(m[1]!)],
   [/\/pulls\/(\d+)\/files$/, (url, m) => prFilesRoute(url, Number(m[1]))],
   [/\/issues\/\d+$/, () => json({ body: '## 👤 For humans\nAdds a field to the core.\n\n## 🤖 For agents\n- x' })]

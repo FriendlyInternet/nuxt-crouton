@@ -1,9 +1,9 @@
 // Team-based endpoint - requires @fyit/crouton-auth package
-// The requireTeamAdmin utility handles team resolution and auth
+// The requireCan utility handles team resolution and auth
 import { z } from 'zod'
 import type { NewBookingsSetting } from '../../../../../types'
 import { createBookingsSetting } from '../../../../database/queries'
-import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
+import { requireCan } from '@fyit/crouton-auth/server/utils/team-auth'
 
 // Hand-added body validation (#3377)
 const bodySchema = z.object({
@@ -13,7 +13,7 @@ const bodySchema = z.object({
 }).strip()
 
 export default defineEventHandler(async (event) => {
-  const { team, user } = await requireTeamAdmin(event)
+  const { team, user } = await requireCan(event, 'bookings:manage')
 
   const body = await readValidatedBody(event, bodySchema.parse)
 

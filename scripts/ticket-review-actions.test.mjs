@@ -180,15 +180,51 @@ test('3. the next ready step is only a NOTE (written by hand), never a dispatch'
 test('7. an epic without tickets:rolling keeps today\'s whole-epic flow', () => {
   const subs = [sub(1, 0, { body: 'Rule: x. Test: y.' }), sub(2, 0, { body: 'Rule: x. Test: y.\nBlocked-by: #1' })]
   const go = decide(subs, verdictFile(ticketSection(1), ticketSection(2)))
+  // #4456: the whole-epic path removes tickets:approved first (moved here from ticket-review.yml)
+  const unapprove = { kind: 'unlabel', issue: 9, label: 'tickets:approved' }
   assert.deepEqual(reviewActions({ epic: 9, labels: ['epic'], decision: go, comments: [], tickets: subs }), [
-    { kind: 'label', issue: 9, label: 'tickets:approved' }, { kind: 'label', issue: 1, label: 'work-this' },
+    unapprove, { kind: 'label', issue: 9, label: 'tickets:approved' }, { kind: 'label', issue: 1, label: 'work-this' },
   ])
   const nogo = decide(subs, verdictFile(ticketSection(1), ticketSection(2, 'no-go', '3')))
   assert.deepEqual(reviewActions({ epic: 9, labels: ['epic'], decision: nogo, comments: [], tickets: subs }), [
-    { kind: 'dispatch', issue: 9, workflow: 'ticket-revise.yml', inputs: { epic: '9' } },
+    unapprove, { kind: 'dispatch', issue: 9, workflow: 'ticket-revise.yml', inputs: { epic: '9' } },
   ])
   const legacy = bot('<!-- ticket-review:v1 -->\n<!-- ticket-review-verdict:no-go -->')
-  assert.deepEqual(reviewActions({ epic: 9, labels: ['epic'], decision: nogo, comments: [legacy, legacy], tickets: subs }), [{ kind: 'block', issue: 9 }])
+  assert.deepEqual(reviewActions({ epic: 9, labels: ['epic'], decision: nogo, comments: [legacy, legacy], tickets: subs }), [unapprove, { kind: 'block', issue: 9 }])
+})
+
+// covers: T5
+test('T5 (#4456): a ticket subject on an epic without tickets:rolling touches only that ticket', () => {
+  const plain = (n) => sub(n, 0, { body: 'Rule: x. Test: y.' })
+  const subs = [plain(11), plain(12), plain(13)]
+  const labels = ['epic', 'tickets:approved']
+  const one = [subs[0]]
+  const go = decide(one, verdictFile(ticketSection(11)), { subject: '11' })
+  assert.equal(go.ok, true, String(go.errors))
+  const goLines = kinds(reviewActions({ epic: 10, subject: '11', labels, decision: go, comments: [], tickets: one, subIssues: subs }))
+  assert.deepEqual(goLines, [{ kind: 'unlabel', issue: 11, label: 'work-this' }, { kind: 'label', issue: 11, label: 'work-this' }])
+  assert.ok(!goLines.some((l) => l.label === 'tickets:approved'), 'a per-ticket review leaves tickets:approved alone')
+  const nogo = decide(one, verdictFile(ticketSection(11, 'no-go', '3')), { subject: '11' })
+  const nogoLines = kinds(reviewActions({ epic: 10, subject: '11', labels, decision: nogo, comments: [], tickets: one, subIssues: subs }))
+  assert.deepEqual(nogoLines, [{ kind: 'dispatch', issue: 10, workflow: 'ticket-revise.yml', inputs: { epic: '10', subject: '11' } }])
+  // a blank subject keeps the whole-epic flow, which removes tickets:approved first
+  const all = decide(subs, verdictFile(ticketSection(11), ticketSection(12), ticketSection(13)))
+  const blank = reviewActions({ epic: 10, subject: '', labels, decision: all, comments: [], tickets: subs })
+  assert.deepEqual(blank[0], { kind: 'unlabel', issue: 10, label: 'tickets:approved' })
+  assert.deepEqual(blank.slice(1).map((l) => l.issue), [10, 11, 12, 13])
+})
+
+// covers: T5
+test('T5 (#4456): the CLI with --subject 11 on a non-rolling epic labels only #11', () => {
+  const d = mkdtempSync(join(tmpdir(), 'tra-gate-'))
+  const w = (n, v) => { writeFileSync(join(d, n), typeof v === 'string' ? v : JSON.stringify(v)); return join(d, n) }
+  const plain = (n) => sub(n, 0, { body: 'Rule: x. Test: y.' })
+  const subs = [plain(11), plain(12), plain(13)]
+  const decision = decide([subs[0]], verdictFile(ticketSection(11)), { subject: '11' })
+  const out = execFileSync('node', [new URL('./ticket-review-actions.mjs', import.meta.url).pathname,
+    w('decision.json', decision), w('comments.json', []), w('epic.json', { number: 10, labels: ['epic', 'tickets:approved'] }), w('subs.json', subs), w('steps.json', ''), '--subject', '11'], { encoding: 'utf8' })
+  const lines = out.trim().split('\n').map((l) => JSON.parse(l))
+  assert.deepEqual(kinds(lines), [{ kind: 'unlabel', issue: 11, label: 'work-this' }, { kind: 'label', issue: 11, label: 'work-this' }])
 })
 
 test('the CLI prints one JSON line per hand-off (the path ticket-review.yml runs)', () => {

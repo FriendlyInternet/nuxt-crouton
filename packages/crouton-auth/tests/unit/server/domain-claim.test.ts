@@ -11,7 +11,13 @@ let currentTeam = 'A'
 const tbl = { domain: { domain: 'domain', status: 'status', organizationId: 'organizationId' } }
 
 // Conditions are plain predicates so the stub honours eq/and like the real query.
-vi.mock('../../../server/utils/team', () => ({ requireTeamOwner: async () => ({ team: { id: currentTeam } }) }))
+// The route asks requireCan(event, 'team:domains') (#4108); route-actions.test.ts runs the real one.
+vi.mock('../../../server/utils/permissions', () => ({
+  requireCan: async (_e: unknown, action: string) => {
+    if (action !== 'team:domains') throw Object.assign(new Error(`unexpected action ${action}`), { status: 500 })
+    return { team: { id: currentTeam } }
+  }
+}))
 vi.mock('../../../server/utils/database', () => ({
   tables: tbl,
   eq: (col: string, val: string) => (r: any) => r[col] === val,

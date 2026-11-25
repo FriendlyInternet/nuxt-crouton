@@ -73,6 +73,10 @@
         "expectStatus": [404]
       },
       {
+        "path": "/api/teams/{teamId}/pages/smoke-none/access-code",
+        "expectStatus": [404]
+      },
+      {
         "path": "/api/crouton-bookings/teams/{teamId}/calendar-bookings"
       },
       {
@@ -130,6 +134,39 @@
       },
       {
         "path": "/api/teams/{teamId}/mcp-tokens"
+      },
+      {
+        "path": "/api/teams/{teamId}/domains"
+      },
+      {
+        "path": "/api/teams/{teamId}/crouton-events"
+      },
+      {
+        "path": "/api/teams/{teamId}/crouton-events/export"
+      },
+      {
+        "path": "/api/teams/{teamId}/crouton-operations"
+      },
+      {
+        "path": "/api/teams/{teamId}/bookings-bookings"
+      },
+      {
+        "path": "/api/teams/{teamId}/email-logs"
+      },
+      {
+        "path": "/api/teams/{teamId}/email-logs/stats"
+      },
+      {
+        "path": "/api/teams/{teamId}/settings/email"
+      },
+      {
+        "path": "/api/auth/organization/list-roles?organizationId={teamId}",
+        "expectStatus": 200
+      },
+      {
+        "path": "/api/teams/{teamId}/can?actions=team:manage",
+        "expectStatus": 200,
+        "expectIncludes": "\"team:manage\":true"
       }
     ]
   }

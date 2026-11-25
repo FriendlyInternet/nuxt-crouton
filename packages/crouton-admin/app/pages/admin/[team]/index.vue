@@ -8,7 +8,8 @@
  * @route /admin/[team]
  */
 definePageMeta({
-  middleware: ['auth', 'team-admin'],
+  middleware: ['auth', 'can'],
+  can: 'admin:access',
   layout: 'admin'
 })
 

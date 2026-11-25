@@ -116,7 +116,8 @@ const panelMapRef = ref<{ flyToLocation: (locationId: string) => void } | null>(
 
 // Crouton form and team auth for location creation
 const { open: openCroutonForm } = useCrouton()
-const { isAdmin } = useTeam()
+// Managing bookings is the `bookings:manage` action (#4105)
+const isAdmin = useCan('bookings:manage')
 const notify = useNotify()
 
 // Preview mode - injected from admin page, defaults to false

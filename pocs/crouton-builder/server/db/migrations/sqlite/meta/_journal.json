@@ -99,6 +99,13 @@
       "when": 1795511789875,
       "tag": "0013_aberrant_paper_doll",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1795541808588,
+      "tag": "0014_common_black_panther",
+      "breakpoints": true
     }
   ]
 }

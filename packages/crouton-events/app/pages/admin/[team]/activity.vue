@@ -1,7 +1,8 @@
 <script setup lang="ts">
 definePageMeta({
   layout: 'admin',
-  middleware: ['auth', 'team-admin']
+  middleware: ['auth', 'can'],
+  can: 'activity:view'
 })
 
 const { t } = useI18n()

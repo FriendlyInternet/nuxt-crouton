@@ -12,6 +12,8 @@ import { organization, member as memberTable } from '../database/schema/auth'
 import type { Team, Member, User } from '../../types'
 import { mapOrganizationToTeam } from '../../shared/utils/auth'
 import { useServerAuth, requireServerSession } from './useServerAuth'
+import { getAccessControl } from '../lib/access'
+import { seedTeamAdminRole } from '../lib/team-admin-role'
 import type { CroutonAuthConfig } from '../../types/config'
 
 // Extended session type with organization plugin properties
@@ -317,6 +319,8 @@ export async function getOrCreateDefaultOrganization(event: H3Event): Promise<Te
       INSERT INTO organization (id, name, slug, isDefault, personal, createdAt)
       VALUES (${orgId}, ${appName}, ${defaultTeamSlug}, 1, 0, ${now})
     `)
+    // The team's own admin row, from the config template (#4130).
+    await seedTeamAdminRole(db, orgId, getAccessControl())
     console.log(`[crouton/auth] Created default organization "${appName}" (slug: ${defaultTeamSlug})`)
   } catch (error: unknown) {
     // Handle race condition - if another request created it, fetch it
@@ -428,9 +432,10 @@ export async function requireTeamRole(
 ): Promise<TeamContext> {
   const context = await resolveTeamAndCheckMembership(event)
 
-  const roleHierarchy = { owner: 3, admin: 2, member: 1 }
-  const userRoleLevel = roleHierarchy[context.membership.role] ?? 0
-  const requiredRoleLevel = roleHierarchy[requiredRole]
+  const roleHierarchy: Record<string, number> = { owner: 3, admin: 2, member: 1 }
+  // A team's own role (#4106) is still a member of the team: rank it as member.
+  const userRoleLevel = roleHierarchy[context.membership.role] ?? 1
+  const requiredRoleLevel = roleHierarchy[requiredRole] ?? 1
 
   if (userRoleLevel < requiredRoleLevel) {
     throw createError({
@@ -473,7 +478,7 @@ export async function requireTeamOwner(event: H3Event): Promise<TeamContext> {
 export async function getOrganizationMembershipDirect(
   organizationId: string,
   userId: string
-): Promise<{ role: 'owner' | 'admin' | 'member' } | null> {
+): Promise<{ role: string } | null> {
   const db = useDB()
 
   const result = await db
@@ -487,7 +492,8 @@ export async function getOrganizationMembershipDirect(
 
   const row = result[0]
   if (!row) return null
-  return { role: row.role as 'owner' | 'admin' | 'member' }
+  // A base role or one of the team's own roles (#4106)
+  return { role: row.role }
 }
 
 /**

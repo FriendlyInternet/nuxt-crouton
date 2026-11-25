@@ -156,16 +156,16 @@ export async function updatePagesPage(
   teamId: string,
   userId: string,
   updates: Partial<PagesPage>,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(tables.pagesPages.id, recordId),
     eq(tables.pagesPages.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(tables.pagesPages.owner, userId))
   }
 
@@ -192,16 +192,16 @@ export async function deletePagesPage(
   recordId: string,
   teamId: string,
   userId: string,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(tables.pagesPages.id, recordId),
     eq(tables.pagesPages.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(tables.pagesPages.owner, userId))
   }
 
@@ -249,10 +249,10 @@ export async function updatePositionPagesPage(
   newParentId: string | null,
   newOrder: number,
   userId?: string,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   // Get the current item to find its path
   const [current] = await (db as any)
@@ -273,7 +273,7 @@ export async function updatePositionPagesPage(
   }
 
   // Non-admins may only move pages they own (checked before any write)
-  if (!isAdmin && (!userId || (current as any).owner !== userId)) {
+  if (!seesAll && (!userId || (current as any).owner !== userId)) {
     throw createError({ status: 403, statusText: 'Forbidden' })
   }
 
@@ -368,13 +368,13 @@ export async function reorderSiblingsPagesPages(
   teamId: string,
   updates: { id: string; order: number }[],
   userId?: string,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   // Non-admins may only reorder pages they own; reject the whole batch before writing
-  if (!isAdmin) {
+  if (!seesAll) {
     const ids = updates.map(u => u.id)
     const rows: { id: string; owner: string | null }[] = ids.length
       ? await (db as any)

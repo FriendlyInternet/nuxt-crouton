@@ -25,7 +25,7 @@ export const THROTTLE_MS = 60_000
 const QUIZ_DAYS = 14
 
 interface GhLabel { name?: string }
-interface GhIssue { number: number, title: string, body: string | null, html_url: string, state?: string, user?: GhUser, labels?: GhLabel[], pull_request?: unknown, updated_at?: string }
+interface GhIssue { number: number, title: string, body: string | null, html_url: string, state?: string, user?: GhUser, labels?: GhLabel[], pull_request?: { merged_at?: string | null } | null, updated_at?: string }
 interface GhPull extends GhIssue { head?: { sha?: string }, base?: { ref?: string }, draft?: boolean }
 type Note = (e: string | null | undefined) => void
 
@@ -42,6 +42,24 @@ const events = (gh: GhSource, n: number) => ghGetAll<GhEvent>(gh, `/repos/${REPO
 const commits = (gh: GhSource, n: number) => ghGetAll<GhCommit>(gh, `/repos/${REPO}/pulls/${n}/commits?per_page=100`)
 // A PR's files: GitHub lists up to 3000 (30 pages). Names the packages a review card warns about (#3785).
 const files = (gh: GhSource, n: number) => ghGetAll<GhFile>(gh, `/repos/${REPO}/pulls/${n}/files?per_page=100`, 30)
+/**
+ * #4501: a delivery epic's newest merged `Epic #N:` PR into main, with its files and how many such
+ * PRs were merged. The epic PR is already merged when `status:to-test` lands, so it is never in the
+ * open-PR list. Search also hits titles that merely contain the number — keep exact-prefix titles only.
+ */
+async function readEpicPr(gh: GhSource, n: number) {
+  const q = `repo:${REPO} is:pull-request base:main in:title "Epic #${n}:"`
+  const s = await ghFetch<{ items?: GhIssue[] }>(gh, `/search/issues?q=${encodeURIComponent(q)}&per_page=100`, { fresh: true })
+  if (s.error) return { data: null, error: s.error }
+  const merged = (s.data?.items ?? [])
+    .filter(p => p.title.startsWith(`Epic #${n}:`) && !!p.pull_request?.merged_at)
+    .sort((a, b) => (a.pull_request!.merged_at! < b.pull_request!.merged_at! ? 1 : -1))
+  const pr = merged[0]
+  if (!pr) return { data: null, error: null }
+  const f = await files(gh, pr.number)
+  if (f.error) return { data: null, error: f.error }
+  return { data: { number: pr.number, files: f.data ?? [], count: merged.length }, error: null }
+}
 const closedIssue = async (gh: GhSource, n: number | null | undefined) =>
   n ? ghFetch<GhIssue>(gh, `/repos/${REPO}/issues/${n}`, { fresh: true }) : { data: null, error: null }
 
@@ -106,13 +124,17 @@ const issueItem = (i: GhIssue): SyncItem => ({
   user: i.user, body: i.body, state: i.state, comments: [], events: [], updatedAt: i.updated_at
 })
 
-/** Blocked / to-test issue: comments + events. */
+/** Blocked / to-test issue: comments + events; a to-test epic also its merged epic PR (#4501). */
 async function readIssue(gh: GhSource, i: GhIssue, note: Note): Promise<SyncItem> {
   const item = issueItem(i)
-  const [c, e] = await Promise.all([comments(gh, i.number), events(gh, i.number)])
-  if (c.error || e.error) { note(c.error); note(e.error); item.readError = true; return item }
+  const toTest = item.labels.includes('status:to-test')
+  const [c, e, p] = await Promise.all([
+    comments(gh, i.number), events(gh, i.number), toTest ? readEpicPr(gh, i.number) : Promise.resolve({ data: null, error: null })
+  ])
+  if (c.error || e.error || p.error) { note(c.error); note(e.error); note(p.error); item.readError = true; return item }
   item.comments = c.data ?? []
   item.events = e.data ?? []
+  if (p.data) item.epicPr = p.data
   return item
 }
 

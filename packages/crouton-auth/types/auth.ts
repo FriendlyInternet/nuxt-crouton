@@ -129,9 +129,15 @@ export interface TeamWithStats extends Team {
 // ============================================================================
 
 /**
- * Team member role
+ * The three built-in team roles.
  */
-export type MemberRole = 'owner' | 'admin' | 'member'
+export type BaseMemberRole = 'owner' | 'admin' | 'member'
+
+/**
+ * Team member role: a base role, or one of the team's own roles (#4106,
+ * Better Auth dynamic access control — any name the team created).
+ */
+export type MemberRole = BaseMemberRole | (string & {})
 
 /**
  * Team membership

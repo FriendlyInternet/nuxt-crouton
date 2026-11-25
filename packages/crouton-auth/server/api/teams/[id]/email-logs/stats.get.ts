@@ -1,15 +1,15 @@
 /**
  * GET /api/teams/[id]/email-logs/stats
  *
- * Get email log statistics for a team. Requires admin role.
+ * Get email log statistics for a team. Requires the `team:manage` action.
  * Returns counts by status and by email type.
  */
-import { requireTeamAdmin } from '../../../../utils/team'
+import { requireCan } from '../../../../utils/permissions'
 import { useDB, tables, count } from '../../../../utils/database'
 import { teamEmailLogScope } from '../../../../utils/email-log-scope'
 
 export default defineEventHandler(async (event) => {
-  const { team } = await requireTeamAdmin(event)
+  const { team } = await requireCan(event, 'team:manage')
 
   const db = useDB()
 

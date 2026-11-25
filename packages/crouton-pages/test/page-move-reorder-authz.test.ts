@@ -31,6 +31,11 @@ vi.mock('@fyit/crouton-auth/server/utils/team', () => ({
     team: { id: 'team_1' }, user: { id: 'u1' }, membership: { role: h.role }
   })
 }))
+// can() (#4108): owner/admin may pages:edit with no site config, member not
+vi.mock('@fyit/crouton-auth/server/utils/team-auth', async () => {
+  const { teamAuthStub } = await import('./stubs/team-auth')
+  return teamAuthStub(() => ({ team: { id: 'team_1' }, user: { id: 'u1' }, membership: { role: h.role } })).module
+})
 
 import moveHandler from '../collections/pages/server/api/teams/[id]/pages-pages/[pageId]/move.patch'
 import reorderHandler from '../collections/pages/server/api/teams/[id]/pages-pages/reorder.patch'

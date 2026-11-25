@@ -97,7 +97,11 @@ export default defineEventHandler(async (event) => {
           .then((rows: any[]) => rows[0])
 
         isMember = !!membership
-        isAdmin = membership?.role === 'admin' || membership?.role === 'owner'
+        // "Admin-only" visibility follows the admin:access action (#4108), not a role name
+        if (membership) {
+          const { can } = await import('@fyit/crouton-auth/server/utils/team-auth')
+          isAdmin = await can(team.id, session.user.id, 'admin:access', event)
+        }
       }
     } catch {
       // Auth not available or error - continue as unauthenticated

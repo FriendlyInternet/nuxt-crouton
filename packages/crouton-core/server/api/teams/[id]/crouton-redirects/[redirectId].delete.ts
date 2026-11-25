@@ -1,5 +1,5 @@
 import { deleteCroutonRedirect } from '../../../../database/queries/redirects'
-import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
+import { requireCan, can } from '@fyit/crouton-auth/server/utils/team-auth'
 import { invalidateRedirectCache } from '../../../../utils/redirectCache'
 
 export default defineEventHandler(async (event) => {
@@ -11,11 +11,11 @@ export default defineEventHandler(async (event) => {
   }
 
   const authTimer = timing.start('auth')
-  const { team, user, membership } = await requireTeamAdmin(event)
+  const { team, user } = await requireCan(event, 'site:manage')
   authTimer.end()
 
   const dbTimer = timing.start('db')
-  const result = await deleteCroutonRedirect(redirectId, team.id, user.id, { role: membership.role })
+  const result = await deleteCroutonRedirect(redirectId, team.id, user.id, { seesAll: await can(team.id, user.id, 'site:manage', event) })
   dbTimer.end()
 
   invalidateRedirectCache()

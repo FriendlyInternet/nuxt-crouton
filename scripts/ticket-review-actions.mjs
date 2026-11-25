@@ -8,13 +8,17 @@
 //   { kind:'unlabel',  issue, label }               → gh issue edit --remove-label
 //   { kind:'block',    issue }                      → gh issue edit --add-label status:blocked
 //   { kind:'note',     text }                       → appended to the verdict comment + job summary
+//   { kind:'comment',  issue, text }                → gh issue comment on that issue (a note on the TICKET, #4456)
 //   { kind:'retitle',  issue, title, seenTitle }    → gh issue edit --title, only when the live title is
 //                                                    still seenTitle (`retitle-ok`); always printed FIRST, so a
 //                                                    go ticket is renamed before its worker reads the title (#4353)
 //
 // An epic WITHOUT `tickets:rolling` keeps today's whole-epic flow exactly (go → `tickets:approved` +
 // release the unblocked tickets; no-go → ticket-revise.yml under the 3-round cap, else hold;
-// needs-owner → hold). A ROLLING epic decides per ticket:
+// needs-owner → hold) — unless the review has a ticket-number subject (#4456): then the no-go/hold
+// lines come from the per-ticket path and the go release from `gateRelease` (ticket-review-gate.mjs).
+// The whole-epic path removes `tickets:approved` first (moved here from ticket-review.yml), so a
+// per-ticket review leaves it on. A ROLLING epic decides per ticket:
 //   rule: a ticket's start depends only on the plan verdict, its own verdict and its own step's
 //   blockers — never on a sibling's verdict.
 //   • plan go → `steps:approved` on the epic; a go ticket starts at once (once the plan is approved);
@@ -44,6 +48,8 @@ import { countRounds as legacyRounds, route } from './ticket-revise.mjs'
 import { parsePipelineBlock } from './pipeline-context.mjs'
 import { PIPELINE_LABELS } from './traffic-control.mjs'
 import { checkTitle } from './lib/title-rule.mjs'
+import { parseBlockers } from './wave-gate.mjs'
+import { gateRelease } from './ticket-review-gate.mjs'
 import {
   ROLLING_LABEL, STEPS_APPROVED_LABEL, PLAN_GO_MARKER, countRounds, splitVerdict, nextAction, planWrongOnRecord, stepOf,
   verdictCommentsFor, readSteps,
@@ -53,17 +59,21 @@ const names = (ls) => (ls || []).map((l) => (typeof l === 'string' ? l : l?.name
 // Instruction TEXT for the orchestrator (a note in the verdict comment) — this file never dispatches.
 const reviewCmd = (epic, subject) => `\`gh workflow ${'run'} ticket-review.yml -f epic=${epic} -f subject=${subject}\``
 
-/** Today's whole-epic flow, unchanged (moved from ticket-review.yml's `case` block). */
+/**
+ * Today's whole-epic flow (moved from ticket-review.yml's `case` block). Every outcome first removes
+ * `tickets:approved` (remove-then-add: re-adding a label already there fires no event); only a go adds it back.
+ */
 export function legacyActions({ epic, decision, comments, tickets }) {
+  const unapprove = { kind: 'unlabel', issue: epic, label: APPROVED_LABEL }
   const v = decision?.verdict
   if (v === 'go') {
-    return [{ kind: 'label', issue: epic, label: APPROVED_LABEL },
+    return [unapprove, { kind: 'label', issue: epic, label: APPROVED_LABEL },
       ...releasable(tickets).map((r) => ({ kind: 'label', issue: r.number, label: r.label }))]
   }
   if (v === 'no-go' && route(decision, legacyRounds(comments)) === 'revise') {
-    return [{ kind: 'dispatch', issue: epic, workflow: 'ticket-revise.yml', inputs: { epic: String(epic) } }]
+    return [unapprove, { kind: 'dispatch', issue: epic, workflow: 'ticket-revise.yml', inputs: { epic: String(epic) } }]
   }
-  return [{ kind: 'block', issue: epic }]
+  return [unapprove, { kind: 'block', issue: epic }]
 }
 
 /** PURE. The epic's state after this review, in the shape nextAction() reads. */
@@ -131,8 +141,31 @@ export function reviewActions(args) {
   return [...retitleActions(args.decision), ...flowActions(args)]
 }
 
-function flowActions({ epic, subject = '', labels = [], decision, comments = [], tickets = [], subIssues = [], steps = null }) {
-  if (!names(labels).includes(ROLLING_LABEL)) return legacyActions({ epic, decision, comments, tickets })
+const isTicketSubject = (subject) => /^\d+$/.test(String(subject ?? '').trim())
+
+function flowActions(args) {
+  const { epic, subject = '', labels = [], decision, comments = [], tickets = [] } = args
+  const rolling = names(labels).includes(ROLLING_LABEL)
+  if (!rolling && !isTicketSubject(subject)) return legacyActions({ epic, decision, comments, tickets })
+  if (!rolling) return gateTicketActions(args)
+  return perTicketActions(args)
+}
+
+/**
+ * #4456: a review of ONE ticket on an epic without `tickets:rolling` (started by ticket-review-gate.mjs).
+ * The no-go / needs-owner / round-cap lines come from the per-ticket path; its start line is dropped
+ * and the gate's own release (`gateRelease`) decides the go. Siblings are never touched.
+ */
+function gateTicketActions(args) {
+  const n = Number(String(args.subject).trim())
+  const subs = (args.subIssues?.length ? args.subIssues : args.tickets) || []
+  const ticket = subs.find((s) => s.number === n) || null
+  const verdict = (args.decision?.tickets || []).find((t) => t.number === n)?.verdict
+  const lines = perTicketActions(args).filter((l) => !(l.kind === 'label' && l.issue === n))
+  return [...lines, ...gateRelease({ ticket, verdict, blockerStates: args.blockerStates || {} })]
+}
+
+function perTicketActions({ epic, subject = '', labels = [], decision, comments = [], tickets = [], subIssues = [], steps = null }) {
   const subs = subIssues.length ? subIssues : tickets
   const state = rollingState({ subject, labels, decision, comments, subIssues: subs, steps })
   const out = []
@@ -234,6 +267,26 @@ function runGather(argv, subject) {
   console.log(`held epic #${epic.number}: the step list cannot be read`)
 }
 
+/**
+ * CLI: the state of each `Blocked-by:` number of a ticket subject (#4456) — from subs.json for a
+ * sibling, else one `gh api` read. A failed read counts as `open` (the ticket waits; the wave release
+ * in on-issue-close.yml starts it when the blocker closes).
+ */
+function readBlockerStates(subject, subIssues) {
+  if (!isTicketSubject(subject)) return {}
+  const sub = subIssues.find((s) => String(s.number) === String(subject).trim())
+  const states = {}
+  for (const b of parseBlockers(sub?.body)) {
+    const sib = subIssues.find((s) => s.number === b)
+    if (sib) { states[b] = sib.state === 'closed' ? 'closed' : 'open'; continue }
+    try {
+      const out = execFileSync('gh', ['api', `repos/${process.env.GITHUB_REPOSITORY}/issues/${b}`, '--jq', '.state'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+      states[b] = out.trim() === 'closed' ? 'closed' : 'open'
+    } catch { states[b] = 'open' }
+  }
+  return states
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const argv = process.argv.slice(2)
   const si = argv.indexOf('--subject')
@@ -247,7 +300,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const subIssues = json(subsF)
   const steps = stepsF && existsSync(stepsF) && readFileSync(stepsF, 'utf8').trim() ? json(stepsF) : null
   const tickets = subIssues.filter((s) => s.state !== 'closed')
-  for (const line of reviewActions({ epic: epic.number, subject, labels: epic.labels, decision: json(decisionF), comments: json(commentsF), tickets, subIssues, steps })) {
+  const blockerStates = readBlockerStates(subject, subIssues)
+  for (const line of reviewActions({ epic: epic.number, subject, labels: epic.labels, decision: json(decisionF), comments: json(commentsF), tickets, subIssues, steps, blockerStates })) {
     console.log(JSON.stringify(line))
   }
 }

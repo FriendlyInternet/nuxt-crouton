@@ -125,10 +125,13 @@ watch(() => props.yxmlFragment, async (fragment) => {
     try {
       // Dynamically import TipTap Collaboration extension
       const { Collaboration } = await import('@tiptap/extension-collaboration')
+      // Blocks a collaborator adds get a short-lived line on their left
+      const { RemoteChangeHighlight } = await import('../utils/remote-change-highlight')
       const extensions: any[] = [
         Collaboration.configure({
           fragment
-        })
+        }),
+        RemoteChangeHighlight
       ]
 
       // Other people's carets/selections (#3984): crouton-collab's connection carries a
@@ -226,11 +229,8 @@ const content = computed({
     return '' // For html and markdown
   },
   set: (value) => {
-    if (props.contentType === 'json' && typeof value === 'object') {
-      emit('update:modelValue', JSON.stringify(value))
-    } else {
-      emit('update:modelValue', value)
-    }
+    const isJsonObject = props.contentType === 'json' && typeof value === 'object'
+    emit('update:modelValue', isJsonObject ? JSON.stringify(value) : value)
   }
 })
 
@@ -668,5 +668,14 @@ defineExpose({
   right: 0.5rem;
   opacity: 0;
   transition: opacity 0.2s;
+}
+
+/* Remote changes (collab): a block someone else added gets a thin primary line on its left for ~2s, then the line fades */
+.crouton-remote-new { position: relative }
+.crouton-remote-new::before { content: ''; position: absolute; top: 0; bottom: 0; left: -0.75rem; width: 2px; border-radius: 1px; background: var(--ui-primary); opacity: 1; transition: opacity .6s ease-out; pointer-events: none }
+.crouton-remote-fading::before { opacity: 0 }
+/* Reduced motion: the line still shows, it just goes without the fade */
+@media (prefers-reduced-motion: reduce) {
+  .crouton-remote-new::before { transition: none }
 }
 </style>

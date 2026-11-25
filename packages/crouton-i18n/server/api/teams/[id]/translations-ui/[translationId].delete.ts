@@ -1,4 +1,4 @@
-import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
+import { requireCan } from '@fyit/crouton-auth/server/utils/team-auth'
 
 /**
  * DELETE /api/teams/[id]/translations-ui/[translationId]
@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // Get team and verify membership
-  const { team, user } = await requireTeamAdmin(event)
+  const { team, user } = await requireCan(event, 'translations:manage')
 
 
   // Verify the translation belongs to this team and capture beforeData

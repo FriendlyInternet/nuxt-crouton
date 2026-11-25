@@ -1,4 +1,7 @@
 {
+  "permissions": {
+    "activityView": "View the activity log"
+  },
   "events": {
     "title": "Activity",
     "admin": {
