@@ -1681,6 +1681,10 @@ jobs:
           D="$RUNNER_TEMP/plan-review"; mkdir -p "$D"
           gh issue view "$ISSUE" --json title,body --jq '"# " + .title + "\n\n" + .body' > "$D/issue.md"
           gh api "repos/${{ github.repository }}/issues/comments/${PLAN_ID}" --jq .body > "$D/plan.md"
+          # #4524 — did the ticket ask for a mockup, and was one posted? (none | posted | waived | missing)
+          gh api --paginate "repos/${{ github.repository }}/issues/${ISSUE}/comments?per_page=100" --jq '[.[] | {body}]' | jq -s add > "$D/comments.json" || echo '[]' > "$D/comments.json"
+          node scripts/lib/signoff-route.mjs "$D/issue.md" "$D/comments.json" --mockup > "$D/mockup" || echo none > "$D/mockup"
+          echo "mockup: $(cat "$D/mockup")"
           # Prior review rounds: each sent-back verdict carries a hidden verdict line.
           PRIOR="$(gh api --paginate "repos/${{ github.repository }}/issues/${ISSUE}/comments?per_page=100" \
             --jq '[.[] | select(.body | test("\\A(?:[ \\t]*<!--[^\\n]*-->[ \\t]*\\r?\\n)*[ \\t]*<!-- plan-review-verdict:no-go -->[ \\t]*(\\r?\\n|\\z)"))] | length' | awk '{ s += $1 } END { print s + 0 }')"
@@ -1739,18 +1743,19 @@ jobs:
             gh issue comment "$ISSUE" --body "$(printf '<!-- pipeline-note -->\n<!-- plan-review-failed -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review (#2756)_\n\n🔴 **Plan review produced no verdict** — nothing was approved.\n**Needs:** action — re-run [the review](%s).' "$RUN_URL")" || true
             exit 1
           fi
-          if ! DECISION="$(node scripts/lib/plan-verdict.mjs "$D/plan.md" "$D/verdict.md")"; then
+          MOCKUP="$(cat "$D/mockup" 2>/dev/null || echo none)"
+          if ! DECISION="$(node scripts/lib/plan-verdict.mjs "$D/plan.md" "$D/verdict.md" --mockup "$MOCKUP")"; then
             echo "::error::malformed verdict: $DECISION"
             gh issue comment "$ISSUE" --body "$(printf '<!-- pipeline-note -->\n<!-- plan-review-failed -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review (#2756)_\n\n🔴 **Plan review verdict was malformed** — nothing was approved.\n**Needs:** action — re-run [the review](%s).' "$RUN_URL")" || true
             exit 1
           fi
           VERDICT="$(echo "$DECISION" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).verdict)')"
-          node scripts/lib/plan-verdict.mjs render "$D/plan.md" "$D/verdict.md" "$ROUND" "$MODEL" > "$D/comment.md"
+          node scripts/lib/plan-verdict.mjs render "$D/plan.md" "$D/verdict.md" "$ROUND" "$MODEL" --mockup "$MOCKUP" > "$D/comment.md"
           # remove-then-add: re-adding a label the issue already carries fires no event.
           gh issue edit "$ISSUE" --remove-label "plan:approved" 2>/dev/null || true
           REVIEW_URL="$(gh issue comment "$ISSUE" --body-file "$D/comment.md")"
           echo "verdict: $VERDICT (round $ROUND) → $REVIEW_URL"
-          ROUTE=""; [ "$VERDICT" = no-go ] && { ROUTE="$(node scripts/lib/plan-verdict.mjs route "$D/plan.md" "$D/verdict.md" "$ROUND")" || ROUTE=hold; }
+          ROUTE=""; [ "$VERDICT" = no-go ] && { ROUTE="$(node scripts/lib/plan-verdict.mjs route "$D/plan.md" "$D/verdict.md" "$ROUND" --mockup "$MOCKUP")" || ROUTE=hold; }
           node scripts/flow-checklist.mjs "$ISSUE" --verdict plan "$VERDICT" --round "$ROUND" --link "$REVIEW_URL" ${ROUTE:+--route "$ROUTE"} || true
           case "$VERDICT" in
             go)

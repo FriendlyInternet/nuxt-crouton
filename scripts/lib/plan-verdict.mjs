@@ -27,6 +27,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { parsePlan } from './plan-shape.mjs'
 import { recordMarker } from './reply-record.mjs'
+import { MOCKUP_MISSING_QUESTION } from './signoff-route.mjs'
 
 export const REVIEW_MARKER = '<!-- plan-review:v1 -->'
 export const RUBRIC = [
@@ -102,8 +103,10 @@ export function pendingSignoff(planBody) {
   return plan.needsOwner === true && /design sign-?off/i.test(section(planBody, 'Needs owner'))
 }
 
-/** PURE. Merge the deterministic floor and the reviewer's rubric into the final decision. */
-export function decide(planBody, verdictBody) {
+/** PURE. Merge the deterministic floor and the reviewer's rubric into the final decision.
+ *  `mockup` is `mockupState` from signoff-route.mjs: a requested mockup that is `missing` is the
+ *  pipeline's own owner question, whatever the reviewer asked (#4524 — it can't see the thread). */
+export function decide(planBody, verdictBody, { mockup = 'none' } = {}) {
   const v = parseVerdict(verdictBody)
   if (!v.ok) return { ok: false, errors: v.errors }
   const floor = precheck(planBody)
@@ -116,6 +119,11 @@ export function decide(planBody, verdictBody) {
   if (hardFails.length) verdict = 'no-go'
   else if (!items['7'].pass) verdict = 'needs-owner'
   else verdict = 'go'
+  if (mockup === 'missing') {
+    const notes = planNotes(planBody)
+    if (v.question) notes['7'] = `reviewer also asked: ${v.question.replace(/\s+/g, ' ').trim()}`
+    return { ok: true, verdict: 'needs-owner', stated: v.stated, items, failed, question: MOCKUP_MISSING_QUESTION, overridden: Object.keys(floor), notes }
+  }
   // A pending design sign-off is a hold, never a pass or a rejection (#3238).
   if (pendingSignoff(planBody)) {
     return { ok: true, verdict: 'needs-owner', stated: v.stated, items, failed, question: SIGNOFF_QUESTION, overridden: Object.keys(floor), notes: planNotes(planBody) }
@@ -159,13 +167,16 @@ export function renderComment(d, { round = 1, model = '' } = {}) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const args = process.argv.slice(2)
+  const argv = process.argv.slice(2)
+  const mi = argv.indexOf('--mockup')
+  const mockup = mi >= 0 ? argv[mi + 1] || 'none' : 'none'
+  const args = mi >= 0 ? argv.filter((_, i) => i !== mi && i !== mi + 1) : argv
   const render = args[0] === 'render'
   const route = args[0] === 'route'
   const [planFile, verdictFile, round, model] = render || route ? args.slice(1) : args
-  if (!planFile || !verdictFile) { console.error('usage: plan-verdict.mjs [render|route] <plan-file> <verdict-file> [round model]'); process.exit(2) }
+  if (!planFile || !verdictFile) { console.error('usage: plan-verdict.mjs [render|route] <plan-file> <verdict-file> [round model] [--mockup <state>]'); process.exit(2) }
   let d
-  try { d = decide(readFileSync(planFile, 'utf8'), readFileSync(verdictFile, 'utf8')) }
+  try { d = decide(readFileSync(planFile, 'utf8'), readFileSync(verdictFile, 'utf8'), { mockup }) }
   catch (e) { console.error(e.message); process.exit(1) }
   if (!d.ok) console.error(d.errors.join('\n'))
   if (route) {
