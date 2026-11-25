@@ -35,8 +35,8 @@ interface CollectionMutationReturnUntyped {
  *
  * How it works:
  * 1. Performs the API mutation (POST/PATCH/DELETE)
- * 2. Queries nuxtApp.payload.data to find ALL cache keys for the collection
- * 3. Refreshes all matching keys (including those with query parameters)
+ * 2. Queries nuxtApp.payload.data to find the current team's cache keys for the collection
+ * 3. Refreshes the current team's matching keys (including those with query parameters)
  * 4. UI updates with fresh data from the server
  *
  * @example
@@ -58,6 +58,8 @@ export function useCollectionMutation(collection: string): CollectionMutationRet
   const collections = useCollections()
   const config = collections.getConfig(collection)
   const { getTeamId } = useTeamContext()
+  // Cache slots are named and refreshed only through the one key builder (#4506)
+  const { refreshLists, refreshItems } = useCollectionCacheKeys(collection)
 
   if (!config) {
     console.error(`[useCollectionMutation] Collection "${collection}" not found in registry`)
@@ -88,8 +90,8 @@ export function useCollectionMutation(collection: string): CollectionMutationRet
   }
 
   /**
-   * Invalidate cache for this collection (triggers refetch in all views)
-   * Finds ALL cache keys for this collection (including those with query params) and refreshes them
+   * Invalidate cache for this collection in the current team (triggers refetch in its views)
+   * Finds the current team's cache keys for this collection (including those with query params) and refreshes them
    * Optionally refreshes individual item caches when item IDs are provided
    *
    * @param itemIds - Optional item ID(s) to invalidate individual item caches
@@ -101,31 +103,15 @@ export function useCollectionMutation(collection: string): CollectionMutationRet
     refreshCollection: boolean = true,
     mutationData?: any
   ) => {
-    // Refresh ALL cache keys for this collection (supports queries with parameters)
-    // Queries Nuxt's payload.data to find all matching keys
+    // Refresh the current team's cached lists of this collection (any query
+    // params). Other teams' slots are never touched.
     if (refreshCollection) {
-      const nuxtApp = useNuxtApp()
-      const prefix = `collection:${collection}:`
-
-      // Get all matching keys from Nuxt's async data
-      const allKeys = Object.keys(nuxtApp.payload.data)
-      const matchingKeys = new Set(allKeys.filter(key => key.startsWith(prefix)))
-
-      // Always include the base collection key as fallback
-      // (ensures refresh even if payload.data enumeration misses client-side entries)
-      matchingKeys.add(`${prefix}{}`)
-
-      // Refresh all queries for this collection
-      await Promise.all([...matchingKeys].map(key => refreshNuxtData(key)))
+      await refreshLists()
     }
 
-    // Refresh individual item caches if IDs provided - for detail views (e.g., CroutonCardMini)
+    // Refresh the current team's item caches - for detail views (e.g., CroutonCardMini)
     if (itemIds) {
-      const ids = Array.isArray(itemIds) ? itemIds : [itemIds]
-      for (const id of ids) {
-        const itemCacheKey = `collection-item:${collection}:${id}`
-        await refreshNuxtData(itemCacheKey)
-      }
+      await refreshItems(itemIds)
     }
 
     // AUTO-REFRESH REFERENCED COLLECTIONS
@@ -134,18 +120,8 @@ export function useCollectionMutation(collection: string): CollectionMutationRet
     if (config?.references && mutationData) {
       for (const [field, refCollection] of Object.entries(config.references)) {
         const refId = mutationData[field]
-
-        if (refId && typeof refId === 'string') {
-          const refCacheKey = `collection-item:${refCollection}:${refId}`
-          await refreshNuxtData(refCacheKey)
-        } else if (Array.isArray(refId)) {
-          // Handle array references (e.g., multiple IDs)
-          for (const id of refId) {
-            if (id && typeof id === 'string') {
-              const refCacheKey = `collection-item:${refCollection}:${id}`
-              await refreshNuxtData(refCacheKey)
-            }
-          }
+        if ((refId && typeof refId === 'string') || Array.isArray(refId)) {
+          await refreshItems(refId, refCollection)
         }
       }
     }
@@ -264,38 +240,61 @@ export function useCollectionMutation(collection: string): CollectionMutationRet
     const correlationId = generateCorrelationId()
     const timestamp = Date.now()
 
-    try {
-      // Delete each item individually (treat 404 as success — item already gone)
-      await Promise.all(
-        ids.map(id =>
-          $fetch(`${baseUrl}/${id}`, {
-            method: 'DELETE',
-            credentials: 'include'
-          }).catch((err: any) => {
-            if (err?.response?.status === 404 || err?.status === 404 || err?.statusCode === 404) return
-            throw err
-          })
-        )
+    // Delete each item individually (treat 404 as success — item already gone).
+    // allSettled: one refused row must not hide the rows the server did delete.
+    const results = await Promise.allSettled(
+      ids.map(id =>
+        $fetch(`${baseUrl}/${id}`, {
+          method: 'DELETE',
+          credentials: 'include'
+        }).catch((err: any) => {
+          if (err?.response?.status === 404 || err?.status === 404 || err?.statusCode === 404) return
+          throw err
+        })
       )
+    )
 
-      // Emit hook for event tracking (zero overhead if no listeners)
-      const nuxtApp = useNuxtApp()
-      await nuxtApp.hooks.callHook('crouton:mutation', {
-        operation: 'delete',
-        collection,
-        itemIds: ids,
-        correlationId,
-        timestamp
-      })
+    const doneIds = ids.filter((_, i) => results[i]?.status === 'fulfilled')
+    const failures = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
 
-      // Invalidate cache to trigger refetch (includes individual item caches)
-      await invalidateCache(ids)
-    } catch (error: any) {
-      const errorMessage = errorText(error, t('mutations.deleteFailed'))
+    if (doneIds.length > 0) {
+      try {
+        // Emit hook for event tracking (zero overhead if no listeners)
+        const nuxtApp = useNuxtApp()
+        await nuxtApp.hooks.callHook('crouton:mutation', {
+          operation: 'delete',
+          collection,
+          itemIds: doneIds,
+          correlationId,
+          timestamp
+        })
 
-      notify.error(t('mutations.deleteFailed'), { description: errorMessage })
+        // Invalidate cache to trigger refetch (includes individual item caches)
+        await invalidateCache(doneIds)
+      } catch (error: any) {
+        const errorMessage = errorText(error, t('mutations.deleteFailed'))
 
-      throw error
+        notify.error(t('mutations.deleteFailed'), { description: errorMessage })
+
+        throw error
+      }
+    }
+
+    if (failures.length > 0) {
+      const firstError = failures[0]!.reason
+      const message = errorText(firstError, t('mutations.deleteFailed'))
+      const description = doneIds.length === 0
+        ? message
+        : t('mutations.deletePartial', {
+            done: doneIds.length,
+            total: ids.length,
+            failed: failures.length,
+            error: message
+          })
+
+      notify.error(t('mutations.deleteFailed'), { description })
+
+      throw firstError
     }
   }
 

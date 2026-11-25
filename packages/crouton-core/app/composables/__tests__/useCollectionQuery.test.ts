@@ -92,8 +92,10 @@ vi.stubGlobal('console', {
 import useCollections from '../useCollections'
 import { useTeamContext } from '../useTeamContext'
 import { useRemoteCollectionRefresh } from '../useRemoteCollectionRefresh'
+import { useCollectionCacheKeys } from '../useCollectionCacheKeys'
 
 vi.stubGlobal('useCollections', useCollections)
+vi.stubGlobal('useCollectionCacheKeys', useCollectionCacheKeys)
 vi.stubGlobal('useTeamContext', useTeamContext)
 vi.stubGlobal('useRemoteCollectionRefresh', useRemoteCollectionRefresh)
 
@@ -209,11 +211,31 @@ describe('useCollectionQuery', () => {
       expect(key1).toBe(key2)
     })
 
-    it('generates key with empty object for no query', async () => {
+    // covers: T3
+    it('generates key with the team and an empty object for no query', async () => {
+      mockUseTeam = () => ({ currentTeam: ref({ id: 'team-a' }) })
+
       await useCollectionQuery('products')
 
       const call = mockUseFetch.mock.calls[0] as any
-      expect(call[1].key.value).toBe('collection:products:{}')
+      expect(call[1].key.value).toBe('collection:products:team-a:{}')
+    })
+
+    // covers: T3
+    it('switching team moves the key and the fetch URL to the new team (#4506)', async () => {
+      const currentTeam = ref<{ id: string }>({ id: 'team-a' })
+      mockUseTeam = () => ({ currentTeam })
+
+      await useCollectionQuery('products')
+
+      const call = mockUseFetch.mock.calls[0] as any
+      expect(call[1].key.value).toBe('collection:products:team-a:{}')
+      expect(call[0]()).toBe('/api/teams/team-a/shop-products')
+
+      currentTeam.value = { id: 'team-b' }
+
+      expect(call[1].key.value).toBe('collection:products:team-b:{}')
+      expect(call[0]()).toBe('/api/teams/team-b/shop-products')
     })
   })
 

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { defineComponent, h, nextTick, ref, computed } from 'vue'
 import { mountSuspended, registerEndpoint } from '@nuxt/test-utils/runtime'
 import { useCollectionQuery } from '../../app/composables/useCollectionQuery'
+import { useCollectionCacheKeys } from '../../app/composables/useCollectionCacheKeys'
 
 // Real Nuxt runtime: real useFetch / useAsyncData, requests counted at the endpoint.
 // Nuxt's test env may prefix paths with `/_`; strip it so assertions read as the real URL.
@@ -51,6 +52,8 @@ describe('useCollectionQuery (real Nuxt runtime)', () => {
     vi.stubGlobal('useCollections', () => ({ getConfig: () => ({ apiPath: 'products' }) }))
     vi.stubGlobal('useTeamContext', () => ({ getTeamId: () => team.value }))
     vi.stubGlobal('useRemoteCollectionRefresh', () => {})
+    vi.stubGlobal('useTeam', () => ({ currentTeam: computed(() => (team.value ? { id: team.value } : null)) }))
+    vi.stubGlobal('useCollectionCacheKeys', useCollectionCacheKeys)
   })
 
   it('makes no request while waiting for a team', async () => {
