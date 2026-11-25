@@ -22,7 +22,8 @@
 //          a non-owner's reply on a status:blocked issue → none (owner = login, scripts/lib/owner.mjs, #4168) ·
 //          a reply on a held question that carries a reply record (#4145): readReply() decides once —
 //          owner `ok: <reason>` / approval on a twice-rejected plan → approve-plan / plan-needs-reason,
-//          anything else it accepts → resume carrying `starts` (the re-plan step follows it); no record,
+//          anything else it accepts → resume carrying `starts` (the re-plan step follows it); a chat's
+//          status note on a plan record (a 🤖 comment, not the owner's voice, no `**Worker:**` line) → none (#4531); no record,
 //          or nothing it accepts → the record-less routes below ·
 //          owner reply on a plan rejected twice → approve-plan (`ok: <reason>`) /
 //          plan-needs-reason (bare approval) (#3272; other replies fall through to the re-plan) ·
@@ -42,7 +43,7 @@ import { routePrComment } from './revise-route.mjs'
 import { isQuizReply } from './owner-quiz.mjs'
 import { isOwnerScreenComment } from './lib/owner-screens.mjs'
 import { parseOverride } from './lib/decision-line.mjs'
-import { readReply } from './lib/reply-record.mjs'
+import { readReply, isStatusNote } from './lib/reply-record.mjs'
 import { isOwner } from './lib/owner.mjs'
 
 export const KINDS = [
@@ -85,6 +86,8 @@ function routeHeldPlan({ body, owner, ownerLogin, userLogin, issue, out, userTyp
 function routeRecord({ body, owner, ownerLogin, userLogin, issue, labels, out, userType, record }) {
   if (!record || !out.blocked) return null
   const { starts } = readReply(record, { body, userLogin, owner: ownerLogin, userType })
+  // A chat's status note on a held plan must not fall through to the record-less resume (#4531).
+  if (isStatusNote(record, { body, userLogin, owner: ownerLogin, userType })) return out('none', "a chat's status note on a held plan starts nothing")
   if (!starts) return null
   if (starts === 'approve-plan' || starts === 'plan-needs-reason') {
     return owner ? out(starts, `record: ${starts === 'approve-plan' ? 'ok: <reason>' : 'bare approval'} on a twice-rejected plan`) : null

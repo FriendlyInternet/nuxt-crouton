@@ -14,9 +14,14 @@
 // The router (comment-route.mjs) reads a reply against the open record once (`openRecord` +
 // `readReply`, #4145) and passes on what it starts; the re-plan step follows that. `openRecordAt`
 // also gives the record's comment index, for the receipt (#4207).
+//
+// Plan records follow the #4192 owner-voice rule too (#4531): a relayed `ok` is the owner's yes,
+// a chat's status note starts nothing, a chat's `**Worker:**` line still asks for a re-plan.
 import { leadingMarkers, markerValue } from './marker.mjs'
 import { parseOverride, isOwnerVoice } from './decision-line.mjs'
-import { isApproval, isBareApproval } from '../approval.mjs'
+import { isApproval, isBareApproval, isAgentComment } from '../approval.mjs'
+import { stripGeneratedTrailer } from '../comment-command.mjs'
+import { hasWorkerLine } from './chat-claim.mjs'
 
 /** A plan-review verdict marker (moved here from plan-hold.mjs so plan-hold can import openRecord without a cycle). */
 export const VERDICT = /<!--\s*plan-review-verdict:(go|no-go|needs-owner)\s*-->/
@@ -104,10 +109,37 @@ const isVerdict = (c) => !isHuman(c) && Boolean(markerValue(c?.body || '', VERDI
 /** Did the owner speak after `at`, not counting the newest comment (the reply being routed)? */
 const answeredAfter = (list, at, owner) => list.slice(at + 1, -1).some((x) => isOwnerVoice(who(x), owner))
 
+/** The records a plan review holds on (#4531): they get the #4192 owner-voice rule too. */
+const PLAN_KINDS = new Set(['plan-question', 'plan-rejected'])
+
+/**
+ * The words the owner said (#4531): a chat's relay of the owner's answer (`isOwnerVoice` on a 🤖
+ * comment) with its leading header — every line up to and including the first 🤖 line — and the
+ * generated trailer removed. Any other comment is returned as it is, so `isBareApproval` stays strict.
+ */
+function ownerText(c) {
+  if (!(isAgentComment(c.body) && isOwnerVoice(c, c.owner))) return c.body
+  const lines = String(c.body).split('\n')
+  const at = lines.findIndex((l) => l.trim())
+  return stripGeneratedTrailer(lines.slice(at + 1).join('\n'))
+}
+
+/**
+ * PURE. A chat's status note on a held plan (#4531): a 🤖 comment on a plan record that is not the
+ * owner speaking (`isOwnerVoice`) and does not address the worker. A `**Worker:** …` line is a
+ * change request, as everywhere else in the repo (`hasWorkerLine`), so it still re-plans.
+ * @param {object|null} record
+ * @param {{body?: string, userLogin?: string, owner?: string, userType?: string}} c
+ */
+export function isStatusNote(record, comment) {
+  const c = asReply(comment)
+  return PLAN_KINDS.has(record?.kind) && isAgentComment(c.body) && !isOwnerVoice(c, c.owner) && !hasWorkerLine(c.body)
+}
+
 const FORMS = {
   'ok: <reason>': (c) => parseOverride(c) !== null,
-  ok: (c) => isBareApproval(c.body) && !OK_REASON.test(c.body),
-  approval: (c) => isApproval(c.body),
+  ok: (c) => { const t = ownerText(c); return isBareApproval(t) && !OK_REASON.test(t) },
+  approval: (c) => isApproval(ownerText(c)),
 }
 
 /**
@@ -115,20 +147,39 @@ const FORMS = {
  * order. On a `plan-rejected` record an approval or an `ok:`-shaped reply is never `other`
  * (today's isPlanHold does not re-plan it): `{ form: null, starts: null }`. On a
  * `worker-question` record only the owner speaking (`isOwnerVoice`) is read at all (#4192).
+ * On a plan record (#4531) the same rule: a chat's relay of the owner's answer is read as the
+ * owner's words (a relayed `ok` is the `ok` form), a chat's status note (`isStatusNote`) starts
+ * nothing, and a chat's `**Worker:**` request reads as `other` (a re-plan with feedback).
  * @param {object|null} record
  * @param {{body?: string, userLogin?: string, owner?: string, userType?: string}} comment
  * @returns {{form: string|null, starts: string|null}}
  */
-export function readReply(record, comment = {}) {
-  const c = { body: String(comment?.body || ''), userLogin: comment?.userLogin, owner: comment?.owner, userType: comment?.userType }
-  if (!record || !Array.isArray(record.accepts)) return { form: 'other', starts: null }
-  // A worker's question is answered only by the owner speaking (#4192): a chat's status note is not.
-  if (record.kind === 'worker-question' && !isOwnerVoice(c, c.owner)) return { form: null, starts: null }
-  for (const form of record.accepts) {
-    if (form === 'other') {
-      if (record.kind === 'plan-rejected' && (isApproval(c.body) || OK_REASON.test(c.body))) return { form: null, starts: null }
-    } else if (!FORMS[form]?.(c)) continue
-    return { form, starts: record.starts?.[form] ?? null }
-  }
-  return { form: null, starts: null }
+export function readReply(record, comment) {
+  const c = asReply(comment)
+  if (!Array.isArray(record?.accepts)) return { form: 'other', starts: null }
+  if (isUnheard(record, c)) return NOTHING
+  const form = record.accepts.find((f) => matchesForm(record, f, c))
+  if (form === undefined || (form === 'other' && rejectedApproval(record, c))) return NOTHING
+  return { form, starts: record.starts?.[form] ?? null }
+}
+
+const NOTHING = Object.freeze({ form: null, starts: null })
+
+/** The four fields a reply is read by, `body` always a string. */
+function asReply(comment) {
+  const { body, userLogin, owner, userType } = comment || {}
+  return { body: String(body || ''), userLogin, owner, userType }
+}
+
+/** Not read at all: a worker's question is answered only by the owner speaking (#4192); a chat's status note on a held plan is not the owner's answer either (#4531). */
+const isUnheard = (record, c) => (record.kind === 'worker-question' && !isOwnerVoice(c, c.owner)) || isStatusNote(record, c)
+
+/** `other` takes anything; a named form must match its test in `FORMS`. */
+const matchesForm = (record, form, c) => form === 'other' || Boolean(FORMS[form]?.(c))
+
+/** On a `plan-rejected` record an approval or an `ok:`-shaped reply is never `other`. */
+function rejectedApproval(record, c) {
+  if (record.kind !== 'plan-rejected') return false
+  const t = ownerText(c)
+  return isApproval(t) || OK_REASON.test(t)
 }
