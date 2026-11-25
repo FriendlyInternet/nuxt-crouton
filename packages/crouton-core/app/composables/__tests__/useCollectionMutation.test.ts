@@ -63,6 +63,7 @@ const mutationTranslations: Record<string, string> = {
   'mutations.creationFailed': 'Creation failed',
   'mutations.updateFailed': 'Update failed',
   'mutations.deleteFailed': 'Delete failed',
+  'mutations.deletePartial': '{done} of {total} deleted. {failed} could not be deleted: {error}',
   'mutations.createdSuccessfully': 'Created successfully',
   'mutations.updatedSuccessfully': 'Updated successfully',
   'mutations.deletedCount': 'Deleted {count} item(s)',
@@ -70,10 +71,7 @@ const mutationTranslations: Record<string, string> = {
 vi.stubGlobal('useT', () => ({
   t: (key: string, params?: any) => {
     const template = mutationTranslations[key] || key
-    if (params?.count !== undefined) {
-      return template.replace('{count}', String(params.count))
-    }
-    return template
+    return template.replace(/\{(\w+)\}/g, (m, k) => params?.[k] !== undefined ? String(params[k]) : m)
   }
 }))
 
@@ -138,8 +136,10 @@ vi.stubGlobal('console', {
 // Import composables after mocking
 import useCollections from '../useCollections'
 import { useTeamContext } from '../useTeamContext'
+import { useCollectionCacheKeys } from '../useCollectionCacheKeys'
 
 vi.stubGlobal('useCollections', useCollections)
+vi.stubGlobal('useCollectionCacheKeys', useCollectionCacheKeys)
 vi.stubGlobal('useTeamContext', useTeamContext)
 
 // Import the composable under test
@@ -248,15 +248,19 @@ describe('useCollectionMutation', () => {
 
     it('invalidates collection cache after success', async () => {
       mockPayloadData = {
-        'collection:products:{}': [{ id: '1' }],
-        'collection:products:{"page":2}': [{ id: '2' }]
+        'collection:products:test-team:{}': [{ id: '1' }],
+        'collection:products:test-team:{"page":2}': [{ id: '2' }]
       }
 
       const { create } = useCollectionMutation('products')
       await create({ name: 'Product' })
 
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection:products:{}')
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection:products:{"page":2}')
+      // covers: T5
+      const calls = mockRefreshNuxtData.mock.calls.map(c => c[0]).sort()
+      expect(calls).toEqual([
+        'collection:products:test-team:{"page":2}',
+        'collection:products:test-team:{}'
+      ].sort())
     })
 
     it('shows error toast on failure', async () => {
@@ -303,14 +307,19 @@ describe('useCollectionMutation', () => {
 
     it('refreshes referenced collection caches', async () => {
       mockPayloadData = {
-        'collection:posts:{}': [],
-        'collection-item:users:author-1': { id: 'author-1' }
+        'collection:posts:test-team:{}': [],
+        'collection-item:users:test-team:author-1': { id: 'author-1' }
       }
 
       const { create } = useCollectionMutation('posts')
       await create({ title: 'Post', authorId: 'author-1' })
 
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:users:author-1')
+      // covers: T5
+      const calls = mockRefreshNuxtData.mock.calls.map(c => c[0]).sort()
+      expect(calls).toEqual([
+        'collection-item:users:test-team:author-1',
+        'collection:posts:test-team:{}'
+      ].sort())
     })
   })
 
@@ -367,15 +376,34 @@ describe('useCollectionMutation', () => {
 
     it('invalidates both item and collection cache', async () => {
       mockPayloadData = {
-        'collection:products:{}': [{ id: 'prod-1' }],
-        'collection-item:products:prod-1': { id: 'prod-1' }
+        'collection:products:test-team:{}': [{ id: 'prod-1' }],
+        'collection-item:products:test-team:prod-1': { id: 'prod-1' }
       }
 
       const { update } = useCollectionMutation('products')
       await update('prod-1', { name: 'Updated' })
 
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection:products:{}')
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:products:prod-1')
+      // covers: T5
+      const calls = mockRefreshNuxtData.mock.calls.map(c => c[0]).sort()
+      expect(calls).toEqual([
+        'collection-item:products:test-team:prod-1',
+        'collection:products:test-team:{}'
+      ].sort())
+    })
+
+    it('refreshes only the exact id, not an id that merely starts with it (#4489)', async () => {
+      mockPayloadData = {
+        'collection:products:test-team:{}': [],
+        'collection-item:products:test-team:id1': { id: 'id1' },
+        'collection-item:products:test-team:id10': { id: 'id10' }
+      }
+
+      const { update } = useCollectionMutation('products')
+      await update('id1', { name: 'Updated' })
+
+      const refreshCalls = mockRefreshNuxtData.mock.calls.map(c => c[0])
+      expect(refreshCalls).toContain('collection-item:products:test-team:id1')
+      expect(refreshCalls).not.toContain('collection-item:products:test-team:id10')
     })
 
     it('shows error toast on failure', async () => {
@@ -396,14 +424,14 @@ describe('useCollectionMutation', () => {
 
     it('refreshes referenced collection caches on update', async () => {
       mockPayloadData = {
-        'collection:posts:{}': [],
-        'collection-item:categories:cat-1': { id: 'cat-1' }
+        'collection:posts:test-team:{}': [],
+        'collection-item:categories:test-team:cat-1': { id: 'cat-1' }
       }
 
       const { update } = useCollectionMutation('posts')
       await update('post-1', { categoryId: 'cat-1' })
 
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:categories:cat-1')
+      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:categories:test-team:cat-1')
     })
   })
 
@@ -485,17 +513,21 @@ describe('useCollectionMutation', () => {
 
     it('invalidates item caches for deleted ids', async () => {
       mockPayloadData = {
-        'collection:products:{}': [{ id: 'id1' }, { id: 'id2' }],
-        'collection-item:products:id1': { id: 'id1' },
-        'collection-item:products:id2': { id: 'id2' }
+        'collection:products:test-team:{}': [{ id: 'id1' }, { id: 'id2' }],
+        'collection-item:products:test-team:id1': { id: 'id1' },
+        'collection-item:products:test-team:id2': { id: 'id2' }
       }
 
       const { deleteItems } = useCollectionMutation('products')
       await deleteItems(['id1', 'id2'])
 
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection:products:{}')
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:products:id1')
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:products:id2')
+      // covers: T5
+      const calls = mockRefreshNuxtData.mock.calls.map(c => c[0]).sort()
+      expect(calls).toEqual([
+        'collection-item:products:test-team:id1',
+        'collection-item:products:test-team:id2',
+        'collection:products:test-team:{}'
+      ].sort())
     })
 
     it('shows error toast on failure', async () => {
@@ -524,16 +556,17 @@ describe('useCollectionMutation', () => {
 
       const { deleteItems } = useCollectionMutation('products')
 
-      // Partial failures should throw with the first error encountered
+      // covers: T2
+      // Still rejects with the first error, so the delete dialog stays open
       await expect(deleteItems(['id1', 'id2', 'id3'])).rejects.toEqual(error)
 
-      // All three deletes should have been attempted
       expect(mockFetch).toHaveBeenCalledTimes(3)
 
-      // Error toast should be shown for the failure
+      // One toast that says how many rows were deleted and why the rest were not
+      expect(mockToastAdd).toHaveBeenCalledTimes(1)
       expect(mockToastAdd).toHaveBeenCalledWith({
         title: 'Delete failed',
-        description: 'Item id2 is in use',
+        description: '2 of 3 deleted. 1 could not be deleted: Item id2 is in use',
         icon: 'i-lucide-octagon-alert',
         color: 'primary'
       })
@@ -541,29 +574,80 @@ describe('useCollectionMutation', () => {
 
     it('still invalidates caches after partial failure', async () => {
       mockPayloadData = {
-        'collection:products:{}': [{ id: 'id1' }, { id: 'id2' }],
-        'collection-item:products:id1': { id: 'id1' },
-        'collection-item:products:id2': { id: 'id2' }
+        'collection:products:test-team:{}': [{ id: 'id1' }, { id: 'id2' }, { id: 'id3' }],
+        'collection-item:products:test-team:id1': { id: 'id1' },
+        'collection-item:products:test-team:id2': { id: 'id2' },
+        'collection-item:products:test-team:id3': { id: 'id3' }
       }
 
-      // id1 succeeds, id2 fails
+      // id1 succeeds, id2 fails, id3 succeeds
       mockFetch
         .mockResolvedValueOnce({ success: true })
-        .mockRejectedValueOnce({ data: 'Error' })
+        .mockRejectedValueOnce({ data: { message: 'Item id2 is in use' } })
+        .mockResolvedValueOnce({ success: true })
 
       const { deleteItems } = useCollectionMutation('products')
 
-      try {
-        await deleteItems(['id1', 'id2'])
-      } catch {
-        // Expected to throw due to partial failure
+      await expect(deleteItems(['id1', 'id2', 'id3'])).rejects.toBeTruthy()
+
+      // covers: T1
+      const mutationCalls = mockCallHook.mock.calls.filter(c => c[0] === 'crouton:mutation')
+      expect(mutationCalls).toHaveLength(1)
+      expect(mutationCalls[0]![1]).toEqual(expect.objectContaining({
+        operation: 'delete',
+        collection: 'products',
+        itemIds: ['id1', 'id3']
+      }))
+
+      const refreshed = mockRefreshNuxtData.mock.calls.map(c => c[0])
+      expect(refreshed).toEqual(expect.arrayContaining([
+        'collection-item:products:test-team:id1',
+        'collection-item:products:test-team:id3',
+        'collection:products:test-team:{}'
+      ]))
+      expect(refreshed).not.toContain('collection-item:products:test-team:id2')
+    })
+
+    it('does not emit or refresh when every delete fails', async () => {
+      mockPayloadData = {
+        'collection:products:test-team:{}': [{ id: 'id1' }, { id: 'id2' }],
+        'collection-item:products:test-team:id1': { id: 'id1' },
+        'collection-item:products:test-team:id2': { id: 'id2' }
       }
+      const first = { data: { message: 'First refused' } }
+      mockFetch
+        .mockRejectedValueOnce(first)
+        .mockRejectedValueOnce({ data: { message: 'Second refused' } })
 
-      // Both delete attempts should have been made (parallel execution)
-      expect(mockFetch).toHaveBeenCalledTimes(2)
+      const { deleteItems } = useCollectionMutation('products')
 
-      // Note: Cache invalidation behavior on partial failure depends on implementation
-      // The test documents the current behavior
+      // guard
+      await expect(deleteItems(['id1', 'id2'])).rejects.toEqual(first)
+
+      expect(mockCallHook).not.toHaveBeenCalledWith('crouton:mutation', expect.anything())
+      expect(mockRefreshNuxtData).not.toHaveBeenCalled()
+      expect(mockToastAdd).toHaveBeenCalledTimes(1)
+      expect(mockToastAdd).toHaveBeenCalledWith(expect.objectContaining({
+        title: 'Delete failed',
+        description: 'First refused'
+      }))
+    })
+
+    it('treats a 404 as already deleted', async () => {
+      mockFetch
+        .mockRejectedValueOnce({ statusCode: 404 })
+        .mockResolvedValueOnce({ success: true })
+
+      const { deleteItems } = useCollectionMutation('products')
+
+      // guard
+      await expect(deleteItems(['id1', 'id2'])).resolves.toBeUndefined()
+
+      expect(mockCallHook).toHaveBeenCalledWith('crouton:mutation', expect.objectContaining({
+        operation: 'delete',
+        itemIds: ['id1', 'id2']
+      }))
+      expect(mockToastAdd).not.toHaveBeenCalled()
     })
 
     it('works with single item', async () => {
@@ -578,32 +662,36 @@ describe('useCollectionMutation', () => {
   describe('cache invalidation', () => {
     it('finds all cache keys with collection prefix', async () => {
       mockPayloadData = {
-        'collection:products:{}': [],
-        'collection:products:{"page":1}': [],
-        'collection:products:{"status":"active"}': [],
-        'collection:posts:{}': [], // Different collection
+        'collection:products:test-team:{}': [],
+        'collection:products:test-team:{"page":1}': [],
+        'collection:products:test-team:{"status":"active"}': [],
+        'collection:posts:test-team:{}': [], // Different collection
         'other-key': {} // Not a collection key
       }
 
       const { create } = useCollectionMutation('products')
       await create({ name: 'Product' })
 
-      // Should refresh all products collection keys
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection:products:{}')
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection:products:{"page":1}')
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection:products:{"status":"active"}')
+      // covers: T5
+      // Should refresh exactly the current team's products collection keys
+      const calls = mockRefreshNuxtData.mock.calls.map(c => c[0]).sort()
+      expect(calls).toEqual([
+        'collection:products:test-team:{"page":1}',
+        'collection:products:test-team:{"status":"active"}',
+        'collection:products:test-team:{}'
+      ].sort())
 
       // Should NOT refresh posts or other keys
       const refreshCalls = mockRefreshNuxtData.mock.calls.map(c => c[0])
-      expect(refreshCalls).not.toContain('collection:posts:{}')
+      expect(refreshCalls).not.toContain('collection:posts:test-team:{}')
       expect(refreshCalls).not.toContain('other-key')
     })
 
     it('handles array references', async () => {
       mockPayloadData = {
-        'collection:posts:{}': [],
-        'collection-item:users:user-1': {},
-        'collection-item:users:user-2': {}
+        'collection:posts:test-team:{}': [],
+        'collection-item:users:test-team:user-1': {},
+        'collection-item:users:test-team:user-2': {}
       }
 
       // Add a collection with array reference
@@ -614,13 +702,13 @@ describe('useCollectionMutation', () => {
       const { create } = useCollectionMutation('comments')
       await create({ text: 'Hello', mentionedUserIds: ['user-1', 'user-2'] })
 
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:users:user-1')
-      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:users:user-2')
+      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:users:test-team:user-1')
+      expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:users:test-team:user-2')
     })
 
     it('skips refresh when no matching keys', async () => {
       mockPayloadData = {
-        'collection:posts:{}': [] // Only posts, no products
+        'collection:posts:test-team:{}': [] // Only posts, no products
       }
 
       const { create } = useCollectionMutation('products')
@@ -628,7 +716,46 @@ describe('useCollectionMutation', () => {
 
       // Should only call once for collection key refresh attempt (no matching keys)
       // The specific behavior depends on implementation
-      expect(mockRefreshNuxtData).not.toHaveBeenCalledWith('collection:posts:{}')
+      expect(mockRefreshNuxtData).not.toHaveBeenCalledWith('collection:posts:test-team:{}')
+    })
+  })
+
+  // covers: T4
+  describe('refreshes only the current team (#4506)', () => {
+    const twoTeamPayload = () => ({
+      'collection:products:team-a:{}': [],
+      'collection:products:team-a:{"eventId":"e1"}': [],
+      'collection:products:team-b:{}': [],
+      'collection:productsArchive:team-a:{}': [],
+      'collection-item:products:team-a:p1': {},
+      'collection-item:products:team-b:p1': {}
+    })
+
+    beforeEach(() => {
+      mockRoute = { path: '/admin/team-a/products', params: { team: 'team-a' } }
+      mockUseTeam = () => ({ currentTeam: ref({ id: 'team-a' }) })
+      mockPayloadData = twoTeamPayload()
+    })
+
+    it('create refreshes exactly the two team-a list keys, nothing else', async () => {
+      const { create } = useCollectionMutation('products')
+      await create({ name: 'Product' })
+
+      const calls = mockRefreshNuxtData.mock.calls.map(c => c[0]).sort()
+      expect(calls).toEqual([
+        'collection:products:team-a:{"eventId":"e1"}',
+        'collection:products:team-a:{}'
+      ].sort())
+    })
+
+    it('update refreshes the team-a record and never a team-b or other-collection key', async () => {
+      const { update } = useCollectionMutation('products')
+      await update('p1', { name: 'Renamed' })
+
+      const calls = mockRefreshNuxtData.mock.calls.map(c => c[0])
+      expect(calls).toContain('collection-item:products:team-a:p1')
+      expect(calls.filter(k => k.includes('team-b'))).toEqual([])
+      expect(calls.filter(k => k.includes('productsArchive'))).toEqual([])
     })
   })
 
@@ -708,7 +835,7 @@ describe('useCollectionMutation', () => {
 
     it.skip('logs cache invalidation details', async () => {
       mockPayloadData = {
-        'collection:products:{}': []
+        'collection:products:test-team:{}': []
       }
 
       const { create } = useCollectionMutation('products')
