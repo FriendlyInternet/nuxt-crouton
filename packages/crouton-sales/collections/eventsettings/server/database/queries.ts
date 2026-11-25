@@ -130,16 +130,16 @@ export async function updateSalesEventsetting(
   teamId: string,
   userId: string,
   updates: Partial<SalesEventsetting>,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(tables.salesEventsettings.id, recordId),
     eq(tables.salesEventsettings.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(tables.salesEventsettings.owner, userId))
   }
 
@@ -166,16 +166,16 @@ export async function deleteSalesEventsetting(
   recordId: string,
   teamId: string,
   userId: string,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(tables.salesEventsettings.id, recordId),
     eq(tables.salesEventsettings.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(tables.salesEventsettings.owner, userId))
   }
 

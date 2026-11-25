@@ -7,6 +7,10 @@
  *
  * @route /admin/[team]/team/invitations
  */
+definePageMeta({
+  middleware: ['auth', 'can'],
+  can: 'team:manage'
+})
 </script>
 
 <template>

@@ -16,6 +16,11 @@ vi.mock('@fyit/crouton-auth/server/utils/team', () => ({
   resolveTeamAndCheckMembership: async () => member,
   requireTeamAdmin: async () => member,
 }))
+// Routes check actions via requireCan / can (#4108); admin may every action
+vi.mock('@fyit/crouton-auth/server/utils/team-auth', async () => {
+  const { teamAuthStub } = await import('./stubs/team-auth')
+  return teamAuthStub(() => member).module
+})
 // Reference checks (#3378) are covered in team-references.test.ts; the DB here has no auth/team tables
 vi.mock('../collections/bookings/server/database/queries', () => ({ assertBookingsBookingReferences: async () => undefined }))
 vi.mock('nitropack/runtime', () => ({ useNitroApp: () => ({ hooks: { callHook: () => Promise.resolve() } }) }))

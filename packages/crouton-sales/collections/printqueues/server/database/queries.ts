@@ -148,16 +148,16 @@ export async function updateSalesPrintqueue(
   teamId: string,
   userId: string,
   updates: Partial<SalesPrintqueue>,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(tables.salesPrintqueues.id, recordId),
     eq(tables.salesPrintqueues.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(tables.salesPrintqueues.owner, userId))
   }
 
@@ -184,16 +184,16 @@ export async function deleteSalesPrintqueue(
   recordId: string,
   teamId: string,
   userId: string,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(tables.salesPrintqueues.id, recordId),
     eq(tables.salesPrintqueues.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(tables.salesPrintqueues.owner, userId))
   }
 

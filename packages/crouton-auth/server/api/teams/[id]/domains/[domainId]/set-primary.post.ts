@@ -3,38 +3,17 @@
  *
  * Set a domain as the primary domain for a team/organization.
  * Only verified domains can be set as primary.
- * Requires team owner role.
+ * Requires the `team:domains` action (owner/admin by default).
  */
-import { requireTeamOwner } from '../../../../../utils/team'
-import { useDB, tables, eq, and } from '../../../../../utils/database'
+import { requireCan } from '../../../../../utils/permissions'
+import { tables, eq } from '../../../../../utils/database'
+import { requireTeamDomain } from '../../../../../utils/team-domain'
 
 export default defineEventHandler(async (event) => {
-  const domainId = getRouterParam(event, 'domainId')
-  if (!domainId) {
-    throw createError({
-      status: 400,
-      statusText: 'Domain ID is required'
-    })
-  }
+  // The domain must belong to the team (404 otherwise)…
+  const { db, team, domain, domainId } = await requireTeamDomain(event, () => requireCan(event, 'team:domains'))
 
-  const { team } = await requireTeamOwner(event)
-
-  const db = useDB()
-
-  // Get the domain to verify it belongs to the team and is verified
-  const domain = await db
-    .select()
-    .from(tables.domain)
-    .where(and(eq(tables.domain.id, domainId), eq(tables.domain.organizationId, team.id)))
-    .get()
-
-  if (!domain) {
-    throw createError({
-      status: 404,
-      statusText: 'Domain not found'
-    })
-  }
-
+  // …and be verified
   if (domain.status !== 'verified') {
     throw createError({
       status: 400,

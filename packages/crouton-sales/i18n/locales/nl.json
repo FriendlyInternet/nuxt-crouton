@@ -1,4 +1,7 @@
 {
+  "permissions": {
+    "salesManage": "Kassa beheren"
+  },
   "sales": {
     "title": "Kassa",
     "pageTypes": {},

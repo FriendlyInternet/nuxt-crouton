@@ -4,6 +4,7 @@
 import { z } from 'zod'
 import { assertBookingsBookingReferences } from '../../../../database/queries'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { can } from '@fyit/crouton-auth/server/utils/team-auth'
 import { patchBookingGuarded } from '../../../../../../../server/utils/booking-capacity'
 
 // Hand-added body validation (#3377)
@@ -22,10 +23,10 @@ export default defineEventHandler(async (event) => {
   if (!bookingId) {
     throw createError({ status: 400, statusText: 'Missing booking ID' })
   }
-  const { team, user, membership } = await resolveTeamAndCheckMembership(event)
+  const { team, user } = await resolveTeamAndCheckMembership(event)
 
   const body = await readValidatedBody(event, bodySchema.parse)
-  const isAdmin = membership.role === 'admin' || membership.role === 'owner'
+  const isAdmin = await can(team.id, user.id, 'bookings:manage', event)
   const tz: string = (useRuntimeConfig(event) as any)?.croutonBookings?.timezone || 'Europe/Brussels'
 
   await assertBookingsBookingReferences(team.id, body)

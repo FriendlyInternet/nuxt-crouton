@@ -1,4 +1,8 @@
 {
+  "permissions": {
+    "teamManage": "Team beheren: instellingen, leden en uitnodigingen",
+    "teamDomains": "Eigen domeinen beheren"
+  },
   "onboarding": {
     "signOut": "Uitloggen",
     "noTeamTitle": "Je zit nog niet in een team",

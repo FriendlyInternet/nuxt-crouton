@@ -4,7 +4,7 @@
  * This schema defines all tables required by Better Auth and its plugins:
  * - Core: user, session, account, verification
  * - Rate limit: rateLimit
- * - Organization Plugin: organization, member, invitation
+ * - Organization Plugin: organization, member, invitation, organizationRole
  * - Passkey Plugin: passkey
  * - Two-Factor Plugin: twoFactor
  * - JWT + MCP OAuth provider (#4096): jwks, oauthClient, oauthResource,
@@ -191,6 +191,30 @@ export const invitation = sqliteTable('invitation', {
   index('invitation_email_idx').on(table.email),
   index('invitation_org_idx').on(table.organizationId),
   index('invitation_status_idx').on(table.status)
+])
+
+/**
+ * Organization role table - a team's own roles (#4106)
+ *
+ * Better Auth dynamic access control (`dynamicAccessControl.enabled`). One row
+ * per team role: its name and its permission map (JSON `{ resource: [verb] }`),
+ * read by hasPermission for members holding that role. Columns follow
+ * better-auth@1.7.7 `plugins/organization/organization.mjs` (organizationRole).
+ */
+export const organizationRole = sqliteTable('organizationRole', {
+  id: text('id').primaryKey(),
+  organizationId: text('organizationId').notNull().references(() => organization.id, { onDelete: 'cascade' }),
+  role: text('role').notNull(),
+  permission: text('permission').notNull(), // JSON: { resource: [verb] }
+  createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$default(() => new Date()),
+  updatedAt: integer('updatedAt', { mode: 'timestamp' }),
+  // Admin row only (#4283): JSON array of the crouton actions the team's owner
+  // removed, so a later-declared action still reaches the row. NULL = not
+  // recorded yet. Crouton-only — not a Better Auth additionalField.
+  removedActions: text('removedActions')
+}, table => [
+  index('organizationRole_organizationId_idx').on(table.organizationId),
+  index('organizationRole_role_idx').on(table.role)
 ])
 
 // ============================================================================

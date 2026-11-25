@@ -1,8 +1,8 @@
 // Team-based endpoint - requires @fyit/crouton-auth package
-// The requireTeamAdmin utility handles team resolution and auth
+// The requireCan utility handles team resolution and auth
 import { z } from 'zod'
 import { assertBookingsLocationReferences, createBookingsLocation } from '../../../../database/queries'
-import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
+import { requireCan } from '@fyit/crouton-auth/server/utils/team-auth'
 import { ensureLocationProducts } from '../../../../../../../server/utils/location-products'
 
 // A location lists each team product once, with a whole-number stock of at least 1 (#3967)
@@ -41,7 +41,7 @@ const bodySchema = z.object({
 }).strip()
 
 export default defineEventHandler(async (event) => {
-  const { team, user } = await requireTeamAdmin(event)
+  const { team, user } = await requireCan(event, 'bookings:manage')
 
   const body = await readValidatedBody(event, bodySchema.parse)
   await assertBookingsLocationReferences(team.id, body)

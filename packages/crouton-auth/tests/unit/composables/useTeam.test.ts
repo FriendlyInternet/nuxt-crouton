@@ -331,8 +331,7 @@ describe('useTeam', () => {
       expect(canCreateTeam.value).toBe(false)
     })
 
-    // TODO: Better Auth nanostore mock complexity
-    it.todo('should allow invite for owner/admin', () => {
+    it('should allow invite for owner/admin', () => {
       mockSessionUser.value = { id: 'user-1', email: 'test@example.com' }
       mockActiveOrgData.value = {
         id: 'org-1',
@@ -360,6 +359,96 @@ describe('useTeam', () => {
       const { canInviteMembers, isOwner } = useTeam()
       expect(canInviteMembers.value).toBe(false)
       expect(isOwner.value).toBe(false)
+    })
+  })
+
+  // T3 (#4105): the legacy flags follow the cached `team:manage` answer that
+  // useCan writes into `crouton-can-answers`, falling back to the role default.
+  // useCan / useAsyncData / useTeamContext throw here, proving useTeam() never
+  // calls them (useCan → useTeamContext → useTeam would loop).
+  describe('team:manage answer (#4105)', () => {
+    const forbidden = (name: string) => () => {
+      throw new Error(`useTeam must not call ${name}`)
+    }
+
+    beforeEach(() => {
+      vi.stubGlobal('useCan', forbidden('useCan'))
+      vi.stubGlobal('useAsyncData', forbidden('useAsyncData'))
+      vi.stubGlobal('useTeamContext', forbidden('useTeamContext'))
+      mockSessionUser.value = { id: 'user-1', email: 'test@example.com' }
+    })
+
+    afterEach(() => {
+      vi.unstubAllGlobals()
+      // restore the file-level stubs unstubAllGlobals removed
+      vi.stubGlobal('useNuxtApp', () => ({ $authClient: mockAuthClient }))
+      vi.stubGlobal('useSession', () => ({
+        user: mockSessionUser,
+        activeOrganization: mockSessionActiveOrg,
+        activeOrgRaw: mockActiveOrgData
+      }))
+      vi.stubGlobal('ref', ref)
+      vi.stubGlobal('computed', computed)
+      vi.stubGlobal('readonly', readonly)
+      vi.stubGlobal('useState', (key: string, init?: () => unknown) => {
+        if (!mockUseStateValues[key]) mockUseStateValues[key] = ref(init ? init() : null)
+        return mockUseStateValues[key]
+      })
+      vi.stubGlobal('useAuthConfig', () => ({
+        mode: 'multi-tenant' as const,
+        teams: { allowCreate: mockAllowCreate, limit: 5 }
+      }))
+      vi.stubGlobal('useAuthClient', () => mockAuthClient)
+    })
+
+    const asRole = (role: string) => {
+      mockActiveOrgData.value = {
+        id: 'org-1',
+        name: 'Test',
+        slug: 'test',
+        createdAt: '2024-01-01T00:00:00Z',
+        members: [{ userId: 'user-1', role }]
+      }
+    }
+    const seed = (value: Record<string, Record<string, boolean>>) => {
+      mockUseStateValues['crouton-can-answers'] = ref(value)
+    }
+
+    it('a member granted team:manage can invite and manage', () => {
+      asRole('member')
+      seed({ 'org-1': { 'team:manage': true } })
+      const { canInviteMembers, canManageMembers, isAdmin } = useTeam()
+      expect(canInviteMembers.value).toBe(true)
+      expect(canManageMembers.value).toBe(true)
+      expect(isAdmin.value).toBe(true)
+    })
+
+    it('an admin refused team:manage cannot invite or manage', () => {
+      asRole('admin')
+      seed({ 'org-1': { 'team:manage': false } })
+      const { canInviteMembers, canManageMembers, isAdmin } = useTeam()
+      expect(canInviteMembers.value).toBe(false)
+      expect(canManageMembers.value).toBe(false)
+      expect(isAdmin.value).toBe(false)
+    })
+
+    it('an answer for another team is ignored', () => {
+      asRole('member')
+      seed({ 'org-2': { 'team:manage': true } })
+      const { canInviteMembers } = useTeam()
+      expect(canInviteMembers.value).toBe(false)
+    })
+
+    it.each([
+      ['owner', true],
+      ['admin', true],
+      ['member', false]
+    ])('nothing cached → role default: %s → %s', (role, expected) => {
+      asRole(role)
+      const { canInviteMembers, canManageMembers, isAdmin } = useTeam()
+      expect(canInviteMembers.value).toBe(expected)
+      expect(canManageMembers.value).toBe(expected)
+      expect(isAdmin.value).toBe(expected)
     })
   })
 
@@ -491,8 +580,7 @@ describe('useTeam', () => {
   })
 
   describe('deleteTeam', () => {
-    // TODO: Better Auth nanostore mock complexity
-    it.todo('should call organization.delete for owner', async () => {
+    it('should call organization.delete for owner', async () => {
       mockSessionUser.value = { id: 'user-1', email: 'test@example.com' }
       mockActiveOrgData.value = {
         id: 'org-1',
@@ -511,8 +599,7 @@ describe('useTeam', () => {
       })
     })
 
-    // TODO: Better Auth nanostore mock complexity
-    it.todo('should throw when not owner', async () => {
+    it('should throw when not owner', async () => {
       mockSessionUser.value = { id: 'user-1', email: 'test@example.com' }
       mockActiveOrgData.value = {
         id: 'org-1',
@@ -567,8 +654,7 @@ describe('useTeam', () => {
     })
 
     describe('inviteMember', () => {
-      // TODO: Better Auth nanostore mock complexity
-      it.todo('should call organization.inviteMember', async () => {
+      it('should call organization.inviteMember', async () => {
         mockSessionUser.value = { id: 'user-1', email: 'owner@example.com' }
         mockActiveOrgData.value = {
           id: 'org-1',
@@ -589,8 +675,7 @@ describe('useTeam', () => {
         })
       })
 
-      // TODO: Better Auth nanostore mock complexity
-      it.todo('should throw when not authorized', async () => {
+      it('should throw when not authorized', async () => {
         mockSessionUser.value = { id: 'user-1', email: 'member@example.com' }
         mockActiveOrgData.value = {
           id: 'org-1',
@@ -606,11 +691,36 @@ describe('useTeam', () => {
           .rejects.toThrow('permission')
         expect(error.value).toContain('permission')
       })
+
+      // The Better Auth error shapes the catch turns into a readable message
+      it.each([
+        ['an Error', new Error('boom'), 'boom'],
+        ['an Error with no message', new Error(''), 'Failed to invite member'],
+        ['a { message } object', { code: 'X', message: 'direct' }, 'direct'],
+        ['a nested { error: { message } }', { error: { message: 'nested' } }, 'nested'],
+        ['a { body: { message } } fetch error', { body: { message: 'from body' } }, 'from body'],
+        ['an object with no message', { error: {}, body: {} }, 'Failed to invite member'],
+        ['a non-object', 'nope', 'Failed to invite member']
+      ])('reports %s as a readable message', async (_label, thrown, expected) => {
+        mockSessionUser.value = { id: 'user-1', email: 'owner@example.com' }
+        mockActiveOrgData.value = {
+          id: 'org-1',
+          name: 'Test',
+          slug: 'test',
+          createdAt: '2024-01-01T00:00:00Z',
+          members: [{ userId: 'user-1', role: 'owner' }]
+        }
+        mockAuthClient.organization.inviteMember.mockRejectedValueOnce(thrown)
+
+        const { inviteMember, error } = useTeam()
+
+        await expect(inviteMember({ email: 'new@example.com' })).rejects.toThrow(expected)
+        expect(error.value).toBe(expected)
+      })
     })
 
     describe('removeMember', () => {
-      // TODO: Better Auth nanostore mock complexity
-      it.todo('should call organization.removeMember', async () => {
+      it('should call organization.removeMember', async () => {
         mockSessionUser.value = { id: 'user-1', email: 'owner@example.com' }
         mockActiveOrgData.value = {
           id: 'org-1',
@@ -633,8 +743,7 @@ describe('useTeam', () => {
     })
 
     describe('updateMemberRole', () => {
-      // TODO: Better Auth nanostore mock complexity
-      it.todo('should call organization.updateMemberRole', async () => {
+      it('should call organization.updateMemberRole', async () => {
         mockSessionUser.value = { id: 'user-1', email: 'owner@example.com' }
         mockActiveOrgData.value = {
           id: 'org-1',
@@ -658,8 +767,7 @@ describe('useTeam', () => {
     })
 
     describe('leaveTeam', () => {
-      // TODO: Better Auth nanostore mock complexity
-      it.todo('should allow member to leave', async () => {
+      it('should allow member to leave', async () => {
         mockSessionUser.value = { id: 'user-2', email: 'member@example.com' }
         mockActiveOrgData.value = {
           id: 'org-1',
@@ -682,8 +790,7 @@ describe('useTeam', () => {
         })
       })
 
-      // TODO: Better Auth nanostore mock complexity
-      it.todo('should prevent owner from leaving', async () => {
+      it('should prevent owner from leaving', async () => {
         mockSessionUser.value = { id: 'user-1', email: 'owner@example.com' }
         mockActiveOrgData.value = {
           id: 'org-1',
@@ -703,8 +810,8 @@ describe('useTeam', () => {
 
   describe('invitation methods', () => {
     describe('getPendingInvitations', () => {
-      // TODO: Better Auth nanostore mock complexity
-      it.todo('should return invitations list', async () => {
+      // Better Auth 1.4.x returns the invitations array directly (see useTeam.ts)
+      it('should return invitations list', async () => {
         mockActiveOrgData.value = {
           id: 'org-1',
           name: 'Test',
@@ -712,11 +819,9 @@ describe('useTeam', () => {
           createdAt: '2024-01-01T00:00:00Z'
         }
         mockAuthClient.organization.listInvitations.mockResolvedValue({
-          data: {
-            invitations: [
-              { id: 'inv-1', email: 'pending@example.com', role: 'member' }
-            ]
-          },
+          data: [
+            { id: 'inv-1', email: 'pending@example.com', role: 'member' }
+          ],
           error: null
         })
 

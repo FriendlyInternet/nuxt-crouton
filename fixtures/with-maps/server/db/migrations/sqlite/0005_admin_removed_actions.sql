@@ -1,0 +1,1 @@
+ALTER TABLE `organizationRole` ADD `removedActions` text;

@@ -23,6 +23,7 @@ import type { Team, MemberRole, Member, MemberWithUser } from '../../types'
 import { useAuthClient, requireAuthClient } from '../../types/auth-client'
 import { mapOrganizationToTeam, isSuperAdminUser } from '../../shared/utils/auth'
 import { AuthError, AUTH_ERROR_CODES } from '../utils/errors'
+import { useCanAnswers } from './useCanAnswers'
 
 export interface CreateTeamData {
   name: string
@@ -230,21 +231,26 @@ export function useTeam() {
     return teams.value.length < limit
   })
 
-  const canInviteMembers = computed(() => {
+  // `team:manage` (#4105): the real answer once any `useCan('team:manage')` on
+  // the page has fetched it, else today's role default (the same answer when
+  // there is no site config). Reads the shared answer state only — calling
+  // `useCan` here would loop (useCan → useTeamContext → useTeam) and create
+  // `useAsyncData` inside plugin getters / computeds.
+  const canAnswers = useCanAnswers()
+  const canManageTeam = computed(() => {
+    const id = currentTeam.value?.id
+    const known = id ? canAnswers.value[id]?.['team:manage'] : undefined
+    if (typeof known === 'boolean') return known
     const role = currentRole.value
     return role === 'owner' || role === 'admin'
   })
 
-  const canManageMembers = computed(() => {
-    const role = currentRole.value
-    return role === 'owner' || role === 'admin'
-  })
+  const canInviteMembers = canManageTeam
+  const canManageMembers = canManageTeam
 
   const isOwner = computed(() => currentRole.value === 'owner')
-  const isAdmin = computed(() => {
-    const role = currentRole.value
-    return role === 'owner' || role === 'admin'
-  })
+  /** @deprecated use useCan('team:manage') or the screen's own action (#4105) */
+  const isAdmin = canManageTeam
 
   // ============================================================================
   // Team Methods

@@ -15,6 +15,41 @@ const OWNER: BlockAudienceContext = { authenticated: true, role: 'owner' }
 /** crouton-auth absent, or session not yet resolved. */
 const UNKNOWN: BlockAudienceContext = { authenticated: null, role: null }
 
+// T5 (#4105): the `admin` audience follows the `admin:access` answer when known.
+describe('matchesAudience — admin audience follows canAdmin (#4105)', () => {
+  const vis: BlockVisibility = { roles: ['admin'] }
+
+  it('shows an admin block to a member granted admin:access', () => {
+    expect(matchesAudience(vis, { authenticated: true, role: 'member', canAdmin: true })).toBe(true)
+  })
+
+  it('hides an admin block from an admin refused admin:access', () => {
+    expect(matchesAudience(vis, { authenticated: true, role: 'admin', canAdmin: false })).toBe(false)
+  })
+
+  it('falls back to the role list when canAdmin is unset or null', () => {
+    expect(matchesAudience(vis, MEMBER)).toBe(false)
+    expect(matchesAudience(vis, ADMIN)).toBe(true)
+    expect(matchesAudience(vis, OWNER)).toBe(true)
+    expect(matchesAudience(vis, { authenticated: true, role: 'member', canAdmin: null })).toBe(false)
+    expect(matchesAudience(vis, { authenticated: true, role: 'admin', canAdmin: null })).toBe(true)
+  })
+
+  it('signed in with no team role still shows (unknown → show), whatever canAdmin says', () => {
+    expect(matchesAudience(vis, { authenticated: true, role: null, canAdmin: false })).toBe(true)
+  })
+
+  it('anonymous readers are still refused', () => {
+    expect(matchesAudience(vis, { authenticated: false, role: null, canAdmin: true })).toBe(false)
+  })
+
+  it('owner and member audiences stay role-based', () => {
+    expect(matchesAudience({ roles: ['owner'] }, { authenticated: true, role: 'member', canAdmin: true })).toBe(false)
+    expect(matchesAudience({ roles: ['owner'] }, { authenticated: true, role: 'owner', canAdmin: false })).toBe(true)
+    expect(matchesAudience({ roles: ['member'] }, { authenticated: true, role: 'member', canAdmin: false })).toBe(true)
+  })
+})
+
 describe('matchesAudience — the untouched default', () => {
   it('shows a block with no visibility at all', () => {
     for (const ctx of [ANON, MEMBER, ADMIN, OWNER, UNKNOWN]) {

@@ -25,7 +25,9 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useT()
-const { isAdmin, currentTeam } = useTeam()
+// Editing the team theme is the `site:manage` action (#4105)
+const isAdmin = useCan('site:manage')
+const { currentTeam } = useTeam()
 const notify = useNotify()
 const { theme, isLoading, updateTheme, applyTheme } = useTeamTheme()
 

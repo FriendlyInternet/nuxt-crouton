@@ -18,7 +18,8 @@ export interface UserMenuItemsOptions {
 export function useUserMenuItems(options?: UserMenuItemsOptions) {
   const { t } = useT()
   const { user, logout, loading } = useAuth()
-  const { isAdmin } = useTeam()
+  // Switching the site theme is `site:manage` (#4105); browser-only (cached public pages)
+  const canManageSite = useCan('site:manage', { server: false })
   const router = useRouter()
   const notify = useNotify()
   const { locale, setLocale, locales } = useI18n()
@@ -42,7 +43,7 @@ export function useUserMenuItems(options?: UserMenuItemsOptions) {
   const themePreferenceItems = useState<DropdownMenuItem[]>('crouton:themePreferenceItems', () => [])
   // Set by team-theme plugin (crouton-admin); defaults true when not present
   const allowUserThemes = useState<boolean>('crouton:allowUserThemes', () => true)
-  const canSwitchTheme = computed(() => allowUserThemes.value || isAdmin.value)
+  const canSwitchTheme = computed(() => allowUserThemes.value || canManageSite.value)
 
   const userInitials = computed(() => {
     if (!user.value?.name) return '?'

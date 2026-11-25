@@ -51,6 +51,10 @@
         "expectStatus": [404]
       },
       {
+        "path": "/api/teams/{teamId}/pages/smoke-none/access-code",
+        "expectStatus": [404]
+      },
+      {
         "path": "/api/crouton-sales/teams/{teamId}/sync-status"
       },
       {
@@ -75,8 +79,36 @@
         "path": "/admin/test1/sales/devices"
       },
       {
+        "path": "/api/teams/{teamId}/domains"
+      },
+      {
+        "path": "/api/teams/{teamId}/email-logs"
+      },
+      {
+        "path": "/api/teams/{teamId}/email-logs/stats"
+      },
+      {
+        "path": "/api/teams/{teamId}/settings/email"
+      },
+      {
+        "path": "/api/teams/{teamId}/pages"
+      },
+      {
+        "path": "/api/teams/{teamId}/pages/_home",
+        "expectStatus": [200, 404]
+      },
+      {
         "path": "/api/webhooks/resend",
         "expectStatus": 405
+      },
+      {
+        "path": "/api/auth/organization/list-roles?organizationId={teamId}",
+        "expectStatus": 200
+      },
+      {
+        "path": "/api/teams/{teamId}/can?actions=team:manage",
+        "expectStatus": 200,
+        "expectIncludes": "\"team:manage\":true"
       }
     ]
   }

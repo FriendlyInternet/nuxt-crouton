@@ -127,16 +127,16 @@ export async function updateMainCategory(
   teamId: string,
   userId: string,
   updates: Partial<MainCategory>,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(tables.mainCategories.id, recordId),
     eq(tables.mainCategories.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(tables.mainCategories.owner, userId))
   }
 
@@ -163,16 +163,16 @@ export async function deleteMainCategory(
   recordId: string,
   teamId: string,
   userId: string,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(tables.mainCategories.id, recordId),
     eq(tables.mainCategories.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(tables.mainCategories.owner, userId))
   }
 
