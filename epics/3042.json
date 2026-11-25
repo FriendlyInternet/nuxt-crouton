@@ -1,0 +1,51 @@
+{
+  "epic": 3042,
+  "runs": 15,
+  "epicRuns": 7,
+  "silent": [
+    {
+      "ref": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/45568354860",
+      "workflow": "ticket-revise.yml",
+      "stage": "ticket-revise",
+      "child": null
+    },
+    {
+      "ref": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/45692933199",
+      "workflow": "ticket-revise.yml",
+      "stage": "ticket-revise",
+      "child": null
+    },
+    {
+      "ref": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/45698595218",
+      "workflow": "build-review.yml",
+      "stage": "build-review",
+      "child": 3045
+    }
+  ],
+  "perChild": [
+    {
+      "issue": 3045,
+      "runs": 8,
+      "planRounds": 3,
+      "buildRounds": 1,
+      "revises": 0,
+      "silent": 1
+    }
+  ],
+  "timeToMainHours": 659.9,
+  "ownerTouches": {
+    "typed": 1,
+    "viaAgent": 5,
+    "links": [
+      "https://github.com/FriendlyInternet/nuxt-crouton/issues/3042#issuecomment-7024679606",
+      "https://github.com/FriendlyInternet/nuxt-crouton/issues/3042#issuecomment-7024702102",
+      "https://github.com/FriendlyInternet/nuxt-crouton/issues/3042#issuecomment-7024705027",
+      "https://github.com/FriendlyInternet/nuxt-crouton/issues/3045#issuecomment-6493670523",
+      "https://github.com/FriendlyInternet/nuxt-crouton/issues/3045#issuecomment-6660922398",
+      "https://github.com/FriendlyInternet/nuxt-crouton/issues/3045#issuecomment-7024703929"
+    ]
+  },
+  "stepLine": "1 merged, 0 not planned",
+  "run": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/45706908620",
+  "stored_at": "2026-11-25T21:46:35.874Z"
+}
