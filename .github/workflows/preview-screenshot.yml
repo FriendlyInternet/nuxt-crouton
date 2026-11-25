@@ -106,10 +106,12 @@ jobs:
           DETAILS="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           ID=""
           if [ -n "$EXISTING" ]; then
+            # A failed re-open is tolerated: the notice below says so and the POST fallback opens a fresh check.
             ID=$(gh api -X PATCH "repos/${GITHUB_REPOSITORY}/check-runs/${EXISTING}" -f status=in_progress -f details_url="$DETAILS" --jq .id 2>/dev/null || true)
             [ -n "$ID" ] || echo "::notice::could not re-open check run ${EXISTING} — opening a new one"
           fi
           if [ -z "$ID" ]; then
+            # A failed POST is tolerated: the screenshot still runs; the ::warning:: below names the missing checks:write.
             ID=$(gh api -X POST "repos/${GITHUB_REPOSITORY}/check-runs" -f name='Preview screenshot' -f head_sha="$HEAD_SHA" \
               -f status=in_progress -f details_url="$DETAILS" --jq .id 2>/dev/null || true)
           fi
@@ -157,8 +159,14 @@ jobs:
           FAILED: ${{ steps.target.outputs.failed }}
         run: |
           # Changed files drive which page is shot when the PR declares no review-surface (#2698).
-          CHANGED_FILES=$(gh pr diff "$PR" --repo "$GITHUB_REPOSITORY" --name-only 2>/dev/null || true); export CHANGED_FILES
-          PR_BODY=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json body --jq .body 2>/dev/null || true); export PR_BODY
+          # A failed lookup must not kill the run, but it changes which apps are shot (an empty diff or
+          # body looks like "no own-folder app" / "no declared page"), so each failure raises a warning.
+          CHANGED_FILES=$(gh pr diff "$PR" --repo "$GITHUB_REPOSITORY" --name-only 2>/dev/null) \
+            || { echo "::warning::could not read the changed files of PR #${PR} — app selection falls back to the no-diff case"; CHANGED_FILES=""; }
+          export CHANGED_FILES
+          PR_BODY=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json body --jq .body 2>/dev/null) \
+            || { echo "::warning::could not read the body of PR #${PR} — any review-surface marker it declares is ignored this run"; PR_BODY=""; }
+          export PR_BODY
           node scripts/lib/screenshot-targets.mjs select "$RUNNER_TEMP/records" --out "$RUNNER_TEMP/selected.txt" | tee -a "$GITHUB_OUTPUT"
           # Hand both to the capture step so neither is fetched twice.
           D="EOF_$(openssl rand -hex 8)"
