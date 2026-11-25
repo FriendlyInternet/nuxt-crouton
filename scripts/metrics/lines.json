@@ -41,6 +41,7 @@
       "on-pr-close.yml",
       "owner-quiz.yml",
       "postmortem.yml",
+      "release-waiting.yml",
       "status.yml"
     ],
     "deploys": [

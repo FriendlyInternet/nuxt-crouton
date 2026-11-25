@@ -1,0 +1,61 @@
+name: Release waiting tickets
+
+# The ONE place `releaseWaiting` (scripts/traffic-control.mjs) runs (#3086). Before this, four
+# jobs walked the parked list on their own, with no concurrency group, so one merge started two
+# overlapping walks. Every caller now uses this workflow, and the static repo-wide concurrency
+# group means walks never overlap. If a third event arrives while one walk runs and one waits,
+# GitHub drops the waiting walk and keeps the newest — fine, the newest walk reads the newest state.
+#
+# Callers: on-pr-close.yml (`release-traffic`), on-issue-close.yml (`release-traffic`),
+# build-review.yml and work-issue-pidev.yml (`release-traffic`, `soft: true`, #3583).
+# scripts/release-waiting-wiring.test.mjs fails CI if any other workflow calls releaseWaiting.
+
+on:
+  workflow_call:
+    inputs:
+      soft:
+        description: 'Warn instead of failing when the walk errors (callers that must stay green).'
+        type: boolean
+        required: false
+        default: false
+
+jobs:
+  walk:
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    concurrency:
+      group: release-waiting
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      # App token (not GITHUB_TOKEN): the released label must cascade into work-issue-pidev.yml.
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      # Always the default branch's scripts: the walk runs trusted code whatever the caller's ref.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: |
+            scripts
+            .claude
+          persist-credentials: false
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          SOFT: ${{ inputs.soft }}
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            try {
+              const { releaseWaiting } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/traffic-control.mjs`)
+              const released = await releaseWaiting({ github, context })
+              core.info(released.length ? `traffic released: ${released.map((n) => '#' + n).join(', ')}` : 'traffic: nothing to release')
+            } catch (e) {
+              if (process.env.SOFT !== 'true') throw e
+              core.warning(`traffic release failed: ${e.message}`)
+            }

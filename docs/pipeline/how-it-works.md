@@ -171,6 +171,7 @@ The table below is generated from the workflow files and the grouping in
 | [on-pr-close.yml](../../.github/workflows/on-pr-close.yml) | On PR close | `pull_request` |
 | [owner-quiz.yml](../../.github/workflows/owner-quiz.yml) | Owner quiz | `workflow_call`, `workflow_dispatch` |
 | [postmortem.yml](../../.github/workflows/postmortem.yml) | Epic postmortem | `workflow_call`, `workflow_dispatch` |
+| [release-waiting.yml](../../.github/workflows/release-waiting.yml) | Release waiting tickets | `workflow_call` |
 | [status.yml](../../.github/workflows/status.yml) | Status | `workflow_run`, `check_suite`, `status`, `pull_request`, `issues` |
 
 #### deploys
