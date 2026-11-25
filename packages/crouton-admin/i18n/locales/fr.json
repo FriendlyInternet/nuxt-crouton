@@ -290,6 +290,7 @@
   },
   "themeSettings": {
     "title": "Paramètres du thème",
+    "loadFailed": "Impossible de charger les paramètres du thème",
     "description": "Personnalisez l'apparence de votre équipe.",
     "allowUserThemes": "Permettre aux utilisateurs de choisir leur propre thème",
     "allowUserThemesDescription": "Lorsque désactivé, seuls les administrateurs peuvent modifier le thème.",

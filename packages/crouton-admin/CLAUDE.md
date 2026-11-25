@@ -43,6 +43,7 @@ Requires `@crouton/auth` as a peer dependency (uses its user/session/team tables
 | `app/composables/useAdminStats.ts` | Dashboard statistics composable |
 | `app/composables/useImpersonation.ts` | Impersonation composable |
 | `app/composables/useTeamAdminPages.ts` | Team pages for the side menu + team tabs, filtered by `can()` |
+| `app/composables/useTeamTheme.ts` | Team theme (Uiterlijk / Look & Feel): load, update, reset, apply; loads itself once the team is known if the team-theme plugin couldn't (#4551); tested in `test/useTeamTheme.test.ts` |
 | `app/utils/team-pages.ts` | The one ordered team-page list (label, icon, path, action) |
 
 ## Composables
@@ -53,6 +54,7 @@ Requires `@crouton/auth` as a peer dependency (uses its user/session/team tables
 | `useAdminTeams()` | Team listing and member viewing |
 | `useAdminStats()` | Dashboard statistics |
 | `useImpersonation()` | Start/stop user impersonation |
+| `useTeamTheme()` | Team theme state (`theme`, `isLoading`, `error`, `updateTheme`, `resetTheme`, `refresh`). Loads once per app when a team is known and nothing has loaded yet — never twice, never on the server. `error` holds the last failed load's message (#4551) |
 | `useAdmin()` | Barrel export for all admin composables |
 
 ## Components
@@ -251,6 +253,10 @@ await db.update(user)
    - Super admin: `/super-admin/*`
 
 3. Customize by creating your own pages that override the defaults
+
+### Show the team theme on a new page
+
+Call `useTeamTheme()` — it loads the theme itself once the team is known (also on the first visit after a fresh sign-in, when the boot-time plugin had no team yet). Show `isLoading` while loading and `error` with a retry (`refresh()`) when the load fails; see `TeamThemeSettings.vue`.
 
 ### Customize impersonation banner
 
