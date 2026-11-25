@@ -16,7 +16,7 @@ export interface AppRow {
   app: string
   stagingUrl: string | null
   hasSignIn: boolean
-  previews: Array<{ pr: number, title: string, updatedAt: string, url: string }>
+  previews: Array<{ pr: number, title: string, updatedAt: string, url: string, asksOwner: boolean }>
 }
 export type AppCardRow = AppRow & { toTest: ToTestItem[] }
 export interface ToTestGroup { app: string, list: ToTestItem[], stagingUrl: string | null }
