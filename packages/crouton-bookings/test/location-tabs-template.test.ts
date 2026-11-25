@@ -109,6 +109,19 @@ describe('CroutonBookingsLocationTabs (#4471)', () => {
     expect(hasProp(row[0]!.node, 'can-add')).toBe(false)
   })
 
+  // covers: T3 — #4516 option A: one full-width line under the row, the green underline sits on it
+  it('(h) the tab row has no own line; the Panel block\'s border-b is the only one', () => {
+    expect(tabs.source).toContain(`:ui="{ list: SCROLL_ROW_X + ' border-b-0'`)
+    expect(String(directive(find(tabs.ast, 'UTabs')[0]!.node, 'bind', 'ui'))).toContain(`indicator: 'bottom-0'`)
+    const { anc } = find(panel.ast, 'CroutonBookingsLocationTabs')[0]!
+    // the wrapper's own start tag (class + :class) carries no pb-2
+    const wrapperSource: string = anc[anc.length - 1].loc.source
+    expect(wrapperSource.slice(0, wrapperSource.indexOf('>'))).not.toMatch(/pb-2/)
+    const classes = String(panel.template.match(/class="[^"]*"/g)).split(/\s|,/)
+    expect(classes.filter(c => c === 'border-b')).toHaveLength(1)
+    expect(panel.template).toMatch(/class="shrink-0 [^"]*border-b border-default/)
+  })
+
   // covers: T4
   it('(g) every locale has bookings.filters.all', () => {
     for (const lang of ['en', 'nl', 'fr']) {

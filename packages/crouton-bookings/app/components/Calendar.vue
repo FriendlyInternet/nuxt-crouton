@@ -47,6 +47,8 @@ const emit = defineEmits<{
   'update:filters': [value: FilterState]
   'update:view': [value: 'week' | 'month']
   'hoverBooking': [bookingId: string | null]
+  /** The month/week label was tapped (#4516) */
+  'today': []
 }>()
 
 // The period being shown (owned by the parent; standalone use keeps its own)
@@ -361,7 +363,12 @@ onBeforeUnmount(card.close)
       :active-date="creatingAtDate"
       :is-date-disabled="isDateUnavailable ? isDayUnavailable : undefined"
       @select="onWeekSelect"
+      @today="emit('today')"
     >
+      <template v-if="$slots['header-end']" #header-end>
+        <slot name="header-end" />
+      </template>
+
       <!-- Add booking tab (slides down from under the date block on hover) -->
       <!-- Deliberately a raw button (#1410): a calendar hover cell whose
            geometry (absolute slide-down tab under the date block) and
@@ -413,7 +420,10 @@ onBeforeUnmount(card.close)
     </CroutonCalendarWeek>
 
     <!-- Month View -->
-    <CroutonCalendarMonth v-else v-model:date="date" @select="onMonthSelect">
+    <CroutonCalendarMonth v-else v-model:date="date" @select="onMonthSelect" @today="emit('today')">
+      <template v-if="$slots['header-end']" #header-end>
+        <slot name="header-end" />
+      </template>
       <template #day="{ day, jsDate, neighbour }">
           <!-- Neighbour months: day number + dots only, so 3x stays cheap -->
           <div

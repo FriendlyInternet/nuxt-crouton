@@ -30,6 +30,8 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   'select': [value: Date | null]
+  /** The label was tapped (it shows today); the consumer can also select it (#4516) */
+  'today': []
 }>()
 
 const { locale } = useI18n()
@@ -115,6 +117,11 @@ function goToToday() {
   date.value = new Date()
 }
 
+function onLabelClick() {
+  goToToday()
+  emit('today')
+}
+
 function isToday(day: { date: DateValue }): boolean {
   const todayDate = today(getLocalTimeZone())
   return day.date.compare(todayDate) === 0
@@ -169,33 +176,39 @@ const sizeClasses = computed(() => {
 
 <template>
   <div class="flex flex-col touch-pan-y">
-    <!-- Header: Nav + Month Label (calendar style) -->
-    <div class="flex items-center justify-center gap-1">
-      <UButton
-        icon="i-lucide-chevrons-left"
-        variant="ghost"
-        color="neutral"
-        size="sm"
-        :aria-label="t('calendar.week.previousWeek')"
-        @click="slide('prev')"
-      />
-      <UButton
-        variant="ghost"
-        color="neutral"
-        :class="['font-medium', sizeClasses.header]"
-        :title="t('calendar.week.today')"
-        @click="goToToday"
-      >
-        {{ weekLabel }}
-      </UButton>
-      <UButton
-        icon="i-lucide-chevrons-right"
-        variant="ghost"
-        color="neutral"
-        size="sm"
-        :aria-label="t('calendar.week.nextWeek')"
-        @click="slide('next')"
-      />
+    <!-- Header: Nav + Month Label (calendar style); #header-end sits at the right edge (#4516) -->
+    <div class="grid grid-cols-[1fr_auto_1fr] items-center">
+      <span />
+      <div class="flex items-center gap-1">
+        <UButton
+          icon="i-lucide-chevrons-left"
+          variant="ghost"
+          color="neutral"
+          size="sm"
+          :aria-label="t('calendar.week.previousWeek')"
+          @click="slide('prev')"
+        />
+        <UButton
+          variant="ghost"
+          color="neutral"
+          :class="['font-medium', sizeClasses.header]"
+          :title="t('calendar.week.today')"
+          @click="onLabelClick"
+        >
+          {{ weekLabel }}
+        </UButton>
+        <UButton
+          icon="i-lucide-chevrons-right"
+          variant="ghost"
+          color="neutral"
+          size="sm"
+          :aria-label="t('calendar.week.nextWeek')"
+          @click="slide('next')"
+        />
+      </div>
+      <div class="flex justify-end">
+        <slot name="header-end" />
+      </div>
     </div>
 
     <!-- Days Grid -->

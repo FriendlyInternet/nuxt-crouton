@@ -92,7 +92,8 @@
     "panel": {
       "noLocations": "Nog geen locaties",
       "membersOnly": "Log in om je boekingen te bekijken en beheren. Dit onderdeel is alleen beschikbaar voor leden.",
-      "signIn": "Inloggen"
+      "signIn": "Inloggen",
+      "calendarHandle": "Wisselen tussen week en maand"
     },
     "calendar": {
       "noBookings": "Geen boekingen",
@@ -174,14 +175,9 @@
     "filters": {
       "settings": "Kalenderinstellingen",
       "view": "Weergave",
-      "foldCalendar": "Kalender verbergen",
-      "unfoldCalendar": "Kalender tonen",
       "all": "Alle",
       "map": "Kaart",
       "cancelled": "Geannuleerde tonen",
-      "today": "Vandaag",
-      "week": "Week",
-      "month": "Maand",
       "addLocation": "Locatie Toevoegen"
     },
     "locationForm": {

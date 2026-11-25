@@ -6,35 +6,23 @@ interface Props {
   locations: LocationData[]
   /** Selected location IDs */
   selectedLocations: string[]
-  /** Whether calendar is visible */
-  showCalendar?: boolean
-  /** Whether a day is selected in the calendar */
-  hasSelectedDate?: boolean
   /** Whether to show cancelled bookings */
   showCancelled?: boolean
   /** Whether user can manage locations (admin) */
   canManageLocations?: boolean
-  /** Current calendar view mode */
-  calendarView?: 'week' | 'month'
-  /** Panel-only view controls (Week/Month, Today, fold). Off on composed pages, where this renders the cog (Show cancelled) and the location tab row itself (#4471, #4492). */
+  /** Panel mode (default): only the admin "no locations yet" prompt renders — the Panel shows the month label, the close X and the fold handle itself (#4516). Off on composed pages, where this renders the cog (Show cancelled) and the location tab row itself (#4471, #4492). */
   viewToggles?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  showCalendar: true,
   showCancelled: false,
   viewToggles: true,
   canManageLocations: false,
-  calendarView: 'week',
-  hasSelectedDate: false,
 })
 
 const emit = defineEmits<{
   'update:selectedLocations': [value: string[]]
-  'update:showCalendar': [value: boolean]
   'update:showCancelled': [value: boolean]
-  'update:calendarView': [value: 'week' | 'month']
-  'go-to-today': []
   'add-location': []
 }>()
 
@@ -62,36 +50,10 @@ const settingsItems = computed(() => [
 
 <template>
   <div class="flex flex-col gap-3">
-    <!-- One short row: Week|Month · Today · settings · fold -->
-    <div class="flex items-center justify-between gap-2">
-      <UFieldGroup v-if="viewToggles && showCalendar" size="sm">
-        <UButton
-          :color="calendarView === 'week' ? 'primary' : 'neutral'"
-          :variant="calendarView === 'week' ? 'solid' : 'outline'"
-          @click="emit('update:calendarView', 'week')"
-        >
-          {{ t('bookings.filters.week') }}
-        </UButton>
-        <UButton
-          :color="calendarView === 'month' ? 'primary' : 'neutral'"
-          :variant="calendarView === 'month' ? 'solid' : 'outline'"
-          @click="emit('update:calendarView', 'month')"
-        >
-          {{ t('bookings.filters.month') }}
-        </UButton>
-      </UFieldGroup>
+    <!-- Composed pages only: the settings cog row (the Panel has no toolbar row, #4516) -->
+    <div v-if="!viewToggles" class="flex items-center justify-between gap-2">
       <div class="flex items-center gap-1 shrink-0 ms-auto">
-        <UButton
-          v-if="viewToggles && showCalendar"
-          size="sm"
-          color="neutral"
-          variant="soft"
-          @click="emit('go-to-today')"
-        >
-          {{ t('bookings.filters.today') }}
-        </UButton>
-
-        <UDropdownMenu v-if="!viewToggles" :items="settingsItems">
+        <UDropdownMenu :items="settingsItems">
           <UChip :show="hasActiveFilter" color="primary" size="md">
             <UButton
               size="sm"
@@ -102,18 +64,6 @@ const settingsItems = computed(() => [
             />
           </UChip>
         </UDropdownMenu>
-
-        <UButton
-          v-if="viewToggles"
-          size="sm"
-          color="neutral"
-          variant="ghost"
-          :icon="showCalendar ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
-          :aria-label="showCalendar ? t('bookings.filters.foldCalendar') : t('bookings.filters.unfoldCalendar')"
-          :aria-expanded="showCalendar"
-          @click="emit('update:showCalendar', !showCalendar)"
-        />
-        <slot name="toolbar-end" />
       </div>
     </div>
 

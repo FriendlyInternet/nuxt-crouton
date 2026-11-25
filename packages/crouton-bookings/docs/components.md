@@ -48,6 +48,11 @@ File: `app/components/Calendar.vue`
 | `update:filters` | `[value: FilterState]` |
 | `update:view` | `[value: "week" \| "month"]` |
 | `hoverBooking` | `[bookingId: string \| null]` |
+| `today` | `[]` |
+
+| Slot | Props |
+| --- | --- |
+| `header-end` | `{}` |
 
 ## CroutonBookingsDateBadge
 

@@ -15,10 +15,12 @@ File: `app/components/Month.vue`
 | --- | --- |
 | `update:date` | `[value: Date]` |
 | `select` | `[value: Date]` |
+| `today` | `[]` |
 
 | Slot | Props |
 | --- | --- |
 | `day` | `{ day: DateValue; jsDate: Date; neighbour: boolean; }` |
+| `header-end` | `any` |
 
 ## CroutonCalendarWeek
 
@@ -41,8 +43,10 @@ File: `app/components/Week.vue`
 | --- | --- |
 | `update:date` | `[value: Date]` |
 | `select` | `[value: Date \| null]` |
+| `today` | `[]` |
 
 | Slot | Props |
 | --- | --- |
+| `header-end` | `{}` |
 | `day` | `{ day: any; jsDate: any; }` |
 | `day-action` | `{ day: any; jsDate: any; weekday: any; dayNumber: any; }` |

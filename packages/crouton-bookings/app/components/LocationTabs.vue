@@ -95,7 +95,7 @@ watch(() => props.modelValue, revealActiveTab, { flush: 'post' })
         :content="false"
         variant="link"
         size="sm"
-        :ui="{ list: SCROLL_ROW_X, trigger: 'min-w-fit' }"
+        :ui="{ list: SCROLL_ROW_X + ' border-b-0', indicator: 'bottom-0', trigger: 'min-w-fit' }"
         @update:model-value="onUpdate"
       >
         <template #leading="{ item }">

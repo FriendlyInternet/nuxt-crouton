@@ -92,7 +92,8 @@
     "panel": {
       "noLocations": "Aucun lieu pour le moment",
       "membersOnly": "Connectez-vous pour consulter et gérer vos réservations. Cette section est réservée aux membres.",
-      "signIn": "Se connecter"
+      "signIn": "Se connecter",
+      "calendarHandle": "Basculer entre semaine et mois"
     },
     "calendar": {
       "noBookings": "Aucune réservation",
@@ -174,14 +175,9 @@
     "filters": {
       "settings": "Paramètres du calendrier",
       "view": "Affichage",
-      "foldCalendar": "Masquer le calendrier",
-      "unfoldCalendar": "Afficher le calendrier",
       "all": "Tous",
       "map": "Carte",
       "cancelled": "Afficher les annulés",
-      "today": "Aujourd'hui",
-      "week": "Semaine",
-      "month": "Mois",
       "addLocation": "Ajouter un Lieu"
     },
     "locationForm": {

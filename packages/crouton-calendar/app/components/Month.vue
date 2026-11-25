@@ -13,13 +13,17 @@ import { CalendarDate, getLocalTimeZone, today } from '@internationalized/date'
  */
 const emit = defineEmits<{
   select: [value: Date]
+  /** The label was tapped (it shows today); the consumer can also select it (#4516) */
+  today: []
 }>()
 
 // The month being shown (any date in it)
 const date = defineModel<Date>('date', { required: true })
 
 defineSlots<{
-  day(props: { day: DateValue, jsDate: Date, neighbour: boolean }): any
+  'day'(props: { day: DateValue, jsDate: Date, neighbour: boolean }): any
+  /** Right end of the label row (e.g. a close button) */
+  'header-end'?(): any
 }>()
 
 const { t } = useT()
@@ -79,6 +83,11 @@ function goToToday() {
   date.value = new Date()
 }
 
+function onLabelClick() {
+  goToToday()
+  emit('today')
+}
+
 // Day activation comes through UCalendar's own cellTrigger (a real <button>,
 // so mouse AND keyboard land here) — never through handlers on the #day slot
 // content. Param typed to UCalendar's emit union; this calendar is single-date.
@@ -96,32 +105,39 @@ function onActivate(value: any) {
 
 <template>
   <div class="flex flex-col w-full touch-pan-y">
-    <div class="flex items-center justify-center gap-1">
-      <UButton
-        icon="i-lucide-chevrons-left"
-        variant="ghost"
-        color="neutral"
-        size="sm"
-        :aria-label="t('calendar.month.previousMonth')"
-        @click="slide('prev')"
-      />
-      <UButton
-        variant="ghost"
-        color="neutral"
-        class="font-medium"
-        :aria-label="t('calendar.month.today')"
-        @click="goToToday"
-      >
-        {{ monthLabel }}
-      </UButton>
-      <UButton
-        icon="i-lucide-chevrons-right"
-        variant="ghost"
-        color="neutral"
-        size="sm"
-        :aria-label="t('calendar.month.nextMonth')"
-        @click="slide('next')"
-      />
+    <!-- Label row; #header-end sits at the right edge, the label stays centred (#4516) -->
+    <div class="grid grid-cols-[1fr_auto_1fr] items-center">
+      <span />
+      <div class="flex items-center gap-1">
+        <UButton
+          icon="i-lucide-chevrons-left"
+          variant="ghost"
+          color="neutral"
+          size="sm"
+          :aria-label="t('calendar.month.previousMonth')"
+          @click="slide('prev')"
+        />
+        <UButton
+          variant="ghost"
+          color="neutral"
+          class="font-medium"
+          :aria-label="t('calendar.month.today')"
+          @click="onLabelClick"
+        >
+          {{ monthLabel }}
+        </UButton>
+        <UButton
+          icon="i-lucide-chevrons-right"
+          variant="ghost"
+          color="neutral"
+          size="sm"
+          :aria-label="t('calendar.month.nextMonth')"
+          @click="slide('next')"
+        />
+      </div>
+      <div class="flex justify-end">
+        <slot name="header-end" />
+      </div>
     </div>
     <div class="grid grid-cols-7 px-1 pt-1" aria-hidden="true">
       <span v-for="wd in weekdays" :key="wd" class="text-center text-xs text-muted">{{ wd }}</span>

@@ -166,13 +166,12 @@ const hoveredBookingId = store.hoveredBookingId
 const filterState = store.filters
 
 // Visibility states for panel sections
-const showCalendar = ref(true)
 const showMap = ref(false)
 
 // Calendar view mode (lifted from Calendar component)
 const calendarView = store.calendarView
 
-// Handle go-to-today from pill controls
+// Tapping the calendar's month/week label goes to today and selects it (#4516)
 const onGoToToday = store.goToToday
 
 // Parse GeoJSON coordinates from location data
@@ -289,30 +288,19 @@ defineExpose({
   <div class="booking-panel flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-default bg-default">
       <!-- Fixed on top: filters + calendar. Only the list below scrolls. -->
       <div class="shrink-0 flex flex-col gap-2 border-b border-default">
-        <!-- Filter controls -->
-        <div class="px-2 pt-2 pb-1.5 md:px-4 md:pt-3 md:pb-2">
+        <!-- Admin "no locations yet" prompt; renders nothing otherwise, so no empty band (#4516) -->
+        <div v-if="resolvedLocations.length === 0 && effectiveIsAdmin" class="px-2 pt-2 pb-1.5 md:px-4 md:pt-3 md:pb-2">
           <CroutonBookingsPanelFilters
             :locations="resolvedLocations"
             :selected-locations="filterState.locations"
-            :has-selected-date="!!selectedDate"
-            :show-calendar="showCalendar"
             :can-manage-locations="effectiveIsAdmin"
-            :calendar-view="calendarView"
             @update:selected-locations="filterState.locations = $event"
-            @update:show-calendar="showCalendar = $event"
-            @update:calendar-view="calendarView = $event"
-            @go-to-today="onGoToToday"
             @add-location="onAddLocation"
-          >
-            <template #toolbar-end>
-              <slot name="toolbar-end" />
-            </template>
-          </CroutonBookingsPanelFilters>
+          />
         </div>
 
-        <!-- Calendar -->
-        <!-- No bottom padding when the tab row follows: the gap already separates them, and the list keeps its room on a phone -->
-        <div v-if="showCalendar" class="px-2" :class="{ 'pb-2': resolvedLocations.length === 0 }">
+        <!-- Calendar: its label row is the panel's top row; #toolbar-end (the close X) sits at its right end (#4516) -->
+        <div class="px-2">
           <CroutonBookingsCalendar
             v-model:filters="filterState"
             v-model:date="shownDate"
@@ -327,11 +315,21 @@ defineExpose({
             @select="onCalendarSelect"
             @day-click="onCalendarDayClick"
             @hover-booking="(id) => hoveredBookingId = id"
-          />
+            @today="onGoToToday"
+          >
+            <template v-if="$slots['toolbar-end']" #header-end>
+              <slot name="toolbar-end" />
+            </template>
+          </CroutonBookingsCalendar>
         </div>
 
-        <!-- Location tabs: one row under the calendar, stays when it folds (#4471) -->
-        <div v-if="resolvedLocations.length > 0" class="px-2 pb-2">
+        <!-- Drag/tap handle: folds month ↔ week (#4516) -->
+        <div class="px-2" :class="{ 'pb-1': resolvedLocations.length === 0 }">
+          <CroutonBookingsCalendarFoldHandle v-model="calendarView" />
+        </div>
+
+        <!-- Location tabs: one row under the calendar, stays when it folds (#4471); the block's own border-b is the one line under it -->
+        <div v-if="resolvedLocations.length > 0" class="px-2">
           <CroutonBookingsLocationTabs
             :locations="resolvedLocations"
             :model-value="tabValueFor(filterState.locations)"

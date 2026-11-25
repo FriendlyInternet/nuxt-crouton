@@ -36,7 +36,7 @@ Booking system layer for Nuxt applications: bookings for locations with or witho
 CroutonBooking
 ├── Slot/
 │   └── Indicator.vue   - Visual slot indicator; its hover highlight (hoverBooking) reacts to mouse/pen only — touch is ignored (#4302)
-├── Panel.vue           - Main booking sidebar (CroutonBookingsPanel; self-fetches via useBookingsList); forwards a `#toolbar-end` slot to PanelFilters
+├── Panel.vue           - Main booking sidebar (CroutonBookingsPanel; self-fetches via useBookingsList); forwards a `#toolbar-end` slot onto the calendar's month/week label row (`#header-end`, the admin full-screen close); the month label also runs `store.goToToday`; `CalendarFoldHandle` under the calendar folds month ↔ week (#4516)
 ├── LayoutCalendar.vue  - CroutonBookingsLayoutCalendar: the calendar as a placeable layout block (#709), registered in croutonLayoutBlocks as `bookings-calendar` (compound, minWidth 520, minHeight 480, fill). Wraps CroutonBookingsPanel; the deterministic layout pass picks it → calendar-primary.
 ├── Layout/             - ATOMIC layout blocks (#924, "bookings-from-blocks" gap test) — the Panel's sub-surfaces broken out so a user can reassemble the native layout from `croutonLayoutBlocks`. Each self-fetches (shared useFetch key per team + `dedupe: 'defer'` ⇒ one call per key; see *useFetch keys carry the team* below) + coordinates cross-pane via useBookingsLayoutFilters.
 │   ├── List.vue         - CroutonBookingsLayoutList (`bookings-list`) — the list, shared-filter aware
@@ -44,13 +44,14 @@ CroutonBooking
 │   ├── Locations.vue    - CroutonBookingsLayoutLocations (`bookings-locations`) — selectable location list → shared location filter (one location at a time, #4471) (a robust list, NOT the geo/maplibre PanelMap — see #924 gap notes)
 │   └── Filters.vue      - CroutonBookingsLayoutFilters (`bookings-filters`) — status/location/cancelled → shared store (Panel-only view controls hidden via `PanelFilters` `view-toggles=false`, #2563)
 ├── Calendar.vue        - Calendar date picker
+├── CalendarFoldHandle.vue - drag/tap/keyboard handle that switches calendarView month ↔ week (#4516)
 ├── List.vue            - Bookings list; `listToggles` (Panel only) puts Show cancelled / Map (Map only with coordinates) on the first month label, or atop a loading/error/empty list (#4492)
 ├── ListToggles.vue     - the Show cancelled / Map text toggles List.vue renders (internal)
 ├── BookingCard.vue     - Individual booking card
 ├── BookingCreateCard.vue - Booking creation form
 ├── LocationTabs.vue   - CroutonBookingsLocationTabs: one sideways-scrolling location tab row (optional "All", admin "+"; hidden with one location), shared by the panel and the booking form (#4471)
 ├── DateBadge.vue       - Date display badge
-├── PanelFilters.vue    - Filter controls; `viewToggles` (default on) shows the Panel-only view controls (Week/Month, Today, fold); with `viewToggles` off it renders the cog (View · Show cancelled) and the location tab row itself (composed pages); in the Panel, Show cancelled and Map live on the list (#4492); a `#toolbar-end` slot renders after the fold button (the admin full-screen close, #3046)
+├── PanelFilters.vue    - Filter controls; `viewToggles` (default on) = Panel mode: only the admin no-locations prompt renders; with `viewToggles` off it renders the cog row (View · Show cancelled) and the location tab row (composed pages); in the Panel, Show cancelled and Map live on the list (#4492)
 └── PanelMap.vue        - Map display
 ```
 
@@ -205,7 +206,7 @@ const { variables, getPreviewValues, demoData } = useBookingEmailVariables()
 
 ## Dependencies
 
-- **Required**: `@fyit/crouton-core` (bundles `@fyit/crouton-auth`), `@fyit/crouton-calendar` (extended by this layer; owns the swipeable week/month views and swipe logic — `Calendar.vue` only supplies the `#day` content, #2574), `@fyit/crouton-catalog` (extended by this layer; owns the shared team product list)
+- **Required**: `@fyit/crouton-core` (bundles `@fyit/crouton-auth`), `@fyit/crouton-calendar` (extended by this layer; owns the swipeable week/month views and swipe logic — `Calendar.vue` supplies the `#day` content and forwards `#header-end` / `today`, #2574, #4516), `@fyit/crouton-catalog` (extended by this layer; owns the shared team product list)
 - **Optional**: `@fyit/crouton-email` (for email features)
 - **Peer**: `@nuxtjs/i18n` (auto-included)
 

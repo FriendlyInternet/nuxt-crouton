@@ -10,6 +10,10 @@
  * ends in a single labelled close. Month view leaves room for the booking list.
  * Desktop keeps the inline calendar.
  *
+ * #4516 — the top row is the calendar's month label plus the close X; a drag handle
+ * under the calendar folds month ↔ week; tapping the label selects today; the
+ * location tab row has one full-width line with the green underline on it.
+ *
  * Fixture-scoped: only the `with-bookings` fixture has the admin bookings page.
  */
 import { expect, type Locator, type Page } from '@playwright/test'
@@ -87,6 +91,22 @@ async function openFullScreen(page: Page): Promise<Locator> {
   return dialog
 }
 
+const handleOf = (dialog: Locator) => dialog.getByRole('button', { name: 'Switch between week and month' })
+
+/** Drag the handle with the mouse: down, move `dy` px in 6 steps, up. */
+async function dragHandle(page: Page, dialog: Locator, dy: number) {
+  const box = await handleOf(dialog).boundingBox()
+  expect(box, 'handle box').toBeTruthy()
+  const x = box!.x + box!.width / 2
+  const y = box!.y + box!.height / 2
+  await page.mouse.move(x, y)
+  await page.mouse.down()
+  await page.mouse.move(x, y + dy, { steps: 6 })
+  await page.mouse.up()
+}
+
+const centreY = (b: { y: number, height: number }) => b.y + b.height / 2
+
 async function closeFullScreen(page: Page, dialog: Locator) {
   await dialog.getByRole('button', { name: 'Close full screen' }).click()
   await expect(dialog).toHaveCount(0)
@@ -155,7 +175,9 @@ test.describe(FIXTURE === 'with-bookings' ? 'bookings full screen' : 'bookings f
     await page.setViewportSize(PHONE)
     await openPage(page, baseURL)
     let dialog = await openFullScreen(page)
-    await dialog.getByRole('button', { name: 'Month' }).click()
+    await expect(dialog.getByRole('button', { name: 'Next week' })).toBeVisible()
+    await handleOf(dialog).click()
+    await expect(dialog.getByRole('button', { name: 'Next week' })).toHaveCount(0)
     await closeFullScreen(page, dialog)
     dialog = await openFullScreen(page)
     await expect(dialog.getByRole('button', { name: 'Next week' })).toHaveCount(0)
@@ -174,11 +196,12 @@ test.describe(FIXTURE === 'with-bookings' ? 'bookings full screen' : 'bookings f
     await expect(close).toHaveCount(1)
     await expect(dialog.getByRole('button', { name: 'Close', exact: true })).toHaveCount(0)
 
-    // Same row as the view toggle.
+    // Same row as the calendar's month label (#4516); no Week/Month toggle any more.
+    await expect(dialog.getByRole('button', { name: 'Month', exact: true })).toHaveCount(0)
     const closeBox = await close.boundingBox()
-    const monthBox = await dialog.getByRole('button', { name: 'Month' }).boundingBox()
-    expect(closeBox && monthBox).toBeTruthy()
-    expect(Math.abs(closeBox!.y - monthBox!.y)).toBeLessThanOrEqual(8)
+    const labelBox = await dialog.getByTitle('Go to today').boundingBox()
+    expect(closeBox && labelBox).toBeTruthy()
+    expect(Math.abs(centreY(closeBox!) - centreY(labelBox!))).toBeLessThanOrEqual(8)
 
     await close.click()
     await expect(dialog).toHaveCount(0)
@@ -189,7 +212,7 @@ test.describe(FIXTURE === 'with-bookings' ? 'bookings full screen' : 'bookings f
     await page.setViewportSize(PHONE)
     await openPage(page, baseURL)
     const dialog = await openFullScreen(page)
-    await dialog.getByRole('button', { name: 'Month' }).click()
+    await handleOf(dialog).click()
     await expect(dialog.getByRole('button', { name: 'Next week' })).toHaveCount(0)
 
     // The scroll area (map + list) under the fixed filters + calendar.
@@ -200,6 +223,113 @@ test.describe(FIXTURE === 'with-bookings' ? 'bookings full screen' : 'bookings f
     const cell = dialog.locator('[style*="min-height"]').first()
     const fits = await cell.evaluate(el => el.scrollHeight <= el.clientHeight)
     expect(fits).toBe(true)
+  })
+
+  // covers: T4 — #4516: one top row (label + X) and a drag handle that folds month ↔ week
+  test('phone: the month label and the close share the top row; dragging the handle folds and unfolds', async ({ page, baseURL }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await openPage(page, baseURL)
+    const dialog = await openFullScreen(page)
+    const panel = dialog.locator('.booking-panel')
+    const close = dialog.getByRole('button', { name: 'Close full screen' })
+    const label = dialog.getByTitle('Go to today')
+    await expect(label).toBeVisible({ timeout: FIRST_HIT })
+
+    const closeBox = (await close.boundingBox())!
+    const labelBox = (await label.boundingBox())!
+    const panelBox = (await panel.boundingBox())!
+    expect(Math.abs(centreY(closeBox) - centreY(labelBox))).toBeLessThanOrEqual(4)
+    expect(labelBox.y - panelBox.y).toBeLessThanOrEqual(16)
+
+    const scroll = dialog.locator('.booking-panel > :nth-child(2)')
+    const positions = async () => ({
+      list: await scroll.evaluate(el => el.scrollTop),
+      win: await page.evaluate(() => window.scrollY),
+    })
+    const before = await positions()
+
+    // down: unfold to the month
+    await dragHandle(page, dialog, 60)
+    await expect(dialog.getByRole('button', { name: 'Next month' })).toBeVisible()
+    await expect(dialog.getByRole('button', { name: 'Next week' })).toHaveCount(0)
+    expect(await positions()).toEqual(before)
+
+    // up: fold to one week row
+    await dragHandle(page, dialog, -60)
+    await expect(dialog.getByRole('button', { name: 'Next week' })).toBeVisible()
+    await expect(dialog.getByRole('button', { name: 'Next month' })).toHaveCount(0)
+    expect(await positions()).toEqual(before)
+  })
+
+  // covers: T5 — #4516: the label is the Today button; it shows and selects today
+  test('phone: tapping the month label jumps to today and selects it', async ({ page, baseURL }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await openPage(page, baseURL)
+    const dialog = await openFullScreen(page)
+    const todayCell = () => cells(dialog).filter({ has: page.locator('.text-primary') })
+
+    // Week view
+    const first = await cells(dialog).first().textContent()
+    await dialog.getByRole('button', { name: 'Next week' }).click()
+    await expect(cells(dialog).first()).not.toHaveText(first ?? '')
+    await page.waitForTimeout(500)
+    await dialog.getByRole('button', { name: 'Next week' }).click()
+    await page.waitForTimeout(500)
+    await dialog.getByTitle('Go to today').click()
+    await expect(todayCell()).toHaveCount(1)
+    await expect(todayCell()).toHaveClass(/bg-elevated/)
+
+    // Month view
+    await handleOf(dialog).click()
+    await expect(dialog.getByRole('button', { name: 'Next month' })).toBeVisible()
+    const monthLabel = dialog.getByRole('button', { name: 'Go to today' })
+    const thisMonth = await monthLabel.textContent()
+    await dialog.getByRole('button', { name: 'Next month' }).click()
+    await expect(monthLabel).not.toHaveText(thisMonth ?? '')
+    await page.waitForTimeout(500)
+    await monthLabel.click()
+    await expect(monthLabel).toHaveText(thisMonth ?? '')
+    // The selected day's cell is highlighted (bg-elevated, number in text-primary)
+    const day = String(new Date().getDate())
+    // (the current month's full cells are the `group` divs; neighbour months render cheaper ones)
+    const todayInMonth = dialog.locator('div.group[style*="min-height"]')
+      .filter({ has: page.locator('span.text-primary', { hasText: new RegExp(`^${day}$`) }) })
+    await expect(todayInMonth.first()).toBeVisible()
+    await expect(todayInMonth.first()).toHaveClass(/bg-elevated/)
+  })
+
+  // covers: T11 — #4516 option A: the selected tab's underline sits on the one full-width line
+  test('phone: the selected location keeps its green underline on the one line', async ({ page, baseURL }) => {
+    await ensureBookingLocations(page, baseURL, 3)
+    await page.setViewportSize({ width: 390, height: 844 })
+    await openPage(page, baseURL)
+    const dialog = await openFullScreen(page)
+    const tablist = dialog.locator('[role=tablist]').first()
+    await expect(tablist).toBeVisible({ timeout: FIRST_HIT })
+    await tablist.getByRole('tab').nth(1).click()
+    await page.waitForTimeout(300)
+
+    const probe = await tablist.evaluate((list) => {
+      list.scrollTop = 0
+      const ind = list.querySelector('[data-slot="indicator"]')!
+      const r = ind.getBoundingClientRect()
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
+      const fixed = document.querySelector('[role=dialog] .booking-panel > :first-child')!
+      const fb = fixed.getBoundingClientRect()
+      const fixedBorder = parseFloat(getComputedStyle(fixed).borderBottomWidth)
+      return {
+        scrollHeight: list.scrollHeight,
+        clientHeight: list.clientHeight,
+        border: getComputedStyle(list).borderBottomWidth,
+        hitIsIndicator: hit === ind || ind.contains(hit),
+        indBottom: r.bottom,
+        lineTop: fb.bottom - fixedBorder,
+      }
+    })
+    expect(probe.scrollHeight).toBe(probe.clientHeight)
+    expect(probe.border).toBe('0px')
+    expect(probe.hitIsIndicator).toBe(true)
+    expect(Math.abs(probe.indBottom - probe.lineTop)).toBeLessThanOrEqual(1)
   })
 
   test('desktop: no full-screen button, inline week navigation still works', async ({ page, baseURL }) => {
