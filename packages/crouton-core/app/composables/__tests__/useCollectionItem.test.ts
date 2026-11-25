@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { ref, computed, unref } from 'vue'
+import { ref, computed, unref, reactive, watch, nextTick } from 'vue'
 
 // Mock dependencies
 const mockFetch = vi.fn()
@@ -21,17 +21,24 @@ vi.stubGlobal('useCollections', () => ({
   getConfig: (name: string) => name === 'products' ? mockCollectionConfig : null
 }))
 
-vi.stubGlobal('useTeamContext', () => ({
-  getTeamId: () => 'team-123'
-}))
+// useTeam() is resolved once at setup by useCollectionItem; count the calls (T6)
+const mockCurrentTeam = ref<{ id?: string } | null>({ id: 'team-123' })
+let useTeamCalls = 0
+const useTeamStub = () => {
+  useTeamCalls++
+  return { currentTeam: mockCurrentTeam }
+}
+vi.stubGlobal('useTeam', useTeamStub)
 
 vi.stubGlobal('$fetch', mockFetch)
 
 // Mock useAsyncData to simulate Nuxt behavior
 let lastAsyncDataOptions: any = null
 
-vi.stubGlobal('useAsyncData', async (key: string, handler: () => Promise<any>, options?: any) => {
-  lastAsyncDataOptions = { key, handler, options }
+const resolveKey = (key: string | (() => string)) => typeof key === 'function' ? key() : key
+
+const simpleAsyncData = async (key: string | (() => string), handler: () => Promise<any>, options?: any) => {
+  lastAsyncDataOptions = { key, resolvedKey: resolveKey(key), handler, options }
 
   const data = ref(options?.default?.() ?? undefined)
   const pending = ref(true)
@@ -76,10 +83,39 @@ vi.stubGlobal('useAsyncData', async (key: string, handler: () => Promise<any>, o
   }
 
   return { data, pending, error, refresh }
-})
+}
+vi.stubGlobal('useAsyncData', simpleAsyncData)
 
-// Import after mocking
+// A closer Nuxt model for the cache-slot rule (T5): one shared key→data store,
+// the key re-resolved reactively, a refetch when the key or a watch source changes.
+const sharedStore = reactive<Record<string, any>>({})
+const sharedAsyncData = async (key: string | (() => string), handler: () => Promise<any>, options?: any) => {
+  const getKey = () => resolveKey(key)
+  const pending = ref(true)
+  const error = ref(null)
+  const run = async () => {
+    const k = getKey()
+    sharedStore[k] = await handler()
+    pending.value = false
+  }
+  watch(getKey, run)
+  if (options?.watch?.length) watch(options.watch, run)
+  await run()
+  const data = computed(() => sharedStore[getKey()] ?? null)
+  return { data, pending, error, refresh: run }
+}
+
+const flush = async () => {
+  await nextTick()
+  await new Promise(r => setTimeout(r, 0))
+  await nextTick()
+}
+
+// Import after mocking — the real key builder (#4506), resolving to this file's stubs
+import { useCollectionCacheKeys } from '../useCollectionCacheKeys'
 import { useCollectionItem } from '../useCollectionItem'
+
+vi.stubGlobal('useCollectionCacheKeys', useCollectionCacheKeys)
 
 describe('useCollectionItem', () => {
   beforeEach(() => {
@@ -90,6 +126,8 @@ describe('useCollectionItem', () => {
       fetchStrategy: 'query'
     }
     lastAsyncDataOptions = null
+    mockCurrentTeam.value = { id: 'team-123' }
+    useTeamCalls = 0
   })
 
   describe('initialization', () => {
@@ -188,11 +226,11 @@ describe('useCollectionItem', () => {
       expect(mockFetch).toHaveBeenCalledWith('/api/teams/team-123/products?ids=item-1', { headers: undefined })
     })
 
-    it('passes watch option with itemId to useAsyncData', async () => {
+    it('passes a getter key and no watch option to useAsyncData (#4489)', async () => {
       await useCollectionItem('products', 'item-1')
 
-      expect(lastAsyncDataOptions.options.watch).toBeDefined()
-      expect(lastAsyncDataOptions.options.watch.length).toBe(1)
+      expect(typeof lastAsyncDataOptions.key).toBe('function')
+      expect(lastAsyncDataOptions.options.watch).toBeUndefined()
     })
   })
 
@@ -207,18 +245,14 @@ describe('useCollectionItem', () => {
 
   describe('team context handling', () => {
     beforeEach(() => {
-      vi.stubGlobal('useTeamContext', () => ({
-        getTeamId: () => undefined
-      }))
+      mockCurrentTeam.value = null
       vi.stubGlobal('useRoute', () => ({
         path: '/teams/unknown/products'
       }))
     })
 
     afterEach(() => {
-      vi.stubGlobal('useTeamContext', () => ({
-        getTeamId: () => 'team-123'
-      }))
+      mockCurrentTeam.value = { id: 'team-123' }
       vi.stubGlobal('useRoute', () => ({
         path: '/teams/test-team/products'
       }))
@@ -309,6 +343,107 @@ describe('useCollectionItem', () => {
 
       // Non-array response should be returned directly
       expect(item.value).toEqual({ id: 'item-1', name: 'Direct' })
+    })
+  })
+
+  describe('cache key follows the record and the team (#4489)', () => {
+    beforeEach(() => {
+      mockCurrentTeam.value = { id: 'team-a' }
+    })
+
+    it('T1: changing the id moves the key to the new id', async () => {
+      const idRef = ref('item-1')
+      await useCollectionItem('products', idRef)
+      const key = lastAsyncDataOptions.key
+
+      expect(resolveKey(key)).toBe('collection-item:products:team-a:item-1')
+      idRef.value = 'item-2'
+      expect(resolveKey(key)).toBe('collection-item:products:team-a:item-2')
+    })
+
+    it('T2: switching the team changes the key to the new team', async () => {
+      await useCollectionItem('products', 'item-1')
+      const key = lastAsyncDataOptions.key
+
+      expect(resolveKey(key)).toBe('collection-item:products:team-a:item-1')
+      mockCurrentTeam.value = { id: 'team-b' }
+      expect(resolveKey(key)).toBe('collection-item:products:team-b:item-1')
+    })
+
+    it('T3: two ids in the same collection get two different keys', async () => {
+      await useCollectionItem('products', 'item-1')
+      const first = lastAsyncDataOptions.resolvedKey
+      await useCollectionItem('products', 'item-2')
+      const second = lastAsyncDataOptions.resolvedKey
+
+      expect(first).toBe('collection-item:products:team-a:item-1')
+      expect(second).toBe('collection-item:products:team-a:item-2')
+    })
+
+    it('uses super-admin as the team part on super-admin routes', async () => {
+      vi.stubGlobal('useRoute', () => ({ path: '/super-admin/products' }))
+      try {
+        await useCollectionItem('products', 'item-1')
+        expect(lastAsyncDataOptions.resolvedKey).toBe('collection-item:products:super-admin:item-1')
+      } finally {
+        vi.stubGlobal('useRoute', () => ({ path: '/teams/test-team/products' }))
+      }
+    })
+
+    it('falls back to the route team param when useTeam has no team', async () => {
+      mockCurrentTeam.value = null
+      vi.stubGlobal('useRoute', () => ({ path: '/admin/acme/products', params: { team: 'acme' } }))
+      try {
+        await useCollectionItem('products', 'item-1')
+        expect(lastAsyncDataOptions.resolvedKey).toBe('collection-item:products:acme:item-1')
+        expect(mockFetch).toHaveBeenCalledWith('/api/teams/acme/products?ids=item-1', { headers: undefined })
+      } finally {
+        vi.stubGlobal('useRoute', () => ({ path: '/teams/test-team/products' }))
+      }
+    })
+
+    it('T5: two views never share a slot for different records or teams', async () => {
+      for (const k of Object.keys(sharedStore)) delete sharedStore[k]
+      mockFetch.mockImplementation(async (url: string) => {
+        const team = url.split('/')[3]
+        const id = url.split('?ids=')[1]
+        return [{ id, team }]
+      })
+      vi.stubGlobal('useAsyncData', sharedAsyncData)
+      try {
+        const view1Id = ref('item-1')
+        const view1 = await useCollectionItem('products', view1Id)
+        const view2 = await useCollectionItem('products', 'item-1')
+        expect(view1.item.value).toEqual({ id: 'item-1', team: 'team-a' })
+        expect(view2.item.value).toEqual({ id: 'item-1', team: 'team-a' })
+
+        view1Id.value = 'item-2'
+        await flush()
+        expect(view1.item.value).toEqual({ id: 'item-2', team: 'team-a' })
+        expect(view2.item.value).toEqual({ id: 'item-1', team: 'team-a' })
+
+        mockCurrentTeam.value = { id: 'team-b' }
+        await flush()
+        expect(view1.item.value).toEqual({ id: 'item-2', team: 'team-b' })
+        expect(view2.item.value).toEqual({ id: 'item-1', team: 'team-b' })
+      } finally {
+        vi.stubGlobal('useAsyncData', simpleAsyncData)
+      }
+    })
+
+    it('T6: re-resolving the key after setup does not call useTeam() again', async () => {
+      const idRef = ref('item-1')
+      await useCollectionItem('products', idRef)
+      expect(useTeamCalls).toBe(1)
+
+      const key = lastAsyncDataOptions.key
+      resolveKey(key)
+      idRef.value = 'item-2'
+      resolveKey(key)
+      mockCurrentTeam.value = { id: 'team-b' }
+      resolveKey(key)
+
+      expect(useTeamCalls).toBe(1)
     })
   })
 })
