@@ -139,7 +139,8 @@ jobs:
           node scripts/lib/epic-steps.mjs steps "$D/comments.json" > "$D/steps.json" || [ $? -eq 3 ]
           node scripts/lib/epic-steps.mjs narrow "$SUBJECT" "$D/subs.json" "$D/steps.json" > "$D/tickets.json"
           node scripts/lib/title-rule.mjs notes "$D/tickets.json" >> "$D/epic.md"
-          echo "EPIC_SRC=$(node scripts/epic-checkout.mjs --epic "$EPIC" --dest "$RUNNER_TEMP/epic-src")" >> "$GITHUB_ENV"
+          SRC="$(node scripts/epic-checkout.mjs --epic "$EPIC" --dest "$RUNNER_TEMP/epic-src")"; echo "EPIC_SRC=$SRC" >> "$GITHUB_ENV"
+          node scripts/lib/ticket-hints.mjs notes "$D/tickets.json" "$D/subs.json" --epic "$EPIC" --root "${SRC:-.}" >> "$D/epic.md"
           echo "tickets: $(jq length "$D/tickets.json") (subject: ${SUBJECT:-all})"
           node scripts/ticket-review-actions.mjs gather "$D/comments.json" "$D/epic.json" "$D/tickets.json" "$D/steps.json" --subject "$SUBJECT"
 
