@@ -314,32 +314,6 @@ body.theme-editorial,
 }
 
 /* ============================================
-   STICKY ACTION BAR — text left, buttons right (e.g. the
-   unsaved-changes bar). Editorial's wider sans pills don't fit
-   beside the label on a phone, so the row wraps (label on its
-   own line, buttons right-aligned below) instead of squeezing
-   the label to one word per line; and it is opaque, so content
-   scrolling underneath doesn't show through as a second box.
-   ============================================ */
-
-:is([data-theme="editorial"], .theme-editorial) .sticky.justify-between:has(> :last-child button) {
-  flex-wrap: wrap;
-  row-gap: 0.5rem;
-  background-color: var(--editorial-paper);
-  border: 1px solid var(--editorial-hairline);
-  font-family: var(--editorial-sans);
-}
-
-:is([data-theme="editorial"], .theme-editorial) .sticky.justify-between:has(> :last-child button) > :last-child {
-  margin-inline-start: auto;
-}
-
-:is([data-theme="editorial"], .theme-editorial) .sticky.justify-between:has(> :last-child button) button {
-  font-family: var(--editorial-sans);
-  white-space: nowrap;
-}
-
-/* ============================================
    INPUTS — sans 15px, hairline
    ============================================ */
 

@@ -77,7 +77,7 @@ const TODAY_ISO = new Date().toISOString()
 const FIXTURES: Record<string, unknown> = {
   '/api/status/apps': {
     data: [
-      { app: 'velo', stagingUrl: 'https://velo.staging', hasSignIn: true, previews: [{ pr: 77, title: 'Velo preview', updatedAt: '2026-11-15T09:00:00Z', url: 'u' }] },
+      { app: 'velo', stagingUrl: 'https://velo.staging', hasSignIn: true, previews: [{ pr: 77, title: 'Velo preview', updatedAt: '2026-11-15T09:00:00Z', url: 'u', asksOwner: true }, { pr: 78, title: 'Velo other preview', updatedAt: '2026-11-15T09:00:00Z', url: 'u2', asksOwner: false }] },
       { app: 'kassa', stagingUrl: null, hasSignIn: false, previews: [] },
       { app: 'notes', stagingUrl: 'https://notes.staging', hasSignIn: true, previews: [] }
     ],
@@ -165,6 +165,15 @@ describe('apps dashboard page server render', () => {
     expect(html).toContain('data-href="/api/status/login/velo?key=pr77"')
     expect(html).toContain('<reply>pr:77</reply>')
     expect(html).toContain('href="https://github.com/FriendlyInternet/nuxt-crouton/pull/77"')
+  })
+
+  // covers: T4 (#3045)
+  it('Apps tab: a preview gets Good to go / Not ok only when the inbox asks the owner about it', async () => {
+    const html = visible(await renderPage())
+    expect(html).toContain('<reply>pr:77</reply>')
+    expect(html).toContain('Velo other preview')
+    expect(html).toContain('data-href="/api/status/login/velo?key=pr78"')
+    expect(html).not.toContain('<reply>pr:78</reply>')
   })
 
   it('To test tab: app filter, groups with staging link, waiting vs merged badge, sign-in only when the item has an app', async () => {
