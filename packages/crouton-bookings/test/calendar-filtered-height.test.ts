@@ -124,6 +124,16 @@ describe('Calendar — one location picked shrinks the cells (#4516)', () => {
     w.unmount()
   })
 
+  // Found in the browser (owner, 25 Nov): with `transition-all` the cell's min-height
+  // shrank over 200ms, so the strip re-measured mid-shrink and kept the 3-location height.
+  it('the month cell does not animate its height (transition, not transition-all)', () => {
+    const w = mountCalendar('month', ['b'])
+    const cls = monthCell(w).className.split(/\s+/)
+    expect(cls).toContain('transition')
+    expect(cls).not.toContain('transition-all')
+    w.unmount()
+  })
+
   it('does the same for the week strip', async () => {
     const w = mountCalendar('week', [])
     expect(w.find('[data-view="week"]').attributes('data-hold-key')).toBe('3')

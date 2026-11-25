@@ -458,10 +458,12 @@ onBeforeUnmount(card.close)
             </div>
           </div>
           <!-- Presentation only — day activation (mouse + keyboard) arrives via
-               CroutonCalendarMonth's cellTrigger button → onMonthSelect. -->
+               CroutonCalendarMonth's cellTrigger button → onMonthSelect.
+               `transition`, not `transition-all`: a min-height change must not animate,
+               or the month's held height is re-measured mid-shrink and keeps the old height (#4516). -->
           <div
             v-else
-            class="group relative w-full flex flex-col items-center justify-start pt-1 pb-1 rounded-md transition-all duration-200"
+            class="group relative w-full flex flex-col items-center justify-start pt-1 pb-1 rounded-md transition duration-200"
             :style="{ minHeight: `${monthCellHeight}px` }"
             :class="[
               isDayUnavailable(jsDate)
