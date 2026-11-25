@@ -103,12 +103,12 @@ const monthCell = (w: ReturnType<typeof mountCalendar>) => w.find('.group.relati
 describe('Calendar — one location picked shrinks the cells (#4516)', () => {
   it('with 3 locations and one picked, the month cell height is the one-row height', () => {
     const one = mountCalendar('month', ['b'])
-    // one indicator row: max(40, 24 + 6·1) = 40px
-    expect(monthCell(one).style.minHeight).toBe('40px')
+    // one indicator row: max(32, 24 + 6·1) = 32px
+    expect(monthCell(one).style.minHeight).toBe('32px')
     expect(one.findAll('[data-indicator]')).toHaveLength(1)
     one.unmount()
 
-    // contrast: all three shown = three rows, max(40, 24 + 6·3) = 42px
+    // contrast: all three shown = three rows, max(32, 24 + 6·3) = 42px
     const all = mountCalendar('month', [])
     expect(monthCell(all).style.minHeight).toBe('42px')
     expect(all.findAll('[data-indicator]')).toHaveLength(3)
@@ -120,7 +120,7 @@ describe('Calendar — one location picked shrinks the cells (#4516)', () => {
     expect(w.find('[data-view="month"]').attributes('data-hold-key')).toBe('3')
     await w.setProps({ filters: { statuses: [], locations: ['b'], showCancelled: false } })
     expect(w.find('[data-view="month"]').attributes('data-hold-key')).toBe('1')
-    expect(monthCell(w).style.minHeight).toBe('40px')
+    expect(monthCell(w).style.minHeight).toBe('32px')
     w.unmount()
   })
 

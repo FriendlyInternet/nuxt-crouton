@@ -332,9 +332,10 @@ function getLocationAddress(locationId: string): string | null {
 // Month cell height matches the real stack (#3046), for n indicator rows:
 //   4 (pt-1) + 16 (day number) + 2 (mt-0.5)
 //   + 4n (2xs bars/dots) + 2(n-1) (gap-0.5) + 4 (pb-1)
-//   = 24 + 6n, with a 40px floor.
+//   = 24 + 6n, with a 32px floor (#4516: a tighter month; with several
+//   locations the cells still grow to fit).
 const monthCellHeight = computed(() => {
-  return Math.max(40, 24 + 6 * maxIndicatorCount.value)
+  return Math.max(32, 24 + 6 * maxIndicatorCount.value)
 })
 
 // ONE shared location card (#3895) instead of one UPopover per indicator per day.
