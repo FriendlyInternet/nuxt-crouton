@@ -29,6 +29,7 @@ export default defineNuxtConfig({
     '../gameboy',
     '../riso',
     '../eink',
-    '../blueprint'
+    '../blueprint',
+    '../editorial'
   ]
 })

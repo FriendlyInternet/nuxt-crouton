@@ -396,3 +396,20 @@ test('#3272 isRejectedTwice: plan:approved or no status:blocked ⇒ false', () =
   assert.equal(twice(thread, ['status:blocked', 'plan:approved']), false)
   assert.equal(twice(thread, []), false)
 })
+
+// covers: T10 (#4531)
+test('#4531 T10 replanFromReply: a relayed ok on a held plan question re-plans from yes and writes the Decisions line', () => {
+  const relayedOk = "> 🤖 **Claude Code** · interactive agent · chat x · posted from `@pmcp`'s account (not Maarten) · _owner answer 25 Nov 02:13_\n\nok"
+  const QK = QUESTION_RECORD('Keep X?')
+  const verdictWithRecord = `<!-- plan-review:v1 -->\n<!-- plan-review-verdict:needs-owner -->\n${recordMarker(QK)}\n> 🤖 review\n\n🔀 **Needs your call** — Keep X?`
+  const comment = { body: relayedOk, userLogin: 'pmcp', owner: 'pmcp', userType: 'User', date: '2026-11-25', url: 'u' }
+  const got = replanFromReply({
+    starts: 'replan-with-yes',
+    comments: [bot(PLAN), bot(verdictWithRecord), { ...comment, userType: 'User' }],
+    labels: ['status:blocked', 'work-this'],
+    comment,
+  })
+  assert.equal(got.replan, true)
+  assert.equal(got.followed, true)
+  assert.match(got.line || '', /yes/i)
+})
