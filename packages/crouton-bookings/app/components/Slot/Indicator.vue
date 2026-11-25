@@ -22,7 +22,7 @@ interface Props {
   bookedColor?: string
   /** Color for cancelled slots */
   cancelledColor?: string
-  size?: 'xs' | 'sm' | 'md' | 'lg'
+  size?: '2xs' | 'xs' | 'sm' | 'md' | 'lg'
   /** 'dots' = fixed-size circles, 'bars' = flex-grow to fill width */
   variant?: 'dots' | 'bars'
 }
@@ -47,6 +47,7 @@ const emit = defineEmits<{
 const { parseSlotIds } = useBookingSlots()
 
 const dotSizeClasses = {
+  '2xs': 'size-1',
   xs: 'size-1.5',
   sm: 'size-2',
   md: 'size-3',
@@ -54,6 +55,7 @@ const dotSizeClasses = {
 }
 
 const barHeightClasses = {
+  '2xs': 'h-1',
   xs: 'h-1.5',
   sm: 'h-2',
   md: 'h-2.5',
@@ -61,6 +63,7 @@ const barHeightClasses = {
 }
 
 const gapClasses = {
+  '2xs': 'gap-px',
   xs: 'gap-[2px]',
   sm: 'gap-[3px]',
   md: 'gap-1',
@@ -79,9 +82,11 @@ function isCancelled(slotId: string): boolean {
   return props.cancelledSlotIds?.includes(slotId) || false
 }
 
-// Two-state opacity: fully booked (1.0) or available/partial (0.15)
+// Three shades: full (1.0), partly booked (0.5), empty (faint) — so a
+// half-full slot no longer looks the same as an empty one (#3046)
 function getSlotOpacity(slotId: string): number {
   if (isBooked(slotId)) return 1
+  if (isPartial(slotId)) return 0.5
   return 0.1
 }
 
@@ -111,6 +116,19 @@ function onSlotHover(slotId: string) {
 function onSlotLeave() {
   emit('hoverBooking', null)
 }
+
+// #4302 — a phone tap fires a fake mouseenter and no mouseleave, so the hovered
+// booking stuck and the list showed only that one. Hover reacts to mouse/pen only.
+function onSlotPointerEnter(event: PointerEvent, slotId: string) {
+  if (event.pointerType === 'touch') return
+  if (!isBooked(slotId) && !isPartial(slotId)) return
+  onSlotHover(slotId)
+}
+
+function onSlotPointerLeave(event: PointerEvent) {
+  if (event.pointerType === 'touch') return
+  onSlotLeave()
+}
 </script>
 
 <template>
@@ -134,8 +152,8 @@ function onSlotLeave() {
         opacity: getSlotOpacity(slot.id),
       }"
       :title="slot.label"
-      @mouseenter="(isBooked(slot.id) || isPartial(slot.id)) && onSlotHover(slot.id)"
-      @mouseleave="onSlotLeave"
+      @pointerenter="(e: PointerEvent) => onSlotPointerEnter(e, slot.id)"
+      @pointerleave="onSlotPointerLeave"
     />
   </div>
 </template>

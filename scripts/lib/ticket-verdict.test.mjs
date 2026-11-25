@@ -23,6 +23,16 @@ test('replay #229 as first written: no-go on item 9, citing the 2026-06 priority
   assert.match(renderComment(d), /Tickets sent back/)
 })
 
+test('revising (#3787): the no-go headline says the pipeline is rewriting, and asks the owner for nothing', () => {
+  const d = decide(set('229.json'), fx('229.verdict.md'))
+  const c = renderComment(d, { revising: 2 })
+  assert.match(c, /Tickets sent back/)
+  assert.match(c, /round 2 of 3/)
+  assert.match(c, /\*\*Next:\*\* none/)
+  assert.doesNotMatch(c, /fix the tickets/)
+  assert.match(renderComment(d), /fix the tickets/) // the hold case (round 3) keeps the ask
+})
+
 test('replay #2725 as first written: "force teamId" is flagged as mechanism-without-rule even when the model says go', () => {
   assert.ok(precheck(set('2725.json')[0])['8'])
   const d = decide(set('2725.json'), fx('2725.lenient.verdict.md'))
@@ -80,22 +90,90 @@ test('hold: with reviewTickets no child gets a trigger label, a review is reques
   assert.equal(open.some((a) => a.type === 'request-ticket-review'), false)
 })
 
-test('item 10 (own test steps) FAIL → needs-owner, never no-go', () => {
-  const ten = fx('clean.verdict.md').replace('## Ticket #1\n### Verdict\ngo', '## Ticket #1\n### Verdict\nneeds-owner').replace('- 10: PASS — every step exercises only this ticket', '- 10: FAIL — step 2 needs #2828 seed data')
-  // (a) with a question → needs-owner
-  const a = ten.replace('### Question\n\n## Ticket #2', '### Question\nDrop the sibling-dependent step?\n\n## Ticket #2')
-  const da = decide(set('clean.json'), a)
-  assert.equal(da.ok, true)
-  assert.equal(da.tickets[0].verdict, 'needs-owner')
-  assert.equal(da.verdict, 'needs-owner')
-  // (b) no question → error
-  assert.match(decide(set('clean.json'), ten).errors.join(), /needs-owner needs a Question/)
-  // (c) hard fail wins
-  const c = a.replace('- 4: PASS — one-line change', '- 4: FAIL — bigger fix exists')
-  assert.equal(decide(set('clean.json'), c).tickets[0].verdict, 'no-go')
+test('item 10 (own test steps) alone → no-go; only item 7 makes needs-owner (#3833)', () => {
+  const stated = (v) => fx('clean.verdict.md').replace('## Ticket #1\n### Verdict\ngo', `## Ticket #1\n### Verdict\n${v}`)
+  const fail10 = (s) => s.replace('- 10: PASS — every step exercises only this ticket', '- 10: FAIL — step 2 needs #2828 seed data')
+  const fail7 = (s) => s.replace('- 7: PASS — mechanical', '- 7: FAIL — needs a cost decision')
+  const ask = (s) => s.replace('### Question\n\n## Ticket #2', '### Question\nShip it?\n\n## Ticket #2')
+  // (a) only 10 FAIL, stated no-go, NO question → accepted as no-go (no malformed-file error)
+  const da = decide(set('clean.json'), fail10(stated('no-go')))
+  assert.equal(da.ok, true, String(da.errors))
+  assert.equal(da.tickets[0].verdict, 'no-go')
+  assert.equal(da.verdict, 'no-go')
+  // (b) only 7 FAIL with a question → needs-owner; without a question → error
+  const db = decide(set('clean.json'), ask(fail7(stated('needs-owner'))))
+  assert.equal(db.ok, true, String(db.errors))
+  assert.equal(db.tickets[0].verdict, 'needs-owner')
+  assert.equal(db.verdict, 'needs-owner')
+  assert.match(decide(set('clean.json'), fail7(stated('needs-owner'))).errors.join(), /needs-owner needs a Question/)
+  // (c) 7 and 10 FAIL with a question → needs-owner (an owner question beats a wording fix)
+  const dc = decide(set('clean.json'), ask(fail10(fail7(stated('needs-owner')))))
+  assert.equal(dc.ok, true, String(dc.errors))
+  assert.equal(dc.tickets[0].verdict, 'needs-owner')
+  // (d) 10 + a hard fail (4) → no-go
+  const dd = fail10(stated('no-go')).replace('- 4: PASS — one-line change', '- 4: FAIL — bigger fix exists')
+  assert.equal(decide(set('clean.json'), dd).tickets[0].verdict, 'no-go')
   // (d) "10" parses as id 10, not 1
   assert.equal(parseVerdicts(fx('clean.verdict.md')).tickets[1].items['10'].pass, true)
   // (e) missing line → error
   const e = fx('clean.verdict.md').replace(/^- 10: .*\n/gm, '')
   assert.match(decide(set('clean.json'), e).errors.join(), /rubric item 10 missing a PASS\/FAIL line/)
+})
+
+// ── #3846: the step-list (`## Plan`) rubric, the plan-wrong verdict, the subject marker ──
+const PLAN = (v = 'go', fail = '') => `## Plan\n### Verdict\n${v}\n### Rubric\n${['P1', 'P2', 'P3', 'P4'].map((id) => `- ${id}: ${id === fail ? 'FAIL' : 'PASS'} — checked the order`).join('\n')}\n${v === 'needs-owner' ? '### Question\nShip both?\n' : ''}`
+
+test('14. a plan review never crashes for lack of an open ticket, and never passes without a step list section', () => {
+  const body = `<!-- ticket-review:v1 -->\n${PLAN()}`
+  const d = decide([], body, { subject: 'plan' })
+  assert.equal(d.ok, true)
+  assert.equal(d.plan.verdict, 'go')
+  assert.deepEqual(d.tickets, [])
+  assert.equal(d.verdict, 'go')
+  // without the plan subject, a verdict with no ticket section is still an error
+  assert.equal(decide([], body).ok, false)
+  // a plan review with no `## Plan` section is an error
+  assert.match(decide(set('clean.json'), fx('clean.verdict.md'), { subject: 'plan' }).errors.join(), /## Plan/)
+})
+
+test('the plan rubric: P1–P3 FAIL → no-go, P4 FAIL → needs-owner, a lenient go is refused', () => {
+  const v = (p) => `<!-- ticket-review:v1 -->\n${p}\n${fx('clean.verdict.md').replace('<!-- ticket-review:v1 -->', '')}`
+  assert.equal(decide(set('clean.json'), v(PLAN('no-go', 'P2')), { subject: 'plan' }).plan.verdict, 'no-go')
+  assert.equal(decide(set('clean.json'), v(PLAN('no-go', 'P2')), { subject: 'plan' }).verdict, 'no-go')
+  assert.equal(decide(set('clean.json'), v(PLAN('needs-owner', 'P4')), { subject: 'plan' }).plan.verdict, 'needs-owner')
+  assert.equal(decide(set('clean.json'), v(PLAN('go', 'P1')), { subject: 'plan' }).ok, false)
+  assert.match(renderComment(decide(set('clean.json'), v(PLAN('no-go', 'P3')), { subject: 'plan' }), { subject: 'plan' }), /Step list sent back/)
+})
+
+test('plan-wrong is a 4th ticket verdict and needs a Why', () => {
+  const wrong = fx('clean.verdict.md').replace(/(## Ticket #1\n### Verdict\n)go/, '$1plan-wrong')
+  assert.match(decide(set('clean.json'), wrong).errors.join(), /Why/)
+  const d = decide(set('clean.json'), wrong.replace(/(## Ticket #1\n[\s\S]*?)(\n## Ticket #2)/, '$1\n### Why\nstep 2 needs the table step 3 adds$2'))
+  assert.equal(d.ok, true)
+  assert.equal(d.tickets[0].verdict, 'plan-wrong')
+  assert.equal(d.verdict, 'plan-wrong')
+  assert.match(renderComment(d, { subject: '1' }), /step list looks wrong/)
+})
+
+test('the subject marker is written only for a subject review; the legacy marker stays', () => {
+  const d = decide(set('clean.json'), fx('clean.verdict.md'))
+  assert.doesNotMatch(renderComment(d), /ticket-review-subject/)
+  const one = decide([set('clean.json')[0]], fx('clean.verdict.md'))
+  const c = renderComment(one, { subject: '1' })
+  assert.match(c, /<!-- ticket-review-subject:1 -->/)
+  assert.match(c, /<!-- ticket-review-verdict:go -->/)
+})
+
+test('T4 (#4353): a Suggested title line is carried through and never changes the verdict or the rubric', () => {
+  const tickets = set('clean.json').map((t, i) => (i === 0 ? { ...t, title: 'velo: the bookings cancel route returns 404' } : t))
+  const base = decide(tickets, fx('clean.verdict.md'))
+  const withTitle = fx('clean.verdict.md').replace('## Ticket #1\n', '## Ticket #1\nSuggested title: Cancelling a booking works again\n')
+  const d = decide(tickets, withTitle)
+  assert.equal(d.ok, true, String(d.errors))
+  assert.equal(d.verdict, base.verdict)
+  assert.equal(d.tickets[0].verdict, 'go')
+  assert.deepEqual(d.tickets[0].items, base.tickets[0].items)
+  assert.equal(d.tickets[0].suggestedTitle, 'Cancelling a booking works again')
+  assert.equal(d.tickets[1].suggestedTitle, '')
+  assert.match(renderComment(d), /💡 Suggested title: Cancelling a booking works again/)
 })

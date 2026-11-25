@@ -27,17 +27,9 @@
 import { execFileSync } from 'node:child_process'
 import { readdirSync, existsSync, readFileSync, appendFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
+import { touchesPieces } from './gallery-links.mjs'
 
 export const ZERO_SHA = '0000000000000000000000000000000000000000'
-
-// #2140: the ONE carve-out from #1297's "PRs only deploy their own app" rule. A PR the pi
-// worker opened as a UI-sign-off hold (work-issue-pidev.yml, #1748) is never a fan-out — it's
-// exactly one known app, held specifically so a human can look at it — so it opts back into
-// the app's full watchPaths instead of the PR-restricted `apps/<app>/**`. Kept as a literal
-// HTML-comment marker (not a label) so no extra GitHub API call is needed: the PR body is
-// already on the `pull_request` event payload. Must match the marker work-issue-pidev.yml
-// appends to HOLD_NOTE — grep both on change.
-export const UI_SIGNOFF_MARKER = '<!-- deploy-preview: full-watch -->'
 
 export class DetectError extends Error {}
 
@@ -60,12 +52,12 @@ export function fileMatchesAny(file, patterns = []) {
  *
  * - workflow_dispatch: the single named app, at the requested env (only the explicit
  *   "production" choice reaches production; anything else → staging — the #318 whitelist).
- * - push / pull_request: STAGING only (#318). A pull_request deploys ONLY the app whose OWN
- *   paths (`apps/<app>/**`) changed (#1297 — a shared-package break is caught by the fixture
- *   smoke + the rung-2 push deploy, not a per-PR fan-out) — UNLESS the PR carries the
- *   UI_SIGNOFF_MARKER (#2140), in which case it matches the full watchPaths like a push does,
- *   so the app it needs sign-off on actually gets a live preview. A push always keeps the full
- *   watchPaths.
+ * - push / pull_request: STAGING only (#318). ONE rule for both: an app/POC is picked if the
+ *   change touches its own folder, `pnpm-lock.yaml`, or any `@fyit/*` package it uses directly or
+ *   transitively (its derived watchPaths, #2397). This reverses #1297's PR-only-own-folder rule
+ *   (#3475): a package PR now previews its consumers, so the preview and status cards match.
+ * - `workspace: 'pocs'` (deploy-pocs.yml): dispatch is always staging; a PR that touches a shared
+ *   UI piece also picks `gallery` (#2462).
  */
 function toEntry(a, environment) {
   return {
@@ -80,28 +72,28 @@ function toEntry(a, environment) {
 
 // workflow_dispatch → the single named app at the requested env (production only for the
 // explicit choice — the #318 whitelist).
-function dispatchInclude(dispatchApp, dispatchEnv, apps) {
+function dispatchInclude(dispatchApp, dispatchEnv, apps, workspace) {
   const a = apps.find(x => x.app === dispatchApp)
   if (!a) return []
-  return [toEntry(a, dispatchEnv === 'production' ? 'production' : 'staging')]
+  // POCs are staging-only; production is never reachable for them.
+  return [toEntry(a, workspace !== 'pocs' && dispatchEnv === 'production' ? 'production' : 'staging')]
 }
 
-// push / pull_request → STAGING only. A pull_request matches only the app's OWN paths (#1297),
-// unless it's a UI-sign-off hold (fullWatchPr, #2140) — then, like a push, it matches the full
-// watchPaths (incl. shared packages).
-function changeInclude(event, changedFiles, apps, fullWatchPr) {
+// push / pull_request → STAGING only. Same rule for both: match the derived watchPaths.
+function changeInclude(event, changedFiles, apps, workspace) {
   const include = []
+  const galleryPr = workspace === 'pocs' && event === 'pull_request' && touchesPieces(changedFiles)
   for (const a of apps) {
-    const patterns = (event === 'pull_request' && !fullWatchPr) ? [`apps/${a.app}/**`] : (a.watchPaths || [])
-    if (changedFiles.some(f => f && fileMatchesAny(f, patterns))) include.push(toEntry(a, 'staging'))
+    const hit = changedFiles.some(f => f && fileMatchesAny(f, a.watchPaths || []))
+    if (hit || (galleryPr && a.app === 'gallery')) include.push(toEntry(a, 'staging'))
   }
   return include
 }
 
-export function computeMatrix({ event, changedFiles = [], dispatchApp = '', dispatchEnv = '', apps = [], fullWatchPr = false }) {
+export function computeMatrix({ event, changedFiles = [], dispatchApp = '', dispatchEnv = '', apps = [], workspace = 'apps' }) {
   const include = event === 'workflow_dispatch'
-    ? dispatchInclude(dispatchApp, dispatchEnv, apps)
-    : changeInclude(event, changedFiles, apps, fullWatchPr)
+    ? dispatchInclude(dispatchApp, dispatchEnv, apps, workspace)
+    : changeInclude(event, changedFiles, apps, workspace)
   return { include, any: include.length > 0 }
 }
 
@@ -206,7 +198,7 @@ function realGit() {
  * consumes, so the watch list is: the app itself, the lockfile, one `packages/<pkg>/**` per
  * `@fyit/*` dependency (deps + devDeps), plus anything still listed explicitly. PURE.
  */
-export function deriveWatchPaths({ app, pkg = {}, explicit = [], readPkg = () => null }) {
+export function deriveWatchPaths({ app, root = 'apps', pkg = {}, explicit = [], readPkg = () => null }) {
   // Walk @fyit/* deps transitively: velo never lists crouton-auth itself, it comes in through
   // crouton-core, yet an auth change must still redeploy velo. `readPkg(name)` returns the
   // package.json of a workspace package (null if unknown); injected so the walk stays pure.
@@ -221,7 +213,7 @@ export function deriveWatchPaths({ app, pkg = {}, explicit = [], readPkg = () =>
   }
   visit(pkg)
   const fromDeps = [...seen].map(n => `packages/${n.slice('@fyit/'.length)}/**`)
-  const all = [`apps/${app}/**`, 'pnpm-lock.yaml', ...fromDeps, ...explicit.filter(Boolean)]
+  const all = [`${root}/${app}/**`, 'pnpm-lock.yaml', ...fromDeps, ...explicit.filter(Boolean)]
   return [...new Set(all)]
 }
 
@@ -250,6 +242,7 @@ export function loadApps(root = 'apps') {
       requireWorkerSecrets: cfg.secrets?.required ?? false,
       watchPaths: deriveWatchPaths({
         app: name,
+        root,
         pkg,
         explicit: Array.isArray(cfg.watchPaths) ? cfg.watchPaths : [],
         readPkg: n => readJson(`packages/${n.slice('@fyit/'.length)}/package.json`)
@@ -261,7 +254,8 @@ export function loadApps(root = 'apps') {
 
 function main() {
   const event = process.env.EVENT || ''
-  const apps = loadApps()
+  const workspace = process.env.WORKSPACE || 'apps'
+  const apps = loadApps(workspace)
 
   let changedFiles = []
   if (event !== 'workflow_dispatch') {
@@ -278,18 +272,11 @@ function main() {
     // only mean the diff failed to compute — fail loud instead of a silent green no-deploy.
     if (changedFiles.length === 0) {
       throw new DetectError(
-        `${event} triggered deploy-apps but the changed-file set is EMPTY — the diff failed to `
+        `${event} triggered deploy-${workspace === 'pocs' ? 'pocs' : 'apps'} but the changed-file set is EMPTY — the diff failed to `
         + `compute (see #1499). Refusing to report success with no deploy.`
       )
     }
   }
-
-  // #2140: a UI-sign-off-held PR (work-issue-pidev.yml) carries this marker in its body so it
-  // opts into the full watchPaths instead of the PR-restricted apps/<app>/** — see
-  // UI_SIGNOFF_MARKER above. github.event.pull_request.body is already on the event payload,
-  // so this needs no extra API call.
-  const fullWatchPr = event === 'pull_request' && (process.env.PR_BODY || '').includes(UI_SIGNOFF_MARKER)
-  if (fullWatchPr) console.log('UI sign-off hold marker found on the PR body — matching full watchPaths (#2140)')
 
   const { include, any } = computeMatrix({
     event,
@@ -297,7 +284,7 @@ function main() {
     dispatchApp: process.env.DISPATCH_APP || '',
     dispatchEnv: process.env.DISPATCH_ENV || '',
     apps,
-    fullWatchPr
+    workspace
   })
   const matrix = JSON.stringify({ include })
   const out = process.env.GITHUB_OUTPUT

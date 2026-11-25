@@ -203,9 +203,10 @@ export interface TeamsConfig {
   autoCreateOnSignup?: boolean
 
   /**
-   * Default team slug that all users join on signup
+   * Default team slug that every user joins — on sign-up and on every sign-in
    *
-   * When set, all new users are automatically added to this team.
+   * When set, users are added to this team when they sign up and whenever they
+   * sign in (accounts made before the setting included).
    * The team is auto-created on first boot if it doesn't exist.
    *
    * Use case: Company apps where everyone belongs to one team.
@@ -289,21 +290,14 @@ export interface TeamsConfig {
   defaultRole?: 'member' | 'admin'
 
   /**
-   * Available roles in the team
+   * Base role → crouton actions (#4104). Defaults: owner and admin get every
+   * action, member none. A role listed here replaces that role's default list;
+   * a role left out keeps its default. The owner must keep `team:manage`
+   * (startup fails otherwise).
+   *
+   * @example { member: ['pages:edit'] }
    */
-  roles?: TeamRole[]
-}
-
-/**
- * Team role definition
- */
-export interface TeamRole {
-  /** Role identifier */
-  id: string
-  /** Display name */
-  name: string
-  /** Role permissions */
-  permissions?: string[]
+  roles?: Partial<Record<'owner' | 'admin' | 'member', string[]>>
 }
 
 // ============================================================================
@@ -409,6 +403,20 @@ export interface SessionConfig {
  */
 export interface CroutonAuthConfig {
   /**
+   * Sign-in for Claude and other MCP apps (#4096)
+   *
+   * When `true`, the app becomes an OAuth 2.1 sign-in server for MCP clients
+   * (Better Auth `jwt()` + `mcp()`): discovery at `/.well-known/*`, open
+   * client registration (DCR, 10 per minute per IP), and a consent screen at
+   * `/auth/consent`. The access token is for `<baseURL>/mcp`, names the user
+   * and the agreed scopes, and carries no team. Off by default: every OAuth
+   * route answers 404.
+   *
+   * @default false
+   */
+  mcpOAuth?: boolean
+
+  /**
    * Application name
    *
    * Used for auto-created team names and display purposes.
@@ -416,6 +424,20 @@ export interface CroutonAuthConfig {
    * @example 'My Company App'
    */
   appName?: string
+
+  /**
+   * Who may create an account (#3340)
+   *
+   * - `'open'` (default) — anyone can sign up.
+   * - `'invite'` — only people with a pending invitation for their email can
+   *   create an account, on every path (email + password, magic link, OAuth
+   *   first sign-in). Enforced on the server in a `user.create.before` hook;
+   *   the UI also hides the "Create account" links. The site admin can still
+   *   create users (server-side `auth.api` calls are trusted).
+   *
+   * @default 'open'
+   */
+  signup?: 'open' | 'invite'
 
   /**
    * Authentication methods configuration

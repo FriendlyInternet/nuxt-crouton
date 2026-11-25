@@ -15,9 +15,9 @@ inputs:
     description: "CLAUDE_CODE_OAUTH_TOKEN — the long-lived token from `claude setup-token` (#2119). Composite actions can't read secrets; pass it in."
     required: true
   pi-version:
-    description: "@earendil-works/pi-coding-agent version. PINNED: the box ran a manifest-pinned pi; an unpinned CI pi changes the pipeline's behaviour with no diff in this repo. 1.3.0 verified with pi-claude-bridge 0.9.3 (needs pi ≥ 0.86.1): headless `--print` answers."
+    description: "@earendil-works/pi-coding-agent version. PINNED: the box ran a manifest-pinned pi; an unpinned CI pi changes the pipeline's behaviour with no diff in this repo. 1.5.0 verified with pi-claude-bridge 0.9.3 (needs pi ≥ 0.86.1): headless `--print` answers; complete-work nudge fires."
     required: false
-    default: "1.3.0"
+    default: "1.5.0"
   claude-version:
     description: "@anthropic-ai/claude-code version, pinned for the same reason."
     required: false

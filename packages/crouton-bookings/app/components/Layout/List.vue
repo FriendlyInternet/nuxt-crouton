@@ -2,7 +2,8 @@
 /**
  * CroutonBookingsLayoutList — the bookings LIST as a placeable, atomic layout
  * block (#924). Self-fetches team bookings via `useBookingsList` (shared
- * `useFetch` cache key ⇒ no duplicate network calls across blocks) and applies
+ * `useFetch` cache key + `dedupe: 'defer'` ⇒ one network call per key across
+ * blocks, #3789) and applies
  * the shared layout filter store, then renders `CroutonBookingsList`.
  *
  * Atomicity note (#924 gap report): the native Panel also feeds List a bundle of

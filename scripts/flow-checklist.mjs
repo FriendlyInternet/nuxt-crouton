@@ -3,21 +3,54 @@
 // The first unticked line is the answer to "where is this ticket?".
 //
 //   node scripts/flow-checklist.mjs <issue> <step> [--link URL] [--note TEXT]
+//   node scripts/flow-checklist.mjs <issue> [<step>] --verdict <plan|build> <go|no-go|needs-owner> --round N [--route R] [--link URL]
 //
 // State lives in the comment itself (a ticked line carries its note/link). Never touches the issue body.
-// Known limit: no per-issue concurrency group (the callers are 5 workflows with their own groups),
+// Known limit: no per-issue concurrency group (the callers are 6 workflows with their own groups),
 // so two ticks landing in the same second could lose one; steps are minutes apart in practice.
+// Plan review is one more caller: its verdict call runs BEFORE plan review starts the next worker
+// run, so it does not race that worker's "routed" tick. There is still no retry loop.
 import { pathToFileURL } from 'node:url'
 import { execFileSync } from 'node:child_process'
+import { mockupState } from './lib/signoff-route.mjs'
 
 export const STEPS = [
   ['routed', 'Routed'],
-  ['plan', 'Plan + mockup posted'],
+  ['plan', 'Plan posted'],
   ['ok', 'Owner ok'],
   ['pr', 'Build PR opened'],
   ['review', 'Build review'],
   ['merged', 'Merged']
 ]
+
+/** Labels an older checklist used for a step; parse() still reads them so old ticks survive (#4524). */
+const LEGACY_LABELS = { plan: ['Plan + mockup posted'] }
+
+/** The Mockup line is never ticked by hand: it is worked out from the thread (`mockupState`, #4524). */
+export const MOCKUP_LINES = {
+  posted: '- [x] Mockup posted',
+  missing: '- [ ] Mockup posted',
+  waived: '- [x] Mockup skipped — owner ok to build without one'
+}
+
+export const REVIEWS = [['plan', 'Plan review'], ['build', 'Build review']]
+export const VERDICTS = ['go', 'no-go', 'needs-owner']
+
+/** True when this verdict hands the ticket to the owner. Mirrors build-review.yml (`[ "$ROUND" -ge 2 ]`)
+ *  and on-comment.yml's plan-review job (`ROUTE = hold`). */
+export function sentToOwner(kind, verdict, round, route) {
+  if (verdict === 'needs-owner') return true
+  if (kind === 'build' && verdict === 'no-go' && Number(round) >= 2) return true
+  return kind === 'plan' && verdict === 'no-go' && route === 'hold'
+}
+
+export function reviewLine(kind, verdict, round, { route, link } = {}) {
+  const r = REVIEWS.find(([k]) => k === kind)
+  if (!r) throw new Error(`unknown review kind "${kind}"`)
+  if (!VERDICTS.includes(verdict)) throw new Error(`unknown verdict "${verdict}"`)
+  if (!/^\d+$/.test(String(round))) throw new Error(`bad round "${round}"`)
+  return `- ${r[1]} — ${verdict} (round ${round})${sentToOwner(kind, verdict, round, route) ? ' · sent to you' : ''}${link ? ` · ${link}` : ''}`
+}
 
 /** The issue a PR closes, from its body's leading "Closes #N" line (the pipeline's contract). */
 export function issueFromPrBody(body = '') {
@@ -31,23 +64,41 @@ export const marker = issue => `<!-- flow-checklist:${issue} -->`
 export function parse(body = '') {
   const state = {}
   for (const [key, label] of STEPS) {
-    const m = body.match(new RegExp(`^- \\[x\\] ${label.replace(/[+]/g, "\\$&")}(?: — (.*))?$`, 'm'))
-    if (m) state[key] = m[1] || ''
+    for (const l of [label, ...(LEGACY_LABELS[key] || [])]) {
+      const m = body.match(new RegExp(`^- \\[x\\] ${l.replace(/[+]/g, "\\$&")}(?: — (.*))?$`, 'm'))
+      if (m) { state[key] = m[1] || ''; break }
+    }
   }
+  const reviews = {}
+  for (const [kind, label] of REVIEWS) {
+    const m = body.match(new RegExp(`^- ${label} — .*$`, 'm'))
+    if (m) reviews[kind] = m[0]
+  }
+  if (Object.keys(reviews).length) state.reviews = reviews
   return state
 }
 
-export function render(issue, state) {
-  const lines = STEPS.map(([key, label]) =>
-    key in state ? `- [x] ${label}${state[key] ? ` — ${state[key]}` : ''}` : `- [ ] ${label}`)
-  return [marker(issue), '> 🤖 **pi.dev harness** · ticket flow · _edited in place_', '', ...lines].join('\n')
+export function render(issue, state, { mockup = 'none' } = {}) {
+  const lines = STEPS.flatMap(([key, label]) => {
+    const line = key in state ? `- [x] ${label}${state[key] ? ` — ${state[key]}` : ''}` : `- [ ] ${label}`
+    return key === 'plan' && MOCKUP_LINES[mockup] ? [line, MOCKUP_LINES[mockup]] : [line]
+  })
+  const rev = REVIEWS.map(([k]) => state.reviews?.[k]).filter(Boolean)
+  const block = rev.length ? ['**Latest reviews**', ...rev, ''] : []
+  return [marker(issue), '> 🤖 **pi.dev harness** · ticket flow · _edited in place_', '', ...block, ...lines].join('\n')
 }
 
-export function tick(body, issue, step, { link, note } = {}) {
+export function review(body, issue, kind, verdict, round, { route, link, mockup } = {}) {
+  const state = parse(body)
+  state.reviews = { ...state.reviews, [kind]: reviewLine(kind, verdict, round, { route, link }) }
+  return render(issue, state, { mockup })
+}
+
+export function tick(body, issue, step, { link, note, mockup } = {}) {
   if (!STEPS.some(([k]) => k === step)) throw new Error(`unknown step "${step}"`)
   const state = parse(body)
   state[step] = [note, link].filter(Boolean).join(' · ')
-  return render(issue, state)
+  return render(issue, state, { mockup })
 }
 
 function gh(args, input) {
@@ -55,22 +106,39 @@ function gh(args, input) {
 }
 
 /** Find-or-create then edit the ticket's single comment. `run` is injectable for tests. */
-export function apply({ repo, issue, step, link, note, run = gh }) {
+export function apply({ repo, issue, step, link, note, verdict, createIfMissing = true, run = gh }) {
+  if (!step && !verdict) throw new Error('apply needs a step or a verdict')
   const comments = JSON.parse(run(['api', `repos/${repo}/issues/${issue}/comments?per_page=100`, '--paginate', '--slurp'])).flat()
   // Only our own bot comments count: the marker must open the body.
   const existing = comments.find(c => (c.body || '').startsWith(marker(issue)) && (!c.user || c.user.type === 'Bot'))
-  const body = tick(existing?.body || '', issue, step, { link, note })
+  if (!existing && !createIfMissing) { console.error(`no checklist comment on #${issue}; skip`); return 'skipped' }
+  // The Mockup line comes from the live thread on every edit; any error → no line (#4524).
+  let mockup = 'none'
+  try {
+    const iss = JSON.parse(run(['api', `repos/${repo}/issues/${issue}`]))
+    mockup = mockupState({ text: `${iss.title || ''}\n${iss.body || ''}`, comments })
+  } catch { mockup = 'none' }
+  let body = existing?.body || ''
+  if (step) body = tick(body, issue, step, { link, note, mockup })
+  if (verdict) body = review(body, issue, verdict.kind, verdict.verdict, verdict.round, { route: verdict.route, link, mockup })
   if (existing) run(['api', '-X', 'PATCH', `repos/${repo}/issues/comments/${existing.id}`, '-F', 'body=@-'], body)
   else run(['api', `repos/${repo}/issues/${issue}/comments`, '-F', 'body=@-'], body)
   return existing ? 'edited' : 'created'
 }
 
 function main() {
-  const [issue, step, ...rest] = process.argv.slice(2)
+  const [issue, ...args] = process.argv.slice(2)
+  const step = args[0] && !args[0].startsWith('--') ? args[0] : undefined
+  const rest = step ? args.slice(1) : args
   const opt = n => { const i = rest.indexOf(`--${n}`); return i >= 0 ? rest[i + 1] : undefined }
-  if (!issue || !step) { console.error('usage: flow-checklist.mjs <issue> <step> [--link U] [--note T]'); process.exit(2) }
-  apply({ repo: process.env.GITHUB_REPOSITORY, issue, step, link: opt('link'), note: opt('note') })
-  console.log(`flow-checklist: ticked "${step}" on #${issue}`)
+  const vi = rest.indexOf('--verdict')
+  if (!issue || (!step && vi < 0)) {
+    console.error('usage: flow-checklist.mjs <issue> [<step>] [--link U] [--note T] [--verdict <plan|build> <verdict> --round N [--route R]]')
+    process.exit(2)
+  }
+  const verdict = vi >= 0 ? { kind: rest[vi + 1], verdict: rest[vi + 2], round: opt('round'), route: opt('route') } : undefined
+  const out = apply({ repo: process.env.GITHUB_REPOSITORY, issue, step, link: opt('link'), note: opt('note'), verdict, createIfMissing: !!step })
+  console.log(`flow-checklist: ${out === 'skipped' ? 'skipped' : `${step ? `ticked "${step}"` : ''}${step && verdict ? ' + ' : ''}${verdict ? `verdict ${verdict.kind} ${verdict.verdict}` : ''}`} on #${issue}`)
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) main()

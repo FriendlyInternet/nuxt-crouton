@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1795096922530,
+      "tag": "0000_last_risque",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1795096922531,
+      "tag": "0001_verify_existing_users",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1795541845395,
+      "tag": "0002_absent_wallop",
+      "breakpoints": true
+    }
+  ]
+}

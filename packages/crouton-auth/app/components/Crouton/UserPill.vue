@@ -38,7 +38,9 @@ const props = withDefaults(defineProps<Props>(), {
 const { t } = useT()
 const route = useRoute()
 const { user, userInitials, dropdownItems, preferenceItems } = useUserMenuItems({ useModal: props.useModal })
-const { currentTeam, currentRole, isAdmin } = useTeam()
+const { currentTeam, currentRole } = useTeam()
+// "See all" activity opens the activity page: `activity:view` (#4105); browser-only (cached public pages)
+const canViewActivity = useCan('activity:view', { server: false })
 const { current, recent, unread, markAllSeen, dismiss, refreshTeamEvents } = useCroutonStatus()
 const { hasApp } = useCroutonApps()
 const { teamSlug } = useTeamContext()
@@ -135,32 +137,36 @@ const menuItems = computed<DropdownMenuItem[][]>(() => {
     type: 'label'
   } as DropdownMenuItem]
 
-  const recentGroup: DropdownMenuItem[] = props.showStatus && recent.value.length
-    ? [
-        { label: t('userPill.recent'), type: 'label' },
-        ...recent.value.map(m => ({
-          label: m.text,
-          icon: m.icon,
-          description: m.description ? `${m.description} · ${timeAgo(m.timestamp)}` : timeAgo(m.timestamp),
-          class: TYPE_ICON_COLOR[m.type],
-          onSelect: (e: Event) => e.preventDefault()
-        } as DropdownMenuItem))
-      ]
+  const recentEntries: DropdownMenuItem[] = props.showStatus
+    ? recent.value.map(m => ({
+        label: m.text,
+        icon: m.icon,
+        description: m.description ? `${m.description} · ${timeAgo(m.timestamp)}` : timeAgo(m.timestamp),
+        class: TYPE_ICON_COLOR[m.type],
+        onSelect: (e: Event) => e.preventDefault()
+      } as DropdownMenuItem))
     : []
 
-  const seeAllGroup: DropdownMenuItem[] = hasApp('events') && teamSlug.value && isAdmin.value
-    ? [{ label: t('userPill.seeAll'), icon: 'i-lucide-history', to: `/admin/${teamSlug.value}/activity` } as DropdownMenuItem]
-    : []
+  const seeAll: DropdownMenuItem | null = hasApp('events') && teamSlug.value && canViewActivity.value
+    ? { label: t('userPill.seeAll'), icon: 'i-lucide-list', to: `/admin/${teamSlug.value}/activity` } as DropdownMenuItem
+    : null
+
+  // Recent entries + "See all" live in one slide-out, like "Langue" (#3986)
+  const recentItem = buildRecentMenuItem({ label: t('userPill.recent'), entries: recentEntries, seeAll })
 
   // First group of dropdownItems is the user header — replaced by ours above
   const [, ...rest] = dropdownItems.value
   const withExtras = props.extraItems.length ? [rest[0] ?? [], props.extraItems, ...rest.slice(1)] : rest
-  return [header, ...(recentGroup.length ? [recentGroup] : []), ...(seeAllGroup.length ? [seeAllGroup] : []), ...withExtras]
+  return [header, ...(recentItem ? [[recentItem]] : []), ...withExtras]
 })
+
+// Opening marks everything seen, so the in-menu badge shows the count from just before opening
+const unreadAtOpen = ref(0)
 
 function onOpenChange(open: boolean) {
   if (!open) return
   refreshTeamEvents()
+  unreadAtOpen.value = unread.value
   markAllSeen()
   if (current.value?.type === 'error') dismiss(current.value.id)
 }
@@ -228,6 +234,16 @@ function retry() {
         :ui="{ content: 'w-72 sm:w-80' }"
         @update:open="onOpenChange"
       >
+        <template #recent-trailing>
+          <UBadge
+            v-if="unreadAtOpen > 0"
+            :label="String(unreadAtOpen)"
+            color="warning"
+            variant="subtle"
+            size="sm"
+          />
+          <UIcon name="i-lucide-chevron-right" class="size-5 shrink-0 text-dimmed" />
+        </template>
         <button
           type="button"
           data-testid="user-pill"

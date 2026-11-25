@@ -17,12 +17,16 @@
     "eruda",
     "src/runtime/pages",
     "src/runtime/client",
-    "README.md"
+    "README.md",
+    "docs/llms.txt"
   ],
   "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "build": "unbuild",
     "dev": "unbuild --stub",
-    "prepack": "pnpm build"
+    "prepack": "pnpm build",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "keywords": [
     "nuxt",
@@ -59,7 +63,7 @@
     "unbuild": "^3.6.1"
   },
   "peerDependencies": {
-    "@fyit/crouton-core": "workspace:*",
+    "@fyit/crouton-core": "workspace:0.x",
     "nuxt": "^4.0.0"
   }
 }

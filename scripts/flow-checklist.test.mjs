@@ -6,7 +6,7 @@ test('first tick creates the checklist with marker', () => {
   const b = tick('', 7, 'routed', { note: 'plan', link: 'http://x' })
   assert.ok(b.includes(marker(7)))
   assert.match(b, /- \[x\] Routed — plan · http:\/\/x/)
-  assert.match(b, /- \[ \] Plan \+ mockup posted/)
+  assert.match(b, /- \[ \] Plan posted/)
 })
 
 test('second tick edits state, keeps earlier ticks', () => {
@@ -50,14 +50,16 @@ test('issueFromPrBody reads the Closes line', () => {
 })
 
 // Wiring: each step is ticked from the workflow that owns its event (#3210).
-const wf = f => readFileSync(new URL(`../.github/workflows/${f}`, import.meta.url), 'utf8')
+// automerge's merge call (and its tick) moved into scripts/lib/v1-merge-io.mjs (#3501).
+const wf = f => readFileSync(new URL(f.endsWith('.mjs') ? `./lib/${f}` : `../.github/workflows/${f}`, import.meta.url), 'utf8')
 for (const [file, step] of [
   ['work-issue-pidev.yml', 'routed'],
   ['work-issue-pidev.yml', 'plan'],
   ['on-comment.yml', 'ok'],
   ['work-issue-pidev.yml', 'pr'],
   ['build-review.yml', 'review'],
-  ['automerge-epic-subpr.yml', 'merged']
+  ['automerge-epic-subpr.yml', 'merged'],
+  ['v1-merge-io.mjs', 'merged']
 ]) {
   test(`${file} ticks "${step}"`, () => {
     assert.match(wf(file), new RegExp(`flow-checklist\\.mjs[^\\n]*(\\n[^\\n]*)?[ "']${step}\\b`))
@@ -66,7 +68,7 @@ for (const [file, step] of [
 
 // The rule itself: one comment per ticket, edited in place (#3210).
 import { apply } from './flow-checklist.mjs'
-function fakeGh(initial = []) {
+function fakeGh(initial = [], issue = { title: 't', body: '' }) {
   const comments = [...initial], calls = []
   const run = (args, input) => {
     calls.push(args)
@@ -74,6 +76,7 @@ function fakeGh(initial = []) {
       const id = Number(args[3].split('/').pop()); comments.find(c => c.id === id).body = input; return ''
     }
     if (args[1].includes('?per_page')) return JSON.stringify([comments])
+    if (args.length === 2 && /^repos\/[^/]+\/[^/]+\/issues\/\d+$/.test(args[1])) return JSON.stringify(issue)
     comments.push({ id: comments.length + 1, body: input, user: { type: 'Bot' } }); return ''
   }
   return { run, comments, calls }
@@ -100,8 +103,136 @@ test('run-name carries the issue number', () => {
 })
 
 test('"Owner ok" is ticked only from a real owner approval, never the plan:approved label (#3210)', () => {
-  const wf = f => readFileSync(new URL(`../.github/workflows/${f}`, import.meta.url), 'utf8')
+  // automerge's merge call (and its tick) moved into scripts/lib/v1-merge-io.mjs (#3501).
+const wf = f => readFileSync(new URL(f.endsWith('.mjs') ? `./lib/${f}` : `../.github/workflows/${f}`, import.meta.url), 'utf8')
   assert.ok(!/flow-checklist\.mjs[^\n]*\bok\b/.test(wf('label-router.yml')), 'label-router.yml must not tick ok')
   const oc = wf('on-comment.yml')
   assert.ok(oc.indexOf("'ok', '--link'") > oc.indexOf('isApproval(body)'), 'ok tick sits after the isApproval check')
+})
+
+// ── review verdicts in the checklist (#3565) ──
+import { review, reviewLine, sentToOwner } from './flow-checklist.mjs'
+import { spawnSync } from 'node:child_process'
+
+const TODAY_EMPTY = '<!-- flow-checklist:7 -->\n> 🤖 **pi.dev harness** · ticket flow · _edited in place_\n\n- [ ] Routed\n- [ ] Plan posted\n- [ ] Owner ok\n- [ ] Build PR opened\n- [ ] Build review\n- [ ] Merged'
+
+test('no verdict → output byte-identical to today', () => {
+  assert.equal(render(7, {}), TODAY_EMPTY)
+  assert.equal(tick('', 7, 'routed', { note: 'plan', link: 'http://x' }), TODAY_EMPTY.replace('- [ ] Routed', '- [x] Routed — plan · http://x'))
+})
+
+test('plan verdict then build verdict → both lines', () => {
+  const b = review(review('', 7, 'plan', 'go', 1, { link: 'L1' }), 7, 'build', 'no-go', 2, { link: 'L2' })
+  assert.ok(b.includes('**Latest reviews**\n- Plan review — go (round 1) · L1\n- Build review — no-go (round 2) · sent to you · L2\n\n- [ ] Routed'))
+})
+
+test('newer build verdict replaces older, plan line kept', () => {
+  let b = review('', 7, 'plan', 'go', 1)
+  b = review(b, 7, 'build', 'no-go', 1)
+  b = review(b, 7, 'build', 'go', 2)
+  assert.equal(b.match(/^- Build review — .*$/gm).length, 1)
+  assert.match(b, /^- Build review — go \(round 2\)$/m)
+  assert.match(b, /^- Plan review — go \(round 1\)$/m)
+})
+
+test('parse(render(x)) round-trips steps and verdicts', () => {
+  let b = tick('', 7, 'routed', { note: 'plan' })
+  b = review(b, 7, 'plan', 'go', 1, { link: 'P' })
+  b = review(tick(b, 7, 'review', { note: 'x' }), 7, 'build', 'needs-owner', 1)
+  assert.deepEqual(parse(render(7, parse(b))), parse(b))
+  assert.equal(render(7, parse(b)), b)
+})
+
+test('sentToOwner table', () => {
+  for (const a of [['build', 'needs-owner', 1], ['build', 'no-go', 2], ['plan', 'needs-owner', 1], ['plan', 'no-go', 1, 'hold']]) assert.equal(sentToOwner(...a), true, a.join())
+  for (const a of [['build', 'go', 2], ['build', 'no-go', 1], ['plan', 'go', 1], ['plan', 'no-go', 1, 'retry'], ['plan', 'no-go', 1]]) assert.equal(sentToOwner(...a), false, a.join())
+  assert.throws(() => reviewLine('x', 'go', 1))
+  assert.throws(() => reviewLine('plan', 'maybe', 1))
+  assert.throws(() => reviewLine('plan', 'go', 'a'))
+})
+
+test('verdict-only call with no checklist comment creates nothing', () => {
+  const g = fakeGh()
+  assert.equal(apply({ repo: 'o/r', issue: 5, verdict: { kind: 'plan', verdict: 'go', round: 1 }, createIfMissing: false, run: g.run }), 'skipped')
+  assert.equal(g.comments.length, 0)
+  assert.equal(g.calls.length, 1)
+})
+
+test('verdict-only call edits the existing comment, ticks + links untouched', () => {
+  const g = fakeGh()
+  apply({ repo: 'o/r', issue: 5, step: 'routed', link: 'http://r', run: g.run })
+  apply({ repo: 'o/r', issue: 5, step: 'plan', link: 'http://p', run: g.run })
+  assert.equal(apply({ repo: 'o/r', issue: 5, verdict: { kind: 'plan', verdict: 'go', round: 1 }, createIfMissing: false, run: g.run }), 'edited')
+  assert.equal(g.comments.length, 1)
+  assert.match(g.comments[0].body, /^- \[x\] Routed — http:\/\/r$/m)
+  assert.match(g.comments[0].body, /^- \[x\] Plan posted — http:\/\/p$/m)
+  assert.match(g.comments[0].body, /\*\*Latest reviews\*\*/)
+})
+
+test('later ticks keep the reviews block', () => {
+  const b = review('', 7, 'build', 'go', 1, { link: 'L' })
+  const slice = s => s.slice(s.indexOf('**Latest reviews**'), s.indexOf('- [')) 
+  const b2 = tick(tick(b, 7, 'pr', { link: 'P' }), 7, 'merged', {})
+  assert.equal(slice(b2), slice(b))
+})
+
+test('on-comment.yml plan-review job makes a verdict-only call before the case', () => {
+  // The plan review was folded into on-comment.yml (#3313); read only its job, not the whole file.
+  const all = wf('on-comment.yml')
+  const w = all.slice(all.indexOf('\n  plan-review:\n'), all.indexOf('\n  plan-review-outcome:\n'))
+  assert.ok(w.length > 100, 'plan-review job not found in on-comment.yml')
+  assert.match(w, /flow-checklist\.mjs "\$ISSUE" --verdict plan /)
+  assert.ok(w.indexOf('flow-checklist.mjs "$ISSUE" --verdict plan') < w.indexOf('case "$VERDICT" in'))
+})
+
+test('build-review.yml passes --verdict build on the review tick line', () => {
+  assert.match(wf('build-review.yml'), /flow-checklist\.mjs" "\$ISSUE" review [^\n]*--verdict build/)
+})
+
+test('CLI with no step and no --verdict exits 2', () => {
+  assert.equal(spawnSync('node', ['scripts/flow-checklist.mjs', '5']).status, 2)
+})
+
+// covers: T3 — the checklist never claims a mockup that was not posted (#4524).
+import { SIGNOFF_MARKER, HOLD_HEADING, MOCKUP_MISSING_QUESTION } from './lib/signoff-route.mjs'
+const ASKS = { title: 'Redesign the card', body: '**Mockup first** (owner rule for visual changes) … Stop for `ok`.' }
+const PLAN_C = { id: 90, body: '<!-- pipeline-plan:v1 -->\n### Reproduced', user: { type: 'Bot' } }
+const HOLD_C = { id: 91, body: `${SIGNOFF_MARKER}\n> 🤖 gate\n\n${HOLD_HEADING}\n\nfork`, user: { type: 'Bot' } }
+
+test('T3 rule: a mockup-asking ticket with a plan and no hold shows Plan ticked and Mockup NOT ticked', () => {
+  const g = fakeGh([PLAN_C], ASKS)
+  apply({ repo: 'o/r', issue: 5, step: 'routed', run: g.run })
+  apply({ repo: 'o/r', issue: 5, step: 'plan', link: 'http://p', run: g.run })
+  const body = g.comments.find(c => c.body.startsWith(marker(5))).body
+  assert.match(body, /^- \[x\] Plan posted — http:\/\/p\n- \[ \] Mockup posted$/m)
+  assert.doesNotMatch(body, /\[x\] Mockup/)
+})
+
+test('T3: with a design-hold comment the Mockup line is ticked', () => {
+  const g = fakeGh([HOLD_C, PLAN_C], ASKS)
+  apply({ repo: 'o/r', issue: 5, step: 'plan', run: g.run })
+  assert.match(g.comments.at(-1).body, /^- \[x\] Plan posted\n- \[x\] Mockup posted$/m)
+})
+
+test('T3: an owner ok to build without the mockup shows as skipped', () => {
+  const waived = { ...ASKS, body: `${ASKS.body}\n\n## Decisions\n- 2026-11-25 — owner answered yes (\`ok\`) to the plan review's question: "${MOCKUP_MISSING_QUESTION}"` }
+  const g = fakeGh([PLAN_C], waived)
+  apply({ repo: 'o/r', issue: 5, step: 'plan', run: g.run })
+  assert.match(g.comments.at(-1).body, /^- \[x\] Mockup skipped — owner ok to build without one$/m)
+})
+
+test('T3: a ticket that asks for no mockup has no Mockup line; a failed issue read adds none either', () => {
+  const g = fakeGh([PLAN_C], { title: 'Fix a bug', body: 'nothing visual' })
+  apply({ repo: 'o/r', issue: 5, step: 'plan', run: g.run })
+  assert.doesNotMatch(g.comments.at(-1).body, /Mockup/)
+  const broken = fakeGh([PLAN_C], ASKS)
+  const run = (args, input) => (args.length === 2 && /issues\/5$/.test(args[1]) ? 'not json' : broken.run(args, input))
+  apply({ repo: 'o/r', issue: 5, step: 'plan', run })
+  assert.doesNotMatch(broken.comments.at(-1).body, /Mockup/)
+})
+
+test('T3: an old checklist ticked "Plan + mockup posted" keeps its plan tick', () => {
+  const old = TODAY_EMPTY.replace('- [ ] Plan posted', '- [x] Plan + mockup posted — http://p')
+  assert.equal(parse(old).plan, 'http://p')
+  assert.match(tick(old, 7, 'ok', {}), /^- \[x\] Plan posted — http:\/\/p$/m)
 })

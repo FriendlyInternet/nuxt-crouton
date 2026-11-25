@@ -79,10 +79,10 @@ export async function useCollectionQuery(
   collection: string,
   options: CollectionQueryOptions = {}
 ): Promise<CollectionQueryReturn<any>> {
-  const route = useRoute()
   const collections = useCollections()
   const config = collections.getConfig(collection)
-  const { getTeamId } = useTeamContext()
+  // Cache key and team come from the one builder, resolved once at setup (#4506)
+  const { teamPart, isSuperAdmin, listKey } = useCollectionCacheKeys(collection)
 
   if (!config) {
     console.error(`[useCollectionQuery] Collection "${collection}" not found in registry`)
@@ -111,31 +111,25 @@ export async function useCollectionQuery(
   }))
   const queryForFetch = paginationEnabled ? effectiveQuery : options.query
 
-  // Generate cache key based on collection + query params
-  const cacheKey = computed(() => {
-    const queryStr = queryForFetch?.value
-      ? JSON.stringify(queryForFetch.value)
-      : '{}'
-    return `collection:${collection}:${queryStr}`
-  })
+  // Cache key: collection + team + query params
+  const cacheKey = computed(() => listKey(queryForFetch?.value))
 
   // Determine the full API path based on route context
   const fullApiPath = computed(() => {
-    if (route.path.includes('/super-admin/')) {
+    if (isSuperAdmin.value) {
       return `/api/super-admin/${apiPath}`
     }
 
-    const teamId = getTeamId()
-    if (!teamId) {
+    if (!teamPart.value) {
       // Team context not yet available (SSR or before auth loads)
       // Return null to skip the fetch - client will retry when context is available
       return null
     }
 
-    return `/api/teams/${teamId}/${apiPath}`
+    return `/api/teams/${teamPart.value}/${apiPath}`
   })
 
-  // Track if we should skip fetching (no team context yet)
+  // Skip fetching while there is no team context yet
   const shouldSkip = computed(() => fullApiPath.value === null)
 
   // Build watch array - watch query if provided, and also watch fullApiPath for team context changes
@@ -143,40 +137,31 @@ export async function useCollectionQuery(
     ? [queryForFetch, fullApiPath]
     : [fullApiPath]
 
-  // Local state for when we skip fetching
-  const localData = ref<any>(null)
-  const localPending = ref(false)
-  const localError = ref<any>(null)
-
   // Forward the browser's auth cookie during SSR so team-scoped endpoints
   // see the user's better-auth session. On the client this is undefined.
   const requestHeaders = import.meta.server ? useRequestHeaders(['cookie']) : undefined
 
-  // Re-fetch when a remote client changed this collection (registered before the await)
-  useRemoteCollectionRefresh(collection, () => refresh())
+  // Re-fetch when a remote client changed this collection (registered before the await;
+  // a change arriving while the first load is pending is a no-op — that load returns fresh data)
+  let refreshOnRemote: (() => Promise<void>) | undefined
+  useRemoteCollectionRefresh(collection, () => refreshOnRemote?.())
 
   // Use Nuxt's useFetch with proper caching
   // Skip fetching if no team context (will re-fetch when context becomes available)
   const fetchOptions: UseFetchOptions<any> = {
-    key: cacheKey.value,
+    key: cacheKey,
     query: queryForFetch,
     watch: watchArray,
-    immediate: !shouldSkip.value,
+    // Nuxt 4.5+: no request (initial, watch or refresh) while there is no team
+    enabled: () => !shouldSkip.value,
     headers: requestHeaders
   }
 
-  const { data, refresh: doRefresh, pending, error } = await useFetch(
-    () => fullApiPath.value || '/api/__skip__',
+  const { data, refresh, pending, error } = await useFetch(
+    () => fullApiPath.value ?? '',
     fetchOptions
   )
-
-  // Custom refresh that checks team context
-  const refresh = async () => {
-    if (shouldSkip.value) {
-      return // Can't refresh without team context
-    }
-    await doRefresh()
-  }
+  refreshOnRemote = refresh
 
   // Return normalized data structure
   // Handle both array responses and paginated responses

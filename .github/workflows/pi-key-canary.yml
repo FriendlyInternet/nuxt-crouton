@@ -17,9 +17,15 @@ name: Provider key canary
 # the issue + email, not a red run (mirrors the digests' degrade-to-green philosophy).
 
 on:
-  schedule:
-    - cron: '0 7 * * *' # daily 07:00 UTC — a cheap heads-up before the working day
-  workflow_dispatch: {} # run on demand to verify a fresh top-up landed
+  # timer: the status app's clock (pocs/status/server/utils/clock-jobs.ts) — daily 07:00 UTC, a
+  # cheap heads-up before the working day
+  # Also run on demand to verify a fresh top-up landed.
+  workflow_dispatch:
+    inputs:
+      clock:
+        description: "started by the status app's clock: behave as the timed run"
+        type: boolean
+        default: false
 
 permissions:
   contents: read

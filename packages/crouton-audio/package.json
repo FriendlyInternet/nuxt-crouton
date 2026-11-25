@@ -1,9 +1,15 @@
 {
   "name": "@fyit/crouton-audio",
   "version": "0.1.0",
+  "scripts": {
+    "typecheck": "nuxt typecheck"
+  },
   "description": "Audio player layer for Crouton with waveform visualization (wraps WaveSurfer.js)",
   "type": "module",
   "main": "./nuxt.config.ts",
+  "scripts": {
+    "typecheck": "nuxt prepare && vue-tsc -b tsconfig.typecheck.json --noEmit"
+  },
   "files": [
     "app",
     "nuxt.config.ts",
@@ -35,7 +41,7 @@
     "wavesurfer.js": "^7.12.2"
   },
   "peerDependencies": {
-    "@fyit/crouton-core": "workspace:*",
+    "@fyit/crouton-core": "workspace:0.x",
     "@nuxt/icon": "^1.0.0",
     "@nuxt/ui": "^4.3.0",
     "nuxt": "^4.0.0"

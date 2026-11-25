@@ -28,6 +28,27 @@ export function generateUserColor(userId: string): string {
 }
 
 /**
+ * Normalise a colour to `#rrggbb` — the only format TipTap's collaboration caret
+ * (y-tiptap) accepts. Passes `#rrggbb` through, converts `hsl(h, s%, l%)` (what
+ * `generateUserColor` returns), and falls back to a neutral grey for anything else.
+ */
+export function toHexColor(color: string): string {
+  if (/^#[0-9a-fA-F]{6}$/.test(color)) return color
+  const m = color.match(/^hsla?\(\s*([\d.]+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%/i)
+  if (!m) return '#6b7280'
+  const h = Number(m[1]) % 360
+  const s = Math.min(Number(m[2]), 100) / 100
+  const l = Math.min(Number(m[3]), 100) / 100
+  const a = s * Math.min(l, 1 - l)
+  const channel = (n: number) => {
+    const k = (n + h / 30) % 12
+    const v = l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))
+    return Math.round(v * 255).toString(16).padStart(2, '0')
+  }
+  return `#${channel(0)}${channel(8)}${channel(4)}`
+}
+
+/**
  * Get readable text color based on background luminance.
  * Accepts #rrggbb or hsl(h, s%, l%). Returns dark text for light backgrounds, white otherwise.
  */

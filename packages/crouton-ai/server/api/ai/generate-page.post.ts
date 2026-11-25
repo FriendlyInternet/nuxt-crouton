@@ -1,4 +1,5 @@
 import { generateText } from 'ai'
+import { fetchReferencePage } from '../../utils/fetch-reference-page'
 
 function buildSystemPrompt(language?: string): string {
   const languageInstruction = language
@@ -69,21 +70,6 @@ Return ONLY a valid JSON object — no markdown fences, no explanation, nothing 
 - seoDescription: should summarise the page value proposition clearly`
 }
 
-// Block private/internal addresses to prevent SSRF
-function isBlockedUrl(url: URL): boolean {
-  const host = url.hostname.toLowerCase()
-  return (
-    host === 'localhost'
-    || host.startsWith('127.')
-    || host.startsWith('10.')
-    || host.startsWith('192.168.')
-    || host.startsWith('172.')
-    || host === '0.0.0.0'
-    || host.endsWith('.local')
-    || host.endsWith('.internal')
-  )
-}
-
 // Extract meaningful text from HTML without external dependencies
 function extractPageContent(html: string): string {
   let clean = html
@@ -119,21 +105,8 @@ function extractPageContent(html: string): string {
 }
 
 async function fetchPageContent(url: string): Promise<string | null> {
-  try {
-    const parsed = new URL(url)
-    if (!['http:', 'https:'].includes(parsed.protocol)) return null
-    if (isBlockedUrl(parsed)) return null
-
-    const response = await fetch(parsed.href, {
-      signal: AbortSignal.timeout(8000),
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; CroutonBot/1.0)' }
-    })
-    if (!response.ok) return null
-    return extractPageContent(await response.text())
-  }
-  catch {
-    return null
-  }
+  const html = await fetchReferencePage(url)
+  return html === null ? null : extractPageContent(html)
 }
 
 export default defineEventHandler(async (event) => {

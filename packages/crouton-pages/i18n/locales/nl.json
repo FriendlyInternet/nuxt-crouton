@@ -1,4 +1,7 @@
 {
+  "permissions": {
+    "pagesEdit": "Pagina's bewerken"
+  },
   "pages": {
     "title": "Pagina's",
     "search": "Zoek pagina's...",

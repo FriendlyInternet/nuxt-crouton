@@ -130,16 +130,16 @@ export async function updateSalesLocation(
   teamId: string,
   userId: string,
   updates: Partial<SalesLocation>,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(tables.salesLocations.id, recordId),
     eq(tables.salesLocations.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(tables.salesLocations.owner, userId))
   }
 
@@ -166,16 +166,16 @@ export async function deleteSalesLocation(
   recordId: string,
   teamId: string,
   userId: string,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(tables.salesLocations.id, recordId),
     eq(tables.salesLocations.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(tables.salesLocations.owner, userId))
   }
 
@@ -192,4 +192,11 @@ export async function deleteSalesLocation(
   }
 
   return { success: true }
+}
+
+// Referenced records must belong to this team (#3404)
+export async function assertSalesLocationReferences(teamId: string, data: Record<string, any>) {
+  await assertRefsInTeam(useDB(), teamId, [
+    { field: 'eventId', table: eventsSchema.salesEvents, value: data.eventId },
+  ])
 }

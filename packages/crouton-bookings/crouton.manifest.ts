@@ -8,7 +8,7 @@ import emailLogSchema from './schemas/email-log.json'
 export default defineCroutonManifest({
   id: 'crouton-bookings',
   name: 'Booking System',
-  description: 'Slot-based and inventory booking with optional email notifications. Perfect for courts, rooms, appointments, equipment rentals, and more.',
+  description: 'Bookings for locations with or without time slots, each offering team products with a stock, with optional email notifications. Perfect for courts, rooms, appointments, equipment rentals, and more.',
   icon: 'i-lucide-calendar',
   version: '1.0.0',
   category: 'miniapp',
@@ -22,7 +22,8 @@ export default defineCroutonManifest({
 
   dependencies: [
     '@fyit/crouton-core',
-    '@fyit/crouton-auth'
+    '@fyit/crouton-auth',
+    '@fyit/crouton-catalog'
   ],
 
   // The collections below ship from this package (collections/*), end to end (#2278).
@@ -41,7 +42,7 @@ export default defineCroutonManifest({
     {
       name: 'location',
       tableName: 'bookingsLocations',
-      description: 'Bookable venues, resources, or items. Supports time slots or inventory-based booking.',
+      description: 'Bookable locations, with or without time slots, each listing team products with a stock.',
       schema: locationSchema,
       schemaPath: './schemas/location.json'
     },
@@ -72,6 +73,8 @@ export default defineCroutonManifest({
     }
   ],
 
+  runtimeConfigKey: 'croutonBookings',
+
   configuration: {
     'email.enabled': {
       type: 'boolean',
@@ -85,8 +88,7 @@ export default defineCroutonManifest({
       description: 'How resources can be booked.',
       default: ['slots'],
       options: [
-        { value: 'slots', label: 'Time Slots (courts, rooms, appointments)' },
-        { value: 'inventory', label: 'Inventory (equipment, tickets, rentals)' }
+        { value: 'slots', label: 'Time Slots (courts, rooms, appointments)' }
       ]
     }
   },
@@ -116,12 +118,14 @@ export default defineCroutonManifest({
       'useBookingOptions'
     ],
     components: [
-      { name: 'CroutonBookingPanel', description: 'Main booking sidebar container', props: ['locationId', 'teamId'] },
-      { name: 'CroutonBookingCalendar', description: 'Calendar date picker for booking', props: ['modelValue', 'availableDates'] },
-            { name: 'CroutonBookingList', description: 'Bookings list with filters', props: ['teamId', 'filters'] },
-      { name: 'CroutonBookingCard', description: 'Individual booking display card', props: ['booking'] },
-      { name: 'CroutonBookingSlotIndicator', description: 'Visual slot availability indicator', props: ['slots', 'bookings'] },
-      { name: 'CroutonBookingDateBadge', description: 'Date display badge', props: ['date', 'format'] }
+      { name: 'CroutonBookingsPanel', description: 'Main booking sidebar container' },
+      { name: 'CroutonBookingsCalendar', description: 'Calendar date picker for booking' },
+      { name: 'CroutonBookingsList', description: 'Bookings list with filters' },
+      { name: 'CroutonBookingsBookingCard', description: 'Individual booking display card' },
+      { name: 'CroutonBookingsSlotIndicator', description: 'Visual slot availability indicator' },
+      { name: 'CroutonBookingsDateBadge', description: 'Date display badge' },
+      { name: 'CroutonBookingsLayoutList', description: 'The bookings list as a placeable layout block' },
+      { name: 'CroutonBookingsLayoutCalendar', description: 'The bookings calendar as a placeable layout block' }
     ],
     apiRoutes: [
       '/api/crouton-bookings/teams/[teamId]/availability',

@@ -1,4 +1,16 @@
 {
   "stagingUrl": "https://booking-demo.pmcp.dev",
-  "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-i18n @fyit/crouton-bookings @fyit/crouton-feedback"
+  "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-i18n @fyit/crouton-bookings @fyit/crouton-feedback",
+  "reviewLogin": { "requireData": ["bookings_locations", "bookings_bookings"] },
+  "smoke": {
+    "reads": [
+      { "path": "/api/teams/{teamId}/bookings-settings" },
+      { "path": "/api/crouton-bookings/teams/{teamId}/customer-locations", "expectStatus": 200, "expectIncludes": "seed:bookings-location:test1" },
+      { "path": "/api/crouton-bookings/teams/{teamId}/admin-bookings", "expectStatus": 200, "expectIncludes": "seed:bookings-location:test1" },
+      { "path": "/api/crouton-bookings/teams/{teamId}/calendar-bookings", "expectStatus": 200 },
+      { "path": "/api/crouton-bookings/teams/{teamId}/customer-bookings", "expectStatus": 200 },
+      { "path": "/api/crouton-bookings/teams/{teamId}/availability?locationId=seed:bookings-location:test1:center-court&startDate=2026-01-01&endDate=2100-01-01", "expectStatus": 200, "expectIncludes": "\"bookings\"" },
+      { "path": "/api/teams/{teamId}/catalog-products", "expectStatus": 200, "expectIncludes": "seed:catalog-product:test1" }
+    ]
+  }
 }

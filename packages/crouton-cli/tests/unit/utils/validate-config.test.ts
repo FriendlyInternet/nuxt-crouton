@@ -94,3 +94,19 @@ describe('validateConfig — dialect', () => {
     expect(dialectErrors(result)).toEqual([])
   })
 })
+
+describe('validateConfig — access rules (#3380)', () => {
+  const run = (access: any) =>
+    validateConfig({ collections: [{ name: 'notes', fieldsFile: './nope.json', access }], dialect: 'sqlite' })
+
+  it('reports an invalid access value even in a dry run', async () => {
+    const result = await run({ list: 'mine' })
+    expect(result.valid).toBe(false)
+    expect(result.errors.some(e => e.includes('Invalid access.list'))).toBe(true)
+  })
+
+  it("accepts list: 'own'", async () => {
+    const result = await run({ list: 'own' })
+    expect(result.errors.some(e => e.includes('Invalid access'))).toBe(false)
+  })
+})

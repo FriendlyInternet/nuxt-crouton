@@ -74,13 +74,14 @@ interface Props {
   yxmlFragment?: Y.XmlFragment
   /**
    * Collab provider for cursor awareness (optional).
-   * Used by CollaborationCursor extension to show other users' cursors.
+   * Pass a crouton-collab connection (it carries `awareness`). Shows other people's
+   * carets/selections via y-tiptap and shares this editor's selection while focused.
    */
-  collabProvider?: { awareness: any }
+  collabProvider?: { awareness?: any }
   /**
    * User info for collaboration cursors.
    */
-  collabUser?: { name: string; color?: string }
+  collabUser?: { id?: string; name: string; color?: string }
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -124,15 +125,29 @@ watch(() => props.yxmlFragment, async (fragment) => {
     try {
       // Dynamically import TipTap Collaboration extension
       const { Collaboration } = await import('@tiptap/extension-collaboration')
+      // Blocks a collaborator adds get a short-lived line on their left
+      const { RemoteChangeHighlight } = await import('../utils/remote-change-highlight')
       const extensions: any[] = [
         Collaboration.configure({
           fragment
-        })
+        }),
+        RemoteChangeHighlight
       ]
 
-      // Note: CollaborationCursor requires y-websocket provider format with awareness.setLocalStateField
-      // Our custom WebSocket connection doesn't provide this, so cursor sync is disabled for now
-      // Content sync still works via the Collaboration extension above
+      // Other people's carets/selections (#3984): crouton-collab's connection carries a
+      // y-protocols-style awareness that y-tiptap's cursor plugin reads directly.
+      const awareness = props.collabProvider?.awareness
+      if (awareness && typeof awareness.getStates === 'function') {
+        awareness.setLocalStateField('user', props.collabUser ?? { name: 'Anonymous' })
+        const [{ yCursorPlugin }, { Extension }] = await Promise.all([
+          import('@tiptap/y-tiptap'),
+          import('@tiptap/core')
+        ])
+        extensions.push(Extension.create({
+          name: 'croutonCollabCaret',
+          addProseMirrorPlugins: () => [yCursorPlugin(awareness)]
+        }))
+      }
 
       collabExtensions.value = markRaw(extensions)
       collabReady.value = true
@@ -214,11 +229,8 @@ const content = computed({
     return '' // For html and markdown
   },
   set: (value) => {
-    if (props.contentType === 'json' && typeof value === 'object') {
-      emit('update:modelValue', JSON.stringify(value))
-    } else {
-      emit('update:modelValue', value)
-    }
+    const isJsonObject = props.contentType === 'json' && typeof value === 'object'
+    emit('update:modelValue', isJsonObject ? JSON.stringify(value) : value)
   }
 })
 
@@ -278,6 +290,15 @@ watch(() => ueditorRef.value?.editor, (ed) => {
   if (editor && editor !== editorInstance.value) {
     handleEditorCreate({ editor })
     editor.on('update', () => handleEditorUpdate({ editor }))
+    // Share this editor's selection with the live room while it is the focused one
+    // (#3984). Not cleared on blur: the owner selects text, then switches to the chat.
+    const share = () => props.collabProvider?.awareness?.setEditorSelection?.({
+      focused: editor.isFocused,
+      fragment: props.yxmlFragment,
+      state: editor.state
+    })
+    editor.on('selectionUpdate', share)
+    editor.on('focus', share)
   }
 })
 
@@ -600,6 +621,30 @@ defineExpose({
 </template>
 
 <style>
+/* Other people's carets (y-tiptap yCursorPlugin, #3984). Rendered inside the
+   ProseMirror DOM, so this block stays unscoped. Colour comes inline per user. */
+.ProseMirror-yjs-cursor {
+  position: relative;
+  margin: 0 -1px;
+  border-left: 2px solid;
+  word-break: normal;
+  pointer-events: none;
+}
+
+.ProseMirror-yjs-cursor > div {
+  position: absolute;
+  bottom: 100%;
+  left: -2px;
+  padding: 0 0.375rem;
+  border-radius: 0.25rem 0.25rem 0.25rem 0;
+  color: white;
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+  font-weight: 500;
+  white-space: nowrap;
+  user-select: none;
+}
+
 /* Block selection styling */
 .crouton-editor-blocks :deep(.ProseMirror-selectednode) {
   outline: 2px solid var(--ui-primary);
@@ -623,5 +668,14 @@ defineExpose({
   right: 0.5rem;
   opacity: 0;
   transition: opacity 0.2s;
+}
+
+/* Remote changes (collab): a block someone else added gets a thin primary line on its left for ~2s, then the line fades */
+.crouton-remote-new { position: relative }
+.crouton-remote-new::before { content: ''; position: absolute; top: 0; bottom: 0; left: -0.75rem; width: 2px; border-radius: 1px; background: var(--ui-primary); opacity: 1; transition: opacity .6s ease-out; pointer-events: none }
+.crouton-remote-fading::before { opacity: 0 }
+/* Reduced motion: the line still shows, it just goes without the fade */
+@media (prefers-reduced-motion: reduce) {
+  .crouton-remote-new::before { transition: none }
 }
 </style>

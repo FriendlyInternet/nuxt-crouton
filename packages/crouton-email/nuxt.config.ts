@@ -1,3 +1,4 @@
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import vue from '@vitejs/plugin-vue'
 
@@ -8,6 +9,8 @@ if (process.env.NODE_ENV !== 'production' && !_dependencies.has('crouton-email')
   console.log('🍞 crouton:email ✓ Layer loaded')
 }
 
+const currentDir = fileURLToPath(new URL('.', import.meta.url))
+
 export default defineNuxtConfig({
   // Layer metadata
   $meta: {
@@ -15,9 +18,11 @@ export default defineNuxtConfig({
     version: '0.1.0'
   },
 
-  // Components from the layer
+  // Components from the layer. Absolute path: a relative one resolves against the
+  // layer's srcDir (app/), so 'app/components' matched nothing (#2611). The Email/
+  // folder supplies the prefix, giving EmailInput, EmailResendButton, etc.
   components: [
-    { path: 'app/components', pathPrefix: false }
+    { path: join(currentDir, 'app/components') }
   ],
 
   // Auto-imports from the layer
@@ -32,7 +37,8 @@ export default defineNuxtConfig({
       resendApiKey: '', // NUXT_EMAIL_RESEND_API_KEY (or RESEND_API_KEY for local dev via process.env)
       from: '', // EMAIL_FROM (e.g., noreply@example.com)
       fromName: '', // EMAIL_FROM_NAME (e.g., My App)
-      replyTo: '' // EMAIL_REPLY_TO (optional)
+      replyTo: '', // EMAIL_REPLY_TO (optional)
+      resendWebhookSecret: '' // NUXT_EMAIL_RESEND_WEBHOOK_SECRET (whsec_…, for delivery callbacks)
     },
 
     // Public config

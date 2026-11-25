@@ -17,8 +17,9 @@ OSS). Drill into `packages/<dir>/CLAUDE.md` for detail once a candidate is spott
 | `@fyit/crouton-assets` | `packages/crouton-assets` | Asset management layer extending nuxt-crouton for centralized media library |
 | `@fyit/crouton-audio` | `packages/crouton-audio` | Audio player layer for Crouton with waveform visualization (wraps WaveSurfer.js) |
 | `@fyit/crouton-auth` | `packages/crouton-auth` | Authentication layer for Nuxt applications using Better Auth with teams, passkeys, and 2FA support |
-| `@fyit/crouton-bookings` | `packages/crouton-bookings` | Booking system layer for Nuxt Crouton - slot-based and inventory-based reservations |
+| `@fyit/crouton-bookings` | `packages/crouton-bookings` | Booking system layer for Nuxt Crouton - locations with or without time slots, each offering products with a stock |
 | `@fyit/crouton-calendar` | `packages/crouton-calendar` | Swipeable week/month calendar views for nuxt-crouton - opt-in addon layer |
+| `@fyit/crouton-catalog` | `packages/crouton-catalog` | Shared team product list for nuxt-crouton: what a team offers, used by bookings (stock) and later sales (price) |
 | `@fyit/crouton-charts` | `packages/crouton-charts` | Chart visualizations for nuxt-crouton - collection-driven charts powered by nuxt-charts |
 | `@fyit/crouton-cli` | `packages/crouton-cli` | CLI for Nuxt Crouton - Generate complete CRUD collections with API, components, and database schema |
 | `@fyit/crouton-collab` | `packages/crouton-collab` | Real-time collaboration layer for Nuxt Crouton using Yjs CRDTs |
@@ -30,11 +31,11 @@ OSS). Drill into `packages/<dir>/CLAUDE.md` for detail once a candidate is spott
 | `@fyit/crouton-feedback` | `packages/crouton-feedback` | Drop-in in-page feedback toolkit for any Nuxt UI app — a glasses launcher with a mobile console (eruda) and a pin-a-comment Annotate tool that sends to a pluggable destination (webhook / Slack / Discord / GitHub) |
 | `@fyit/crouton-flow` | `packages/crouton-flow` | Vue Flow integration for nuxt-crouton - graph/DAG visualization for collections |
 | `@fyit/crouton-i18n` | `packages/crouton-i18n` | i18n layer extending nuxt-crouton for multi-language support |
-| `@fyit/crouton-layout` | `packages/crouton-layout` | Deterministic layout engine for Nuxt Crouton — the layout editor, renderer, default-layout compose pass, placeable blocks, and layout_configs storage. Opt in by extending it next to @fyit/crouton-core. |
+| `@fyit/crouton-layout` | `packages/crouton-layout` | Deterministic layout engine for Nuxt Crouton — the layout editor, renderer, default-layout compose pass, placeable blocks, and layout_configs storage. On by default in `crouton init` apps; an app gets it by extending it next to @fyit/crouton-core. |
 | `@fyit/crouton-maps` | `packages/crouton-maps` | Map integration layer for Nuxt Crouton with MapLibre GL (@geoql/v-maplibre), OpenFreeMap tiles, and Nominatim geocoding — no API keys required |
 | `@fyit/crouton-mcp` | `packages/crouton-mcp` | MCP server for AI-powered Crouton collection generation |
 | `@fyit/crouton-mcp-toolkit` | `packages/crouton-mcp-toolkit` | MCP Toolkit integration for Crouton - expose collections to AI assistants via Model Context Protocol |
-| `@fyit/crouton-pages` | `packages/crouton-pages` | Page management system for Nuxt Crouton with page types, tree layout, and CMS functionality |
+| `@fyit/crouton-pages` | `packages/crouton-pages` | Page management system for Nuxt Crouton with page types, tree layout, and CMS functionality — serves a team's public site on its own custom domain, with plain one-language addresses (hideLocaleInUrl) |
 | `@fyit/crouton-printing` | `packages/crouton-printing` | Domain-agnostic printing layer for Nuxt Crouton - print-job queue, ESC/POS engine, drivers, and on-site transport. Consumed by crouton-sales, crouton-bookings, etc. |
 | `@fyit/crouton-sales` | `packages/crouton-sales` | POS/Sales system for Nuxt Crouton - products, categories, orders, and optional thermal receipt printing |
 | `@fyit/crouton-themes` | `packages/crouton-themes` | Swappable themes for Nuxt UI applications |

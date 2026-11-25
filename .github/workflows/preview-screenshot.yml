@@ -4,17 +4,21 @@ name: Preview screenshot
 # inside deploy-app.yml, so a miss could only be retried by redeploying the whole app.
 #
 # Triggers:
-#   • workflow_run — after a Deploy Apps / Deploy POCs run finishes successfully. deploy-app.yml
+#   • workflow_run — after any Deploy Apps / Deploy POCs run finishes (success or not). deploy-app.yml
 #     leaves a `preview-meta-<app>` artifact (app, workspace, url, pr) for each previewed app.
-#   • workflow_dispatch(pr) — re-run alone, no redeploy: reads the artifacts of the newest
-#     successful deploy run for the PR's head commit.
+#   • workflow_dispatch(pr) — re-run alone, no redeploy.
+# Both triggers read the newest run of BOTH deploy workflows for the head commit. A capture that finds
+# one still running leaves the check in progress, so the last one decides whichever deploy finishes
+# last; one "Preview screenshot" check run per commit is updated in place (#4535). Which runs, which
+# apps and which check run: scripts/lib/screenshot-targets.mjs.
 #
 # Per app it logs into the live preview (login re-derived from REVIEW_SEED_SECRET, same formula as
 # the deploy's seed step; link-only apps use a preview-only token, #2700), captures the declared review surface(s) with
 # scripts/capture-review-surfaces.mjs, publishes the PNG(s) to a non-branch ref
 # (refs/review-captures/pr<N>) and posts them in a tagged PR comment (#3351). The sign-off gate looks
 # for that comment, and Status reruns when this check completes (check_suite). The result is a check run named "Preview screenshot" on
-# the PR head: green = a usable shot, red = none, with the reason in one line.
+# the PR head: green = a usable shot, red = none, with the reason in one line;
+# grey only when no job in this commit's deploy was meant to leave a record (#3575).
 
 on:
   workflow_run:
@@ -40,7 +44,8 @@ jobs:
     name: Capture
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request') }}
+    # Any conclusion: a failed/cancelled deploy must still end a check an earlier capture left waiting (#4535).
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.event == 'pull_request' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -52,13 +57,13 @@ jobs:
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
           owner: FriendlyInternet
 
-      # Resolve which deploy run + PR + head commit we are capturing for.
+      # Resolve the PR + head commit, the state of BOTH deploy workflows for it, and any existing check (#4535).
       - name: Resolve target
         id: target
         env:
           GH_TOKEN: ${{ github.token }}
+          APP_TOKEN: ${{ steps.token.outputs.token }}
           EVENT: ${{ github.event_name }}
-          RUN_ID: ${{ github.event.workflow_run.id }}
           RUN_PRS: ${{ toJson(github.event.workflow_run.pull_requests) }}
           RUN_SHA: ${{ github.event.workflow_run.head_sha }}
           INPUT_PR: ${{ inputs.pr }}
@@ -66,36 +71,56 @@ jobs:
           if [ "$EVENT" = workflow_dispatch ]; then
             PR="$INPUT_PR"
             HEAD_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR}" --jq ".head.sha")
-            # Newest successful deploy run for this exact commit that left preview records.
-            RUN_ID=""
-            for wf in deploy-apps.yml deploy-pocs.yml; do
-              id=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${wf}/runs?head_sha=${HEAD_SHA}&status=success&per_page=1" --jq '.workflow_runs[0].id // empty' 2>/dev/null || true)
-              [ -n "$id" ] && RUN_ID="$RUN_ID $id"
-            done
-            RUN_ID="${RUN_ID# }"
           else
             PR=$(printf '%s' "$RUN_PRS" | jq -r '.[0].number // empty')
             HEAD_SHA="$RUN_SHA"
           fi
           [ -n "$PR" ] || { echo "::notice::no PR attached to this run — nothing to capture"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; }
-          [ -n "$RUN_ID" ] || { echo "::warning::no successful deploy run found for ${HEAD_SHA} — deploy first"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; }
-          { echo "pr=$PR"; echo "head_sha=$HEAD_SHA"; echo "run_ids=$RUN_ID"; echo "skip=false"; } >> "$GITHUB_OUTPUT"
+          # Recent runs of both deploy workflows for this commit, any status (a running one makes us wait).
+          for wf in deploy-apps.yml deploy-pocs.yml; do
+            gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${wf}/runs?head_sha=${HEAD_SHA}&per_page=10" \
+              --jq "[.workflow_runs[] | {workflow: \"${wf}\", id, status, conclusion, event}]" > "$RUNNER_TEMP/runs-${wf}.json" 2>/dev/null \
+              || echo '[]' > "$RUNNER_TEMP/runs-${wf}.json"
+          done
+          jq -s 'add' "$RUNNER_TEMP"/runs-*.json > "$RUNNER_TEMP/deploy-runs.json"
+          STATE=$(node scripts/lib/screenshot-targets.mjs runs "$RUNNER_TEMP/deploy-runs.json")
+          printf '%s\n' "$STATE"
+          RUN_IDS=$(printf '%s\n' "$STATE" | sed -n 's/^run_ids=//p'); WAIT=$(printf '%s\n' "$STATE" | sed -n 's/^wait=//p')
+          GH_TOKEN="$APP_TOKEN" gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/check-runs?check_name=Preview%20screenshot&filter=all" \
+            > "$RUNNER_TEMP/checks.json" 2>/dev/null || echo '{}' > "$RUNNER_TEMP/checks.json"
+          EXISTING=$(node scripts/lib/screenshot-targets.mjs check "$RUNNER_TEMP/checks.json" | sed -n 's/^id=//p')
+          if [ -z "$RUN_IDS" ] && [ "$WAIT" != true ] && [ -z "$EXISTING" ]; then
+            echo "::warning::no successful deploy run found for ${HEAD_SHA} — deploy first"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          { printf '%s\n' "$STATE"; echo "pr=$PR"; echo "head_sha=$HEAD_SHA"; echo "existing=$EXISTING"; echo "skip=false"; } >> "$GITHUB_OUTPUT"
 
+      # One check run per commit: re-open the existing one; POST a new one only when there is none (#4535).
       - name: Open check run
         id: check
         if: ${{ steps.target.outputs.skip == 'false' }}
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           HEAD_SHA: ${{ steps.target.outputs.head_sha }}
+          EXISTING: ${{ steps.target.outputs.existing }}
         run: |
-          ID=$(gh api -X POST "repos/${GITHUB_REPOSITORY}/check-runs" -f name='Preview screenshot' -f head_sha="$HEAD_SHA" \
-            -f status=in_progress -f details_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" --jq .id 2>/dev/null || true)
+          DETAILS="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          ID=""
+          if [ -n "$EXISTING" ]; then
+            # A failed re-open is tolerated: the notice below says so and the POST fallback opens a fresh check.
+            ID=$(gh api -X PATCH "repos/${GITHUB_REPOSITORY}/check-runs/${EXISTING}" -f status=in_progress -f details_url="$DETAILS" --jq .id 2>/dev/null || true)
+            [ -n "$ID" ] || echo "::notice::could not re-open check run ${EXISTING} — opening a new one"
+          fi
+          if [ -z "$ID" ]; then
+            # A failed POST is tolerated: the screenshot still runs; the ::warning:: below names the missing checks:write.
+            ID=$(gh api -X POST "repos/${GITHUB_REPOSITORY}/check-runs" -f name='Preview screenshot' -f head_sha="$HEAD_SHA" \
+              -f status=in_progress -f details_url="$DETAILS" --jq .id 2>/dev/null || true)
+          fi
           [ -n "$ID" ] || echo "::warning::could not open the 'Preview screenshot' check run (App needs checks:write)"
           echo "id=$ID" >> "$GITHUB_OUTPUT"
 
       - name: Download preview records
         id: records
-        if: ${{ steps.target.outputs.skip == 'false' }}
+        if: ${{ steps.target.outputs.skip == 'false' && steps.target.outputs.wait != 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_IDS: ${{ steps.target.outputs.run_ids }}
@@ -106,28 +131,83 @@ jobs:
           done
           N=$(find "$RUNNER_TEMP/records" -name meta.json | wc -l)
           echo "count=$N" >> "$GITHUB_OUTPUT"
+          # How many deploy jobs were meant to leave a record (#3575); empty = lookup failed.
+          OK=1
+          for id in $RUN_IDS; do
+            # No pipe: a failed `gh api` must set OK=0 (a pipe into jq would hide it and write []).
+            if gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$id/jobs?per_page=100" --jq '.jobs[]' > "$RUNNER_TEMP/jobs-$id.ndjson"; then
+              jq -s . "$RUNNER_TEMP/jobs-$id.ndjson" > "$RUNNER_TEMP/jobs-$id.json" || OK=0
+            else
+              OK=0
+            fi
+          done
+          if [ -z "$RUN_IDS" ]; then
+            echo "expected=0" >> "$GITHUB_OUTPUT" # no successful deploy: nothing was meant to leave a record
+          elif [ "$OK" = 1 ]; then
+            echo "expected=$(node scripts/lib/screenshot-verdict.mjs count "$RUNNER_TEMP"/jobs-*.json)" >> "$GITHUB_OUTPUT"
+          else
+            echo "expected=" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Which records to shoot: the declared apps, else the apps whose own folder changed (#4535).
+      - name: Select apps
+        id: select
+        if: ${{ steps.target.outputs.skip == 'false' && steps.target.outputs.wait != 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ steps.target.outputs.pr }}
+          FAILED: ${{ steps.target.outputs.failed }}
+        run: |
+          # Changed files drive which page is shot when the PR declares no review-surface (#2698).
+          # A failed lookup must not kill the run, but it changes which apps are shot (an empty diff or
+          # body looks like "no own-folder app" / "no declared page"), so each failure raises a warning.
+          CHANGED_FILES=$(gh pr diff "$PR" --repo "$GITHUB_REPOSITORY" --name-only 2>/dev/null) \
+            || { echo "::warning::could not read the changed files of PR #${PR} — app selection falls back to the no-diff case"; CHANGED_FILES=""; }
+          export CHANGED_FILES
+          PR_BODY=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json body --jq .body 2>/dev/null) \
+            || { echo "::warning::could not read the body of PR #${PR} — any review-surface marker it declares is ignored this run"; PR_BODY=""; }
+          export PR_BODY
+          node scripts/lib/screenshot-targets.mjs select "$RUNNER_TEMP/records" --out "$RUNNER_TEMP/selected.txt" | tee -a "$GITHUB_OUTPUT"
+          # Hand both to the capture step so neither is fetched twice.
+          D="EOF_$(openssl rand -hex 8)"
+          { echo "CHANGED_FILES<<$D"; printf '%s\n' "$CHANGED_FILES"; echo "$D"; } >> "$GITHUB_ENV"
+          [ -z "$PR_BODY" ] || { echo "PR_BODY<<$D"; printf '%s\n' "$PR_BODY"; echo "$D"; } >> "$GITHUB_ENV"
 
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-        if: ${{ steps.records.outputs.count != '0' && steps.records.outputs.count != '' }}
+        if: ${{ steps.select.outputs.count != '0' && steps.select.outputs.count != '' }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        if: ${{ steps.records.outputs.count != '0' && steps.records.outputs.count != '' }}
+        if: ${{ steps.select.outputs.count != '0' && steps.select.outputs.count != '' }}
         with:
           node-version: 22
 
+      - name: Install Playwright (capture)
+        id: pw
+        if: ${{ steps.select.outputs.count != '0' && steps.select.outputs.count != '' }}
+        timeout-minutes: 5
+        run: |
+          set -eo pipefail
+          start=$(date +%s)
+          # Root workspace only: brings playwright-core + sharp, the only packages the capture scripts import (#3593).
+          pnpm install --frozen-lockfile --ignore-scripts --filter nuxt-crouton-workspace
+          # Same browser install as deploy-app.yml:228 — no apt system-deps step (recorded as flaky, e2e.yml:168-172).
+          pnpm exec playwright install chromium
+          node -e "import('playwright-core').catch(e => { console.error('::error::playwright-core failed to import: ' + e.message); process.exit(1) })"
+          echo "::notice::Playwright install took $(( $(date +%s) - start ))s"
+
       - name: Capture + post review-surface evidence
         id: capture
-        if: ${{ steps.records.outputs.count != '0' && steps.records.outputs.count != '' }}
+        if: ${{ steps.select.outputs.count != '0' && steps.select.outputs.count != '' }}
         env:
           GH_TOKEN_PUSH: ${{ steps.token.outputs.token }}
           REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
           PR_NUMBER: ${{ steps.target.outputs.pr }}
           REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
+        # --team is the team the deploy seeded (preview-meta `team`, #4141) — this checkout is main, so its
+        # manifest can miss a reviewTeam the PR adds. Empty (older record) → the capture falls back to the manifest.
         run: |
           set -o pipefail
-          # Changed files drive which page is shot when the PR declares no review-surface (#2698).
-          CHANGED_FILES=$(gh pr diff "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --name-only 2>/dev/null || true); export CHANGED_FILES
-          npx --yes playwright install --with-deps chromium >/dev/null 2>&1 || npx playwright install chromium >/dev/null 2>&1 || true
+          # CHANGED_FILES / PR_BODY come from the Select apps step (job env).
           [ -n "$REVIEW_SEED_SECRET" ] || { echo "result=miss" >> "$GITHUB_OUTPUT"; echo "summary=REVIEW_SEED_SECRET is not set — cannot log in to the preview" >> "$GITHUB_OUTPUT"; exit 0; }
           OUT="$RUNNER_TEMP/uip"; rm -rf "$OUT"; mkdir -p "$OUT"
           LOG="$RUNNER_TEMP/capture.log"; : > "$LOG"
@@ -146,8 +226,8 @@ jobs:
               AUTH=(--preview-token "$TOKEN")
             fi
             node scripts/capture-review-surfaces.mjs --url "$URL" "${AUTH[@]}" \
-              --manifest "$WORKSPACE/$APP/deploy.config.json" --app "$APP" --pr "$PR_NUMBER" --out "$OUT" 2>&1 | tee -a "$LOG" || true
-          done < <(find "$RUNNER_TEMP/records" -name meta.json)
+              --manifest "$WORKSPACE/$APP/deploy.config.json" --app "$APP" --team "$(jq -r '.team // ""' "$META")" --pr "$PR_NUMBER" --out "$OUT" 2>&1 | tee -a "$LOG" || true
+          done < "$RUNNER_TEMP/selected.txt"
           WHY=$(grep '^surface=' "$LOG" | sed -E 's/^surface=([^ ]+) status=[a-z]+ reason=/\1: /' | head -5 | paste -sd';' - || true)
           shopt -s nullglob; PNGS=("$OUT"/*.png)
           if [ ${#PNGS[@]} -eq 0 ]; then
@@ -180,7 +260,7 @@ jobs:
           fi
 
       - name: Upload screenshots (download backup)
-        if: ${{ always() && steps.records.outputs.count != '0' && steps.records.outputs.count != '' }}
+        if: ${{ always() && steps.select.outputs.count != '0' && steps.select.outputs.count != '' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: preview-screenshots-pr${{ steps.target.outputs.pr }}
@@ -189,19 +269,42 @@ jobs:
           if-no-files-found: ignore
 
       - name: Publish result
+        id: publish
         if: ${{ always() && steps.check.outputs.id != '' }}
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           CHECK_ID: ${{ steps.check.outputs.id }}
           RESULT: ${{ steps.capture.outputs.result }}
-          SUMMARY: ${{ steps.capture.outputs.summary }}
+          SUMMARY: ${{ steps.pw.outcome == 'failure' && 'could not install Playwright — see the "Install Playwright (capture)" step log' || steps.capture.outputs.summary || steps.select.outputs.missing }}
           RECORDS: ${{ steps.records.outputs.count }}
+          EXPECTED: ${{ steps.records.outputs.expected }}
+          MISSING: ${{ steps.select.outputs.missing }}
+          WAIT: ${{ steps.target.outputs.wait }}
+          PENDING: ${{ steps.target.outputs.pending }}
         run: |
-          if [ "$RESULT" = ok ]; then C=success
-          elif [ -z "$RESULT" ] && { [ "$RECORDS" = 0 ] || [ -z "$RECORDS" ]; }; then C=neutral; SUMMARY="no preview deployed for this commit — nothing to capture"
-          else C=failure; [ -n "$SUMMARY" ] || SUMMARY="capture step did not finish"; fi
+          # A deploy for this commit is still running: leave the check open, its completion decides (#4535).
+          if [ "$WAIT" = true ]; then
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/check-runs/${CHECK_ID}" -f status=in_progress \
+              -f 'output[title]=Preview screenshot' -f "output[summary]=waiting for ${PENDING} to finish before deciding" >/dev/null \
+              || echo "::warning::could not update the check"
+            echo "### Preview screenshot: waiting for ${PENDING}" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          OUT=$(node scripts/lib/screenshot-verdict.mjs verdict)
+          C=$(printf '%s\n' "$OUT" | sed -n 's/^conclusion=//p'); SUMMARY=$(printf '%s\n' "$OUT" | sed -n 's/^summary=//p')
           gh api -X PATCH "repos/${GITHUB_REPOSITORY}/check-runs/${CHECK_ID}" -f status=completed -f conclusion="$C" \
             -f 'output[title]=Preview screenshot' -f "output[summary]=${SUMMARY}" >/dev/null \
             || echo "::warning::could not publish the check result"
           echo "### Preview screenshot: ${C} — ${SUMMARY}" >> "$GITHUB_STEP_SUMMARY"
           [ "$C" != failure ] || { echo "::error title=Preview screenshot::${SUMMARY}"; exit 1; }
+
+      # #4407: the check_suite of this App-posted check is skipped by automerge (#3501), so ask the
+      # merge step for this PR ourselves when the verdict is not red. The gate still decides.
+      - name: Ask the merge step again
+        if: ${{ always() && steps.publish.outcome == 'success' && steps.target.outputs.wait != 'true' }}
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          PR: ${{ steps.target.outputs.pr }}
+        # Block scalar on purpose: in a plain scalar ` #` starts a YAML comment and cuts the line short.
+        run: |
+          node scripts/handoff-exec.mjs dispatch "$(jq -nc --argjson i "$PR" '{issue:$i,workflow:"automerge-epic-subpr.yml",inputs:{pr:($i|tostring)}}')" || echo "::warning::could not ask the merge step for PR #${PR} (#4407)"

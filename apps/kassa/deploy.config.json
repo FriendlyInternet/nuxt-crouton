@@ -11,7 +11,7 @@
         "path": "/api/teams/{teamId}/sales-categories",
         "method": "POST",
         "body": {
-          "eventId": "smoke-check",
+          "eventId": "seed:event:test1:vlaamsekermis",
           "title": "smoke-{rand}"
         }
       },
@@ -35,6 +35,26 @@
     "required": true,
     "reads": [
       {
+        "path": "/api/teams/{teamId}/email-logs",
+        "expectStatus": [200]
+      },
+      {
+        "path": "/api/teams/{teamId}/crouton-layouts/default",
+        "expectStatus": [200, 204]
+      },
+      {
+        "path": "/api/public/{teamId}/smoke-none",
+        "expectStatus": [404]
+      },
+      {
+        "path": "/api/public/{teamId}/smoke-none/smoke-item",
+        "expectStatus": [404]
+      },
+      {
+        "path": "/api/teams/{teamId}/pages/smoke-none/access-code",
+        "expectStatus": [404]
+      },
+      {
         "path": "/api/crouton-sales/teams/{teamId}/sync-status"
       },
       {
@@ -45,10 +65,50 @@
         "path": "/api/teams/{teamId}/sales-events"
       },
       {
+        "path": "/api/crouton-sales/events/seed:event:test1:vlaamsekermis/order-data",
+        "expectStatus": [401]
+      },
+      {
+        "path": "/api/crouton-sales/events/seed:event:test1:vlaamsekermis/orders/smoke-none/print-status",
+        "expectStatus": [401]
+      },
+      {
         "path": "/api/crouton-sales/teams/{teamId}/devices"
       },
       {
         "path": "/admin/test1/sales/devices"
+      },
+      {
+        "path": "/api/teams/{teamId}/domains"
+      },
+      {
+        "path": "/api/teams/{teamId}/email-logs"
+      },
+      {
+        "path": "/api/teams/{teamId}/email-logs/stats"
+      },
+      {
+        "path": "/api/teams/{teamId}/settings/email"
+      },
+      {
+        "path": "/api/teams/{teamId}/pages"
+      },
+      {
+        "path": "/api/teams/{teamId}/pages/_home",
+        "expectStatus": [200, 404]
+      },
+      {
+        "path": "/api/webhooks/resend",
+        "expectStatus": 405
+      },
+      {
+        "path": "/api/auth/organization/list-roles?organizationId={teamId}",
+        "expectStatus": 200
+      },
+      {
+        "path": "/api/teams/{teamId}/can?actions=team:manage",
+        "expectStatus": 200,
+        "expectIncludes": "\"team:manage\":true"
       }
     ]
   }

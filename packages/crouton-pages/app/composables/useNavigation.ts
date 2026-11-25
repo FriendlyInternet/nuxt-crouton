@@ -52,7 +52,7 @@ export function useNavigation(teamSlug?: MaybeRef<string | null>) {
   const { locale: i18nLocale } = useT()
   const collections = useCollections()
   const { teamId } = useTeamContext()
-  const { hideTeamInUrl } = useDomainContext()
+  const { hideTeamInLinks, hideLocaleInUrl } = useDomainContext()
 
   // Detect public context: not in admin route
   const isPublicContext = computed(() => !route.path.includes('/admin/'))
@@ -103,8 +103,7 @@ export function useNavigation(teamSlug?: MaybeRef<string | null>) {
   const binderItemsMap = ref<Record<string, NavigationItem[]>>({})
 
   // Refresh navigation when pages collection is mutated (reorder, move, create, update, delete)
-  const nuxtApp = useNuxtApp()
-  nuxtApp.hook('crouton:mutation' as any, (event: any) => {
+  useMutationListener((event) => {
     if (event?.collection === 'pagesPages') {
       refresh()
       binderItemsMap.value = {} // clear cached binder items on mutation
@@ -135,7 +134,8 @@ export function useNavigation(teamSlug?: MaybeRef<string | null>) {
       if (!colConfig?.apiPath) return
 
       const binderPath = buildPagePath({
-        hideTeamInUrl: hideTeamInUrl.value,
+        hideTeamInUrl: hideTeamInLinks.value,
+        hideLocaleInUrl: hideLocaleInUrl.value,
         team: team.value,
         locale: locale.value,
         slugPath: buildSlugPath(binderPagesById.get(binder.id)!, binderPagesById, locale.value)
@@ -210,7 +210,8 @@ export function useNavigation(teamSlug?: MaybeRef<string | null>) {
       title: p.title,
       slug: p.slug,
       path: buildPagePath({
-        hideTeamInUrl: hideTeamInUrl.value,
+        hideTeamInUrl: hideTeamInLinks.value,
+        hideLocaleInUrl: hideLocaleInUrl.value,
         team: team.value,
         locale: locale.value,
         slugPath: buildSlugPath(pagesById.get(p.id)!, pagesById, locale.value)

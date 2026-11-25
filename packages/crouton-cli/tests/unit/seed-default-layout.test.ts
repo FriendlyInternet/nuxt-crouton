@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { collectDefaultLayoutSql } from '../../lib/seed-app'
 
-// #2249 — the generator writes crouton.layout.json for every app, but the table it
+// #2249 — the generator used to write crouton.layout.json for every app (now only for
+// apps that extend crouton-layout, #2282), but the table it
 // seeds (`layout_configs`) only exists when the app extends @fyit/crouton-layout.
 // kassa has the file and not the package, so every staging deploy logged
 // "no such table: layout_configs" and skipped the chunk. The layout is now seeded

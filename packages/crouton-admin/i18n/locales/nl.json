@@ -1,4 +1,7 @@
 {
+  "permissions": {
+    "adminAccess": "Beheeromgeving openen"
+  },
   "teams": {
     "generalSettings": "Algemeen",
     "themeSettings": "Thema",
@@ -72,6 +75,42 @@
       "addFailed": "Domein toevoegen mislukt",
       "setPrimaryFailed": "Hoofddomein instellen mislukt",
       "deleteFailed": "Domein verwijderen mislukt"
+    },
+    "rolesScreen": {
+      "tab": "Rollen",
+      "title": "Rollen",
+      "description": "Wie wat mag doen in dit team.",
+      "new": "Nieuwe rol",
+      "name": "Naam",
+      "fixed": "Vast",
+      "teamRoles": "Rollen van dit team",
+      "empty": "Nog geen teamrollen.",
+      "noActions": "Geen acties",
+      "allActions": "Alle acties",
+      "edit": "Bewerken",
+      "delete": "Verwijderen",
+      "deleted": "Rol verwijderd",
+      "deleteConfirm": "Deze rol verwijderen? Dit kan niet ongedaan worden.",
+      "deleteAssigned": "Deze rol is nog aan een lid gegeven — haal hem eerst weg",
+      "nameTaken": "Deze naam bestaat al",
+      "nameInvalid": "Geef een naam van 1 tot 40 tekens, zonder komma",
+      "adminAccessHint": "Een rol met minstens één actie opent ook de beheeromgeving.",
+      "notYoursHint": "Je kunt alleen acties geven die je zelf hebt",
+      "readOnlyRole": "Deze rol heeft acties die jij niet hebt — alleen iemand die ze heeft kan hem wijzigen",
+      "adminOwnerOnly": "Alleen de eigenaar kan deze rol wijzigen",
+      "adminCannotDelete": "De rol admin kan niet worden verwijderd",
+      "adminCannotRename": "De rol admin kan niet worden hernoemd",
+      "groups": {
+        "team": "Team",
+        "site": "Site",
+        "collections": "Collecties",
+        "translations": "Vertalingen",
+        "pages": "Pagina's",
+        "media": "Media",
+        "activity": "Activiteit",
+        "bookings": "Reservaties",
+        "sales": "Verkoop"
+      }
     }
   },
   "navigation": {
@@ -255,10 +294,9 @@
     "allowUserThemes": "Laat gebruikers hun eigen thema kiezen",
     "allowUserThemesDescription": "Indien uit, kunnen alleen beheerders thema's wisselen.",
     "preset": "Themavoorinstelling",
-    "primaryColor": "Primaire kleur",
-    "neutralColor": "Neutrale kleur",
-    "livePreview": "Live voorbeeld",
-    "borderRadius": "Hoekafronding",
+    "mainColor": "Hoofdkleur",
+    "greys": "Grijstinten",
+    "corners": "Hoeken",
     "saved": "Thema-instellingen opgeslagen",
     "resetToDefaults": "Standaardwaarden herstellen",
     "adminRequired": "Beheerderstoegang vereist",
@@ -266,12 +304,20 @@
     "previewPrimary": "Primair",
     "previewOutline": "Omlijnd",
     "previewSoft": "Zacht",
-    "previewGhost": "Transparant",
-    "previewBadge": "Badge",
     "previewInput": "Voorbeeldtekst...",
+    "previewCaption": "Voorbeeld — verandert terwijl je kiest",
+    "previewAppName": "Je app",
+    "previewItemOne": "Eerste item",
+    "previewItemTwo": "Tweede item",
     "presetCustom": "Eigen thema",
     "presetCustomDescription": "Kies zelf je kleuren en afronding",
-    "radiusSharp": "Scherp"
+    "radiusSquare": "Vierkant",
+    "radiusSlight": "Licht",
+    "radiusSoft": "Zacht",
+    "radiusRounded": "Afgerond",
+    "radiusRound": "Rond",
+    "unsavedChanges": "Niet-opgeslagen wijzigingen",
+    "undo": "Ongedaan maken"
   },
   "userBan": {
     "reason": "Reden",

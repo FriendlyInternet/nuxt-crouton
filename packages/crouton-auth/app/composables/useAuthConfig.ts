@@ -38,7 +38,8 @@ interface RuntimeAuthConfig {
     invitationExpiry?: number
     requireEmailVerification?: boolean
     defaultRole?: string
-    roles?: Array<{ id: string; name: string; permissions?: string[] }>
+    /** Base role → crouton actions (#4104). */
+    roles?: Partial<Record<'owner' | 'admin' | 'member', string[]>>
   }
   ui?: {
     theme?: string

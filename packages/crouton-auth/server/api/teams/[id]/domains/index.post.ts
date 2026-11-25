@@ -2,11 +2,11 @@
  * POST /api/teams/[id]/domains
  *
  * Add a new custom domain to a team/organization.
- * Requires team owner role.
+ * Requires the `team:domains` action (owner/admin by default).
  */
 import { z } from 'zod'
-import { requireTeamOwner } from '../../../../utils/team'
-import { useDB, tables, eq, generateVerificationToken } from '../../../../utils/database'
+import { requireCan } from '../../../../utils/permissions'
+import { useDB, tables, eq, and, generateVerificationToken } from '../../../../utils/database'
 
 const addDomainSchema = z.object({
   domain: z
@@ -20,18 +20,23 @@ const addDomainSchema = z.object({
 })
 
 export default defineEventHandler(async (event) => {
-  const { team } = await requireTeamOwner(event)
+  const { team } = await requireCan(event, 'team:domains')
 
   const body = await readValidatedBody(event, addDomainSchema.parse)
 
   const db = useDB()
 
-  // Check if domain already exists
-  const existingDomain = await db
-    .select()
-    .from(tables.domain)
-    .where(eq(tables.domain.domain, body.domain))
-    .get()
+  // Only a VERIFIED claim (or this team's own row) blocks the name. An unverified
+  // claim by another team must not squat it; ownership is proven at verify time.
+  const [verifiedElsewhere, ownRow] = await Promise.all([
+    db.select().from(tables.domain)
+      .where(and(eq(tables.domain.domain, body.domain), eq(tables.domain.status, 'verified')))
+      .get(),
+    db.select().from(tables.domain)
+      .where(and(eq(tables.domain.domain, body.domain), eq(tables.domain.organizationId, team.id)))
+      .get()
+  ])
+  const existingDomain = verifiedElsewhere ?? ownRow
 
   if (existingDomain) {
     throw createError({

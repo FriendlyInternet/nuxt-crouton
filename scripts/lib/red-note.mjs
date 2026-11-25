@@ -1,5 +1,5 @@
 // Pure rules for the red-CI note and the epic rollup's red state (#3006).
-// Used by .github/workflows/status.yml; keep it free of GitHub calls so it is testable.
+// Used by scripts/lib/pr-status-io.mjs (status.yml's pr-comment job); keep it free of GitHub calls so it is testable.
 
 const ROLLUPS = new Set(['CI Gate', 'E2E Gate']) // aggregate gates (#2710)
 

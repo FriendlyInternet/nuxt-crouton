@@ -5,6 +5,7 @@ import {
   minWidthResolver,
   subtreeMinWidth,
   panelMinSizePct,
+  pageRowTracks,
 } from '../layout-viability'
 import type { LayoutNode, LayoutTree } from '@fyit/crouton-core/app/types/layout'
 import type { CroutonLayoutBlockRegistry } from '@fyit/crouton-core/app/types/layout-block'
@@ -248,5 +249,28 @@ describe('panelMinSizePct — px floor → SplitterPanel min-size %', () => {
 
   it('is 0 for a fluid block with no authored minSize', () => {
     expect(panelMinSizePct('horizontal', { type: 'leaf', blockId: 'stats' }, 1000, r)).toBe(0)
+  })
+})
+
+// #3865 — one row expression for the renderer's view grid and the Builder board.
+describe('pageRowTracks — a vertical split\'s page rows', () => {
+  const reg = {
+    fit: { id: 'fit', name: 'Fit', component: 'X', minHeight: 96, sizing: { width: 'fill', height: 'hug' } },
+    fill: { id: 'fill', name: 'Fill', component: 'X', minHeight: 240.4, sizing: { width: 'fill', height: 'fill' } },
+  } as unknown as CroutonLayoutBlockRegistry
+  const leaf = (blockId: string): LayoutNode => ({ type: 'leaf', blockId })
+
+  it('maps a Fit (hug) leaf to auto', () => {
+    expect(pageRowTracks([leaf('fit')], reg)).toBe('auto')
+  })
+  it('maps a Fill leaf to minmax(<rounded minHeight>px, auto)', () => {
+    expect(pageRowTracks([leaf('fill')], reg)).toBe('minmax(240px, auto)')
+  })
+  it('joins a mixed list with spaces, a split child counting as Fill', () => {
+    const split: LayoutNode = { type: 'split', direction: 'horizontal', children: [leaf('fit'), leaf('fill')] }
+    expect(pageRowTracks([leaf('fit'), leaf('fill'), split], reg)).toBe('auto minmax(240px, auto) minmax(240px, auto)')
+  })
+  it('gives an unknown block a zero floor', () => {
+    expect(pageRowTracks([leaf('nope')], reg)).toBe('minmax(0px, auto)')
   })
 })

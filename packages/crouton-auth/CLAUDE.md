@@ -13,13 +13,14 @@ URLs always include `[team]` param (industry standard: Linear, Notion, Vercel, G
 | Team Creation | `teams: { allowCreate: true, showSwitcher: true }` | SaaS platforms |
 | Default Team | `teams: { defaultTeamSlug: 'acme', allowCreate: false, showSwitcher: false }` | Company apps |
 | Personal Workspace | `teams: { autoCreateOnSignup: true, allowCreate: false, showSwitcher: false }` | Personal apps |
+| Invite-only | `signup: 'invite'` | Closed apps (Velo) — sign-up refused on every path (password, magic link, OAuth) unless the email has a pending invitation (403 `SIGNUP_INVITE_ONLY`, `signupGate` in `server/lib/auth.ts`); server-side `auth.api` calls (admin create-user) still allowed; `RouteModal` hides the "Create account" links |
 
 ### TeamsConfig Flags
 
 | Flag | Purpose | Default |
 |------|---------|---------|
 | `autoCreateOnSignup` | Auto-create personal workspace on signup | false |
-| `defaultTeamSlug` | Everyone joins this team on signup (first user → `owner`, rest → `member`) | undefined |
+| `defaultTeamSlug` | Everyone joins this team on sign-up and on every sign-in, so accounts made before the setting join too (first member → `owner`, rest → `member`) | undefined |
 | `allowCreate` | Can users create additional teams. `true`, `false`, or `'superAdmin'` (only `role: 'admin'` or `superAdmin: true` users; rule: `isSuperAdminUser` in `shared/utils/auth.ts`, used by Better Auth and `useTeam().canCreateTeam`) | true |
 | `showSwitcher` | Show team switcher UI | true |
 | `showManagement` | Show team management UI | true |
@@ -32,6 +33,9 @@ URLs always include `[team]` param (industry standard: Linear, Notion, Vercel, G
 | `module.ts` | Nuxt module entry point |
 | `nuxt.config.ts` | Layer configuration |
 | `server/lib/auth.ts` | Better Auth factory (`createAuth`) |
+| `server/lib/access.ts` | Crouton actions + base roles → Better Auth `ac`/`roles` (`buildAccessControl`, #4104) |
+| `server/utils/permissions.ts` | `can()` / `requireCan()` — see "Permissions (actions)" |
+| `server/api/teams/[id]/can.get.ts` | `GET /api/teams/[id]/can?actions=…` → `{ action: boolean }` |
 | `server/utils/team-auth.ts` | Team auth utilities (exported via `@crouton/auth/server`) |
 | `server/utils/team.ts` | Core team resolution logic |
 | `types/config.ts` | `CroutonAuthConfig` configuration type |
@@ -72,6 +76,18 @@ const safeUrl = sanitizeRedirectUrl(redirectParam)  // '/' on external URLs
 | `useTeam()` | Team/organization management |
 | `useTeamContext()` | Current team context |
 | `useTeamState()` | Team state management |
+| `useCan(action)` | May the signed-in member do `action` in the current team? `ComputedRef<boolean>`, SSR-safe (#4104) |
+| `useCan(action, { server: false })` | Same, browser only — for shared-cached public pages, so no visitor's answer lands in the cached HTML (#4105) |
+| `useCanAnswers()` | Shared state of every `useCan` answer (`{ [teamId]: { [action]: boolean } }`); `useTeam()`'s `isAdmin` / `canManageMembers` / `canInviteMembers` read `team:manage` from it, else the owner/admin default (#4105) |
+| `useTeamRoles()` | The current team's own roles (#4106): `roles` (`{ id, role, actions }`), `grantable` (actions you hold), `refresh` / `create(name, actions)` / `update(name, actions)` / `remove(name)`, each `{ data, error }` with Better Auth's `error.code`. Client-only (call `refresh` in `onMounted`) |
+
+## Middleware
+
+| Middleware | Purpose |
+|------------|---------|
+| `auth` | Signed-in only |
+| `guest` | Signed-out only |
+| `can` | Page guard: every matched route's `meta.can` must pass in the route's `[team]`; super-admins skip; refused → 403 (#4105). Shared check: `checkRouteCan(to, actions)` / `routeActions(to)` in `app/utils/routeCan.ts` |
 
 ## Components
 
@@ -97,7 +113,7 @@ const safeUrl = sanitizeRedirectUrl(redirectParam)  // '/' on external URLs
 - `AuthSidebar`, `TeamSection`
 
 ### Pill
-- `CroutonUserPill` (`app/components/Crouton/UserPill.vue`) — one pill for account + status (member / PIN visitor / signed out). Menu from `useUserMenuItems()`, status from `useCroutonStatus()`; marks the app as pill-bearing via `appConfig.crouton.status = 'pill'` (app.config.ts) so `useNotify()` routes every notification to the feed — never from mount state. Props: `showStatus`, `compact`, `placement`, `extraItems`, `useModal`. Core ships a no-op stub (`stubs/CroutonUserPill.vue`).
+- `CroutonUserPill` (`app/components/Crouton/UserPill.vue`) — one pill for account + status (member / PIN visitor / signed out). Menu from `useUserMenuItems()`, status from `useCroutonStatus()`; recent status entries + "See all activity" sit in one "Recent" slide-out (`buildRecentMenuItem`, `app/utils/userPillRecent.ts`); marks the app as pill-bearing via `appConfig.crouton.status = 'pill'` (app.config.ts) so `useNotify()` routes every notification to the feed — never from mount state. Props: `showStatus`, `compact`, `placement`, `extraItems`, `useModal`. Core ships a no-op stub (`stubs/CroutonUserPill.vue`).
 
 ## Server Utilities
 
@@ -123,9 +139,114 @@ import { requireTeamMember, requireTeamAdmin, requireTeamOwner } from '@crouton/
 
 // Require specific roles
 await requireTeamMember(event)  // Any team member
-await requireTeamAdmin(event)   // Admin or owner
+await requireTeamAdmin(event)   // Admin or owner — prefer `requireCan(event, '<action>')` in package code (#4108)
 await requireTeamOwner(event)   // Owner only
 ```
+
+### Permissions (actions) (#4104)
+
+One question everywhere: **may this person do this here?** Packages declare the *actions* they guard; the
+site sets which base role gets which action; crouton turns both into Better Auth access control
+(`server/lib/access.ts` → `organization({ ac, roles })`), so Better Auth and `can()` answer from one
+definition.
+
+**Declare an action** (a package, in its `app/app.config.ts` — packages never declare roles):
+
+```typescript
+export default defineAppConfig({
+  croutonActions: {
+    'pages:edit': { label: 'permissions.pagesEdit' } // `resource:verb` + i18n label key (en/fr/nl)
+  }
+})
+```
+
+An action may not reuse one of Better Auth's own organization permission names (`member:create`,
+`invitation:create`, `team:update`, …) — that would also open the native endpoint; startup fails.
+
+**Set base roles** (the site, the `croutonAuth` module option in `nuxt.config.ts` — the module copies it
+to `runtimeConfig.public.crouton.auth`): base role → actions. A role listed replaces that role's
+defaults; a role left out keeps them. Defaults: owner and admin get **every declared action** (a newly
+declared one too, no config needed), member none — for admin this is the template a team's admin row is
+seeded with (and what `can()` answers until the row exists); an action declared later reaches every team's admin
+row (synced on the team's next `/organization/*` call, and answered by `can()` at once), except in a team
+whose owner removed it — the row's `removedActions` records what the owner left unticked
+(`syncTeamAdminRole`, #4283). The owner must keep `team:manage` — startup fails
+otherwise (`server/plugins/permissions-check.ts`). `owner` and `member` are fixed roles; `admin` is one row
+per team (`organizationRole`), seeded from `teams.roles.admin` (the template, `adminRolePermission()`) on every
+team-creation path and lazily on the team's first `/organization/*` call, editable by the owner only, never
+deletable (`server/lib/team-admin-role.ts`, #4130). A team adds its own roles on top (see **Team roles** below).
+
+```typescript
+// nuxt.config.ts
+croutonAuth: { teams: { roles: { member: ['pages:edit'] } } }
+```
+
+**Ask:**
+
+```typescript
+// Server — auto-imported, or '@fyit/crouton-auth/server/utils/permissions' / '#crouton/team-auth'
+await can(teamId, userId, 'pages:edit', event) // boolean; reads the role from the DB, no session needed; never throws
+await canMany(teamId, userId, ['pages:edit', 'site:manage'], event) // { action: boolean }, one membership read
+const { team } = await requireCan(event, 'pages:edit') // resolves the team like requireTeamAdmin, 403 unless allowed
+// Pass `event` when you have one. Without it can() never builds the auth instance (that would cache it
+// with no request to take the base URL from); it uses the existing one, or the static roles.
+
+// Client (works during SSR — useRequestFetch forwards the cookie)
+const canEdit = useCan('pages:edit') // ComputedRef<boolean>; an array = all must be allowed
+const canEditPublic = useCan('pages:edit', { server: false }) // on a cached public page: browser only
+
+// Page guard (#4105) — every matched route's `can` must pass (parent + child both checked)
+definePageMeta({ middleware: ['auth', 'can'], can: 'site:manage' })
+// Never use useCan() inside middleware: it reads false while loading, so it would refuse everyone.
+
+// HTTP
+GET /api/teams/[id]/can?actions=pages:edit,site:manage // → { 'pages:edit': true, 'site:manage': false }
+```
+
+Unknown actions answer `false`. `admin:access` is true when the role has it **or any other crouton action**
+(so a custom role reaches its screen; Better Auth's own statements like `ac:read` don't count). Each
+action below is declared, with en/fr/nl labels, by the package in its column. The only fallback built into
+crouton-auth (`CROUTON_DEFAULT_ACTIONS`) is `team:manage` (the owner can never lose it) and `admin:access`
+(the one `can()` gives its own meaning) — so they exist even when `createAuth()` gets no layer's
+`croutonActions`. Any other action a package does not declare is unknown (`false`).
+`tests/unit/server/declared-actions.test.ts` checks the table against the real package files.
+
+| Action | Declared by | Default |
+|---|---|---|
+| `admin:access` | crouton-admin | owner, admin (+ any role with another action) |
+| `team:manage` | crouton-auth | owner, admin (owner can never lose it) |
+| `team:domains` | crouton-auth | owner, admin |
+| `site:manage` | crouton-core | owner, admin |
+| `collections:manage` | crouton-core | owner, admin |
+| `translations:manage` | crouton-i18n | owner, admin |
+| `pages:edit` | crouton-pages | owner, admin |
+| `media:manage` | crouton-assets | owner, admin |
+| `activity:view` | crouton-events | owner, admin |
+| `bookings:create` | crouton-bookings | owner, admin |
+| `bookings:manage` | crouton-bookings | owner, admin |
+| `sales:manage` | crouton-sales | owner, admin |
+
+`member` gets none by default. Ownership itself (demote/remove the owner, transfer/delete the team) stays
+role-based (`requireTeamOwner`). Package server routes ask `requireCan(event, action)` / `can()`, never a role name (#4108); `domains/*` uses `team:domains`, so admins may manage domains (`tests/unit/server/route-actions.test.ts` lists every route and its action). Tests: `tests/unit/server/permissions*.test.ts`, `can-endpoint.test.ts`,
+`tests/unit/composables/useCan.test.ts`.
+
+**Team roles** (#4106): Better Auth dynamic access control is on (`dynamicAccessControl: { enabled: true }`
+in `buildOrganizationConfig`, and on `organizationClient`). A team's own roles live in the `organizationRole`
+table (`server/database/schema/auth.ts`; every app with a `member` table has its own `NNNN_team_roles`
+migration, plus a `NNNN_admin_removed_actions` migration adding `organizationRole.removedActions` (#4283),
+both checked by `scripts/team-roles-migrations.test.mjs`) and count everywhere `can()` asks.
+`shared/utils/team-roles.ts` maps ticked actions ↔ the stored permission: `admin:access` is never stored
+(it comes with any other action), and a role with `team:manage` also stores Better Auth's
+`member`/`invitation`/`ac` rights so its own invite / change-role / role endpoints work. Better Auth enforces
+the rest: owner and member can't be created, edited or deleted; the team's admin row can be edited only by an
+owner (by name or id), and is never renamed or deleted; no role may be named or renamed `admin` (crouton's
+`buildAuthHooks`, `ADMIN_ROLE_OWNER_ONLY` / `ADMIN_ROLE_CANNOT_BE_RENAMED` / `ADMIN_ROLE_CANNOT_BE_DELETED`;
+`useTeamRoles().adminRole` / `updateAdmin()`, saved through `adminActionsToRolePermission()`, which always keeps
+admin's `organization:update` + sub-team rights); a role a member still has can't be deleted
+(`ROLE_IS_ASSIGNED_TO_MEMBERS`); you can only give a role actions you hold; the last owner can't be demoted.
+The name can't change after creation (members hold it by name). `MemberRole` is a base role or any team role
+name (`BaseMemberRole` for the three). Screen: crouton-admin `/admin/[team]/team/roles`; the Members picker
+lists team roles too. Tests: `tests/unit/server/team-roles.test.ts`, `tests/unit/shared/team-roles.test.ts`.
 
 ### Public Team Resolution
 
@@ -152,6 +273,8 @@ import {
   getOrganizationMembershipDirect
 } from '@crouton/auth/server'
 ```
+
+`canEditPages(teamId, userId)` (`server/utils/team.ts`) is the single page-edit rule — today team admin or owner; it becomes `can(…, 'pages:edit')` with #4103. `getUserTeamsDirect(userId)` lists a user's teams (`{ id, slug, name, role }`) with no session — both used by the MCP page tools (#4097).
 
 ## Middleware
 
@@ -230,6 +353,16 @@ Located in `server/database/schema/auth.ts` (the `user` table itself lives in `s
 - `twoFactor` - 2FA settings
 - `teamSettings` - Team-specific settings (translations, AI keys, theme)
 - `authEmailLog` - Auth email audit log (verification, password reset, invitation, magic link)
+- `rateLimit` - better-auth rate-limit counters (key = ip|path), shared across instances
+- `jwks`, `oauthClient`, `oauthResource`, `oauthClientResource`, `oauthRefreshToken`, `oauthAccessToken`, `oauthConsent`, `oauthClientAssertion` - sign-in for Claude / MCP apps (#4096; used only with `mcpOAuth: true`, but every app that imports this file gets them on its next `db:generate`)
+
+### Sign-up & password reset (#3141)
+
+E-mail verification is required **iff** the app can send e-mail: `runtimeConfig.public.crouton.email` exists (only crouton-email defines it). It is read once, in `useServerAuth` via `isEmailVerificationRequired(config)`, and passed to `createAuth({ requireEmailVerification })`, which then sets `requireEmailVerification` + `sendOnSignUp` + `sendOnSignIn` (never a hard-coded `sendOnSignUp: false` — that would require verification but never send the mail). The verify link signs the user in (`autoSignInAfterVerification`) and lands on the sign-up `callbackURL` (`register({ callbackURL })`, sanitized), so an invitee returns to the invite page. `register()` returns `{ requiresVerification }`; the register modal then shows "check your email" instead of signing in. Apps without crouton-email keep instant sign-up. A password reset always revokes every session (`revokeSessionsOnPasswordReset`). Existing users were backfilled as verified (migration `*_verify_existing_users` in every app/POC/fixture). The staging review login (`scripts/seed-review-login.mjs`) looks the account up first and resets + verifies it server-side before signing in.
+
+### Custom Domain Claims
+
+`domain` rows are unique per `(organizationId, domain)`, so a team's unverified (pending) claim never blocks another team. Only one team can hold a *verified* domain (partial unique index `domain_verified_uniq`). `POST /api/teams/[id]/domains` refuses a domain only if another team already has it verified; `.../domains/[domainId]/verify` refuses to verify if another team verified it first (409). Apps need migration `domain_per_team_pending` (kassa 0008, velo 0004).
 
 ### Auth Email Log API
 
@@ -238,7 +371,7 @@ Located in `server/database/schema/auth.ts` (the `user` table itself lives in `s
 | `/api/teams/[id]/email-logs` | GET | Admin | List email logs (filter by `type`, `status`; paginate with `limit`, `offset`) |
 | `/api/teams/[id]/email-logs/stats` | GET | Admin | Aggregate stats (total, sent, failed, pending, by type) |
 
-Logs are scoped to team member email addresses. The `auth-email-logger` Nitro plugin automatically records every `crouton:auth:email` hook emission.
+Both endpoints scope with `teamEmailLogScope()` (`server/utils/email-log-scope.ts`, #3546): a team sees rows with its own `organizationId` (invitations, even to non-members), never another team's, and team-less rows (verification, password reset, magic link, pre-#3546 rows) only when the recipient is a current member. The `auth-email-logger` Nitro plugin automatically records every `crouton:auth:email` hook emission, storing `organizationId` for invitations (both send sites pass it: `lib/auth.ts` and the resend endpoint).
 
 ### Team Settings Table
 
@@ -306,9 +439,11 @@ Generated collections automatically import from `@crouton/auth/server`. Ensure:
 
 **Note**: Import from `@crouton/auth/server` directly. The old `#crouton/team-auth` Nitro alias was removed in #2290 (nothing imported it).
 
-## Rate Limiting (Recommended)
+## Rate Limiting
 
-Authentication endpoints are prime targets for abuse. We recommend using `nuxthub-ratelimit` for rate limiting.
+Built in: better-auth's limiter runs with `storage: 'database'` (the `rateLimit` table, shared across Worker instances), keyed on `cf-connecting-ip`; sign-in/sign-up allow 3 tries per 10 s and password-reset/verification-email 3 per 60 s per IP; other auth endpoints 100 per 10 s. Not counted: requests without `cf-connecting-ip` (local dev, e2e — and so any deployment not behind Cloudflare has no auth limit) and the page-load reads `/get-session`, `/organization/get-full-organization`, `/organization/list`. Config: `rateLimit` + `advanced.ipAddress` in `server/lib/auth.ts`; behaviour test: `tests/unit/server/rate-limit.test.ts`. Apps need migration `auth_rate_limit` (#3142).
+
+### Optional: broader per-route limits (`nuxthub-ratelimit`)
 
 ### Installation
 
@@ -358,6 +493,20 @@ export default defineNuxtConfig({
 - Minimum TTL is 60 seconds (NuxtHub KV limitation)
 - See [nuxthub-ratelimit docs](https://github.com/fayazara/nuxthub-ratelimit)
 
+## Sign-in for Claude (MCP OAuth)
+
+With `croutonAuth: { mcpOAuth: true }` (default off) the app becomes an OAuth 2.1 sign-in server for MCP apps (Claude, ChatGPT, …), so they can act for a signed-in user on `<baseURL>/mcp` (#4096). Built from Better Auth's own plugins, no home-made OAuth: `jwt()` (signs access tokens, serves `/api/auth/jwks`) + `mcp()` from `@better-auth/mcp` (it *is* the provider — never add a second `oauthProvider()`). Options live in `buildMcpOAuthOptions()` (`server/lib/auth.ts`).
+
+- **Scopes**: `offline_access` + the tool scopes in `server/lib/mcp-scopes.ts` (today `pages`). A package that adds MCP tools adds its scope there. Without `offline_access` no refresh token is issued and the connection dies after the 1-hour token.
+- **The token carries no team.** It names the user (`sub`), the audience `<baseURL>/mcp` and the agreed scopes. No `postLogin`, no `consentReferenceId`, no team claim; `/mcp` checks the team on every call against the user's own rights. Consent is per user + client.
+- **Routes** (all 404 with the flag off): `/api/auth/oauth2/*` (authorize, token, register, consent, public-client, …); root discovery `/.well-known/oauth-authorization-server`, `/.well-known/oauth-authorization-server/api/auth`, `/.well-known/oauth-protected-resource` and `/.well-known/oauth-protected-resource/mcp`, answered by the server middleware `server/middleware/mcp-oauth-discovery.ts` before `@nuxtjs/mcp-toolkit`'s own 404 handlers on those paths. `openid-configuration` is not served. A signed-in user lists and revokes their own connections with `GET /api/auth/oauth2/get-consents` and `POST /api/auth/oauth2/delete-consent { id }` (velo's Assistants IA page, `apps/velo/app/pages/admin/[team]/assistants.vue`, #4098).
+- **Registration**: open dynamic registration (DCR) without login, because Claude is a public client. Limited to 10 per minute per IP (`rateLimit.register`, kept per `cf-connecting-ip` by the `'/**'` rule). On each registration `mcpClientCleanup()` (`server/lib/mcp-oauth.ts`) deletes anonymous clients older than 24 h that have no consent and no token (a revoked connection keeps its tokens and is left alone). No cron.
+- **No CIMD**: `@better-auth/cimd`'s pinned fetch can't run on Workers (#4120), so clients register through DCR only.
+- **Sign-in resumes the flow**: the provider sends the user to `/auth/login?…&sig=…`; `login.vue` keeps that query, `oauthProviderClient()` (added in `auth-client.client.ts` with the flag on) sends it with the sign-in as `oauth_query`, and better-auth's redirect plugin follows the `{ redirect, url }` answer (`useAuth().login` then never resolves, so the modal doesn't redirect too). Email + password resumes. Passkey, magic link and social sign-in are **not** wired for this flow.
+- **Consent page** `app/pages/auth/consent.vue`: "<client> veut accéder à vos équipes" (the client's `client_name`, or "Une application"), the host of its redirect URI (from the signed query, already matched against the client record), the scopes in plain words, Autoriser / Refuser → `POST /api/auth/oauth2/consent { accept, oauth_query }` and one page load to the returned `url`. No team picker.
+- `mcp()` refuses a non-https `resource` except on localhost, so an app turning this on needs an https `BETTER_AUTH_URL`.
+- Tests: `tests/unit/server/mcp-oauth.test.ts` (real better-auth + SQLite built from `auth.ts`, foreign keys on).
+
 ## Scoped Access Tokens & Grants
 
 Provides lightweight, resource-scoped authentication for scenarios where full user accounts aren't needed:
@@ -370,7 +519,7 @@ Two halves: **tokens** (the bearer credential a holder uses after login) and **g
 
 ### Transport Convention
 
-The canonical header for scoped tokens is **`x-scoped-token`** (exported as `SCOPED_TOKEN_HEADER`); the canonical cookie is **`scoped-access-token`** (set by `useScopedAccess`, the redeem/mint endpoints, and read during SSR — e.g. by crouton-pages' scoped visibility). `validateScopedTokenFromEvent` checks, in order: `x-scoped-token` header → cookie → `Authorization: Bearer`. All consumers use these — there are no package-specific names.
+The canonical header for scoped tokens is **`x-scoped-token`** (exported as `SCOPED_TOKEN_HEADER`); the canonical cookie is **`scoped-access-token`** (set by `useScopedAccess`, the redeem endpoint, and read during SSR — e.g. by crouton-pages' scoped visibility). `validateScopedTokenFromEvent` checks, in order: `x-scoped-token` header → cookie → `Authorization: Bearer`. All consumers use these — there are no package-specific names.
 
 ### Grants (credential → token)
 
@@ -485,19 +634,18 @@ const access = useScopedAccess('booking')
 await access.redeem({ teamId, resourceId: bookingId, secret: pin, displayName: 'Guest' })
 ```
 
-Sessions persist in a client-readable cookie keyed **per resource type** (`scoped-access-session-${resourceType}`), so every consumer of the same resource type lands on the same session (the pages gate and `useEventAccess` share `scoped-access-session-event`). The session cookie's `maxAge` follows the token's real `expiresAt` (not a fixed 8h), keeping the client session honest when a grant uses a custom `tokenTtl`. The httpOnly `scoped-access-token` cookie (server-set by redeem/mint) is for SSR validation only — client writes to it are silent no-ops and client code must never depend on reading it. Because JS can't clear an httpOnly cookie, **logout must go through the server**: `useScopedAccess().logout()` / `useEventAccess().logout()` **await** the `/api/auth/scoped-access/logout` POST (no longer fire-and-forget) so the clearing `Set-Cookie` lands before any reload — otherwise SSR keeps honoring a live cookie and a "logged-out" user still sees gated content.
+Sessions persist in a client-readable cookie keyed **per resource type** (`scoped-access-session-${resourceType}`), so every consumer of the same resource type lands on the same session (the pages gate and `useEventAccess` share `scoped-access-session-event`). The session cookie's `maxAge` follows the token's real `expiresAt` (not a fixed 8h), keeping the client session honest when a grant uses a custom `tokenTtl`. The httpOnly `scoped-access-token` cookie (server-set by redeem) is for SSR validation only — client writes to it are silent no-ops and client code must never depend on reading it. Because JS can't clear an httpOnly cookie, **logout must go through the server**: `useScopedAccess().logout()` / `useEventAccess().logout()` **await** the `/api/auth/scoped-access/logout` POST (no longer fire-and-forget) so the clearing `Set-Cookie` lands before any reload — otherwise SSR keeps honoring a live cookie and a "logged-out" user still sees gated content.
 
 ### API Endpoints
 
 | Endpoint | Method | Auth | Purpose |
 |----------|--------|------|---------|
 | `/api/auth/scoped-access/redeem` | POST | Public (the secret is the auth) | Present credential (PIN) → token; 429 + Retry-After when locked, 410 when exhausted, 401 otherwise (not_found and invalid_secret are indistinguishable) |
-| `/api/auth/scoped-access/mint` | POST | Team member session | Delegation: mint a scoped token directly (no secret) |
 | `/api/auth/scoped-access/validate` | POST | — | Validate a token |
 | `/api/auth/scoped-access/logout` | POST | — | Revoke a token (read from the body **or** the `scoped-access-token` cookie) **and** clear that httpOnly cookie via `Set-Cookie`, so the next SSR request re-gates. No body required — the cookie alone is enough |
 | `/api/auth/scoped-access/refresh` | POST | — | Extend token expiration |
 
-Both redeem and mint also set the `scoped-access-token` cookie (httpOnly) so SSR can validate.
+Redeem also sets the `scoped-access-token` cookie (httpOnly) so SSR can validate.
 
 ### Database Schema
 
@@ -536,8 +684,8 @@ emailed to the owner). Never write a password into a seed: this repo is public.
 
 - **Extends**: None (standalone module/layer)
 - **Used by**: `@fyit/crouton-core` (extends this layer, so every app gets it) and all crouton packages (canonical team auth)
-- **Core deps**: better-auth, @better-auth/passkey
-- **Recommended**: nuxthub-ratelimit (optional peer dependency for rate limiting)
+- **Core deps**: better-auth, @better-auth/passkey, @better-auth/mcp + @better-auth/oauth-provider (pinned `1.7.7`, the same line as better-auth; used only when `mcpOAuth` is on)
+- **Optional**: nuxthub-ratelimit (extra per-route limits; auth endpoints are already limited by better-auth's database store)
 
 ## Testing
 

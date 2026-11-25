@@ -29,6 +29,7 @@ DevTools integration for Nuxt Crouton. Provides visual inspection and management
 | `src/runtime/server-rpc/eventsHealth.ts` | Events health statistics |
 | `src/runtime/server/utils/operationStore.ts` | In-memory operation tracking |
 | `src/runtime/server/plugins/operationTracker.ts` | Nitro plugin for tracking API calls |
+| `src/runtime/server/utils/routeParse.ts` | Pure route → collection/operation helpers (tested in `test/routeParse.test.ts`). `parseTeamCollectionRoute` recognises generated routes `/api/teams/<teamId>/<apiPath>[/<id>[/move]]` for collections registered in `croutonCollections` — read with Nuxt's `useAppConfig` from `#imports`; nitropack's own `useAppConfig` lacks the layers' `app.config.ts` (#3255) |
 
 ## Features
 
@@ -199,6 +200,6 @@ cd playground && pnpm dev
 ## Testing
 
 ```bash
-npx nuxt typecheck  # MANDATORY after changes
+pnpm typecheck && pnpm typecheck:packages  # from the repo root; see root CLAUDE.md "Post-change checks"
 pnpm build          # Build module
 ```

@@ -12,7 +12,8 @@ export default defineCroutonManifest({
   provides: {
     composables: ['useAdminUsers', 'useAdminTeams', 'useAdminStats', 'useImpersonation'],
     components: [
-      { name: 'CroutonAdminDashboard', description: 'Super admin dashboard', props: [] },
+      { name: 'Dashboard', description: 'Super admin dashboard' },
+      { name: 'ImpersonationBanner', description: 'Fixed top banner shown while an admin is impersonating a user' },
     ],
   },
 })

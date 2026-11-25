@@ -1,4 +1,7 @@
 {
+  "permissions": {
+    "salesManage": "Manage the point of sale"
+  },
   "sales": {
     "title": "Point of Sale",
     "pageTypes": {},
@@ -130,7 +133,9 @@
           "eventNotFound": "Event not found",
           "stale": "Not updating",
           "staleHint": "This board has lost contact with the server — the orders shown may be out of date. Check the connection.",
-          "connecting": "connecting"
+          "connecting": "connecting",
+          "signedOut": "Signed out — log in again",
+          "signInAgain": "Log in again"
         }
       },
       "salesOrders": {

@@ -1,6 +1,5 @@
 import { and, eq } from 'drizzle-orm'
 import { requireScopedEvent } from '../../../../utils/require-scoped-event'
-import { salesEvents } from '../../../../../collections/events/server/database/schema'
 import { salesProducts } from '../../../../../collections/products/server/database/schema'
 import { salesCategories } from '../../../../../collections/categories/server/database/schema'
 import { salesClients } from '../../../../../collections/clients/server/database/schema'
@@ -8,17 +7,8 @@ import { salesLocations } from '../../../../../collections/locations/server/data
 
 // Helper-authenticated endpoint: all data needed for POS order interface
 export default defineEventHandler(async (event) => {
-  const { eventId, access, db } = await requireScopedEvent(event)
-
-  const [salesEvent] = await db
-    .select()
-    .from(salesEvents)
-    .where(eq(salesEvents.id, eventId))
-    .limit(1)
-
-  if (!salesEvent) {
-    throw createError({ status: 404, statusText: 'Event not found' })
-  }
+  // The helper loads the event scoped to the token's team (404 otherwise).
+  const { eventId, access, db, salesEvent } = await requireScopedEvent(event)
 
   const products = await db
     .select()

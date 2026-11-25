@@ -1,4 +1,7 @@
 {
+  "permissions": {
+    "salesManage": "Gérer le point de vente"
+  },
   "sales": {
     "title": "Point de vente",
     "blocks": {
@@ -129,7 +132,9 @@
           "eventNotFound": "Événement introuvable",
           "stale": "Non actualisé",
           "staleHint": "Cet écran a perdu le contact avec le serveur — les commandes affichées peuvent être obsolètes. Vérifiez la connexion.",
-          "connecting": "connexion"
+          "connecting": "connexion",
+          "signedOut": "Déconnecté — reconnectez-vous",
+          "signInAgain": "Se reconnecter"
         }
       },
       "salesOrders": {

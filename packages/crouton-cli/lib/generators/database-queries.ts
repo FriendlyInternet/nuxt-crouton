@@ -1,7 +1,8 @@
 // Generator for database queries
 import { toKebabCase, pascal, toLayerCamelCase } from '../utils/helpers.ts'
 import { collectFilterFields } from '../utils/filter-fields.ts'
-import { collectTeamRefFields } from '../utils/team-ref-fields.ts'
+import { collectTeamRefFields, collectPersonRefFields } from '../utils/team-ref-fields.ts'
+import { resolveAccess } from './api-endpoints.ts'
 
 // Shared context for the tree-query template builders below
 interface TreeQueryContext {
@@ -16,6 +17,31 @@ interface TreeQueryContext {
 }
 
 // Section banner + the TreeItem interface shared by the tree query templates
+/**
+ * Person-field membership check (#1958): a person field may only hold a member of the caller's
+ * team. Built on crouton-auth's `getMembership` (fails closed → null on a DB error). Emits a
+ * separate function from `assert<X>References` because `getMembership` needs the event.
+ * Exported so the test can compile and run the emitted code.
+ */
+export function buildPersonRefCheck(personFields: Array<Record<string, any>>, prefixedPascalCase: string): string {
+  if (personFields.length === 0) return ''
+  return `
+
+// A person field may only hold a member of the caller's team (#1958)
+export async function assert${prefixedPascalCase}TeamMembers(event: Parameters<typeof getMembership>[0], teamId: string, data: Record<string, any>) {
+  for (const [field, value] of [${personFields.map(f => `['${f.name}', data.${f.name}]`).join(', ')}] as const) {
+    if (value === undefined || value === null || value === '') continue
+    const ids = typeof value === 'string'
+      ? [value]
+      : Array.isArray(value) && value.every(v => typeof v === 'string') ? value.filter(v => v !== '') : null
+    if (!ids) throw createError({ status: 400, statusText: \`Invalid reference: \${field}\` })
+    for (const id of new Set(ids)) {
+      if (!(await getMembership(event, teamId, id))) throw createError({ status: 400, statusText: \`Invalid reference: \${field}\` })
+    }
+  }
+}`
+}
+
 function buildTreeQueriesHeader(ctx: TreeQueryContext): string {
   return `
 
@@ -558,7 +584,7 @@ function buildArrayRefProcessing(
 // (total via a parallel count(*)); otherwise it returns the bare array — so
 // existing non-paginated callers are unaffected (enforced by the overloads).
 function buildGetAllOpts(filterFields: string[], tableName: string, own = false): { overload1Opts: string; overload2Opts: string; implOpts: string; filterConditions: string } {
-  // list: 'own' adds an ownerId option (callers pass it for non-admins only)
+  // list: 'own' adds an ownerId option (callers pass it unless they have the collection's action)
   const fkTypeFields = [...filterFields.map(f => `${f}?: string`), ...(own ? ['ownerId?: string'] : [])].join('; ')
   return {
     overload1Opts: `opts?: {${fkTypeFields ? ` ${fkTypeFields} ` : ''}}`,
@@ -681,7 +707,7 @@ export async function create${ctx.prefixedPascalCase}(data: New${ctx.prefixedPas
 }`
 }
 
-// update* — team-scoped update with owner check (admins bypass) + 404 guard
+// update* — team-scoped update with owner check (callers with the action bypass: seesAll) + 404 guard
 function buildUpdateQuery(ctx: QueryTemplateContext): string {
   return `
 
@@ -690,16 +716,16 @@ export async function update${ctx.prefixedPascalCase}(
   teamId: string,
   userId: string,
   updates: Partial<${ctx.prefixedPascalCase}>,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(tables.${ctx.tableName}.id, recordId),
     eq(tables.${ctx.tableName}.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(tables.${ctx.tableName}.owner, userId))
   }
 
@@ -723,7 +749,7 @@ export async function update${ctx.prefixedPascalCase}(
 }`
 }
 
-// delete* — team-scoped delete with owner check (admins bypass) + 404 guard
+// delete* — team-scoped delete with owner check (callers with the action bypass: seesAll) + 404 guard
 function buildDeleteQuery(ctx: QueryTemplateContext): string {
   return `
 
@@ -731,16 +757,16 @@ export async function delete${ctx.prefixedPascalCase}(
   recordId: string,
   teamId: string,
   userId: string,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(tables.${ctx.tableName}.id, recordId),
     eq(tables.${ctx.tableName}.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(tables.${ctx.tableName}.owner, userId))
   }
 
@@ -817,7 +843,14 @@ export function generateQueries(
   // (hierarchy already includes reorderSiblings, so we skip to avoid duplicate exports)
   const sortableQueries = hasHierarchy ? '' : generateSortableQueries(data, tableName, prefixedPascalCasePlural)
 
-  const own = data.collectionConfig?.access?.list === 'own'
+  const access = resolveAccess(data)
+  const own = access.list === 'own'
+  // The runtime registry reads this to refuse public exposure of 'own' collections (#3380)
+  const accessExport = Object.keys(access).length === 0
+    ? ''
+    : `
+
+export const ${prefixedPascalCasePlural}Access = ${JSON.stringify(access)} as const`
   const { overload1Opts, overload2Opts, implOpts, filterConditions } = buildGetAllOpts(filterFields, tableName, own)
 
   const ctx: QueryTemplateContext = {
@@ -854,13 +887,18 @@ ${teamRefFields.map(f => `    { field: '${f.name}', table: ${f.refTarget}Schema.
   ])
 }`
 
+  const personFields = collectPersonRefFields(data)
+
   return buildFileHeader(ctx)
+    + (personFields.length > 0 ? `import { getMembership } from '@fyit/crouton-auth/server/utils/team'\n` : '')
     + buildGetAllQuery(ctx)
     + buildGetByIdsQuery(ctx)
     + buildCreateQuery(ctx)
     + buildUpdateQuery(ctx)
     + buildDeleteQuery(ctx)
+    + accessExport
     + assertRefsQuery
+    + buildPersonRefCheck(personFields, prefixedPascalCase)
     + treeQueries
     + sortableQueries
 }

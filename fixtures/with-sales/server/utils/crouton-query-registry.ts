@@ -11,4 +11,5 @@
 export const queryRegistry: Record<string, {
   getAll: () => Promise<(teamId: string) => Promise<any[]>>
   getByIds: () => Promise<(teamId: string, ids: string[]) => Promise<any[]>>
+  access?: () => Promise<any>
 }> = {}

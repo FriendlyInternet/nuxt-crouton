@@ -1,4 +1,5 @@
 import type { MapConfig } from '../types'
+import { getMapStyle } from './useMapStyles'
 
 const DEFAULT_STYLE = 'https://tiles.openfreemap.org/styles/liberty'
 
@@ -29,7 +30,8 @@ export function useMapConfig(): MapConfig & { isConfigured: boolean } {
 
   return {
     isConfigured: true,
-    style: mapsConfig?.style || DEFAULT_STYLE,
+    // Accept a preset name ('positron') or a full style URL
+    style: getMapStyle(mapsConfig?.style || DEFAULT_STYLE),
     center: mapsConfig?.center,
     zoom: mapsConfig?.zoom || 12
   }

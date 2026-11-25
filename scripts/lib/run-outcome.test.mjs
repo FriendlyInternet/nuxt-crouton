@@ -1,8 +1,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { classify, classifyComment, joinRuns, median, summarizeRuns, legacyClassifyComment, NOTE_MARKER } from './run-outcome.mjs'
-import { buildRecord, writeRecord, conclusionOf } from '../eval-ledger/record-run.mjs'
+import { buildRecord, writeRecord, conclusionOf, runMatchesSubject } from '../eval-ledger/record-run.mjs'
 import { subjectFromLog } from '../eval-ledger/backfill.mjs'
+import { validate } from '../eval-ledger/schema.mjs'
 
 const win = { start: '2026-11-03T10:00:00Z', end: '2026-11-03T10:30:00Z' }
 const at = '2026-11-03T10:10:00Z'
@@ -122,6 +123,53 @@ test('write: 409 is retried; an unreachable API throws (caller exits 0)', async 
   await assert.rejects(writeRecord({ repo: 'o/r', token: 't', fetchImpl: async () => { throw new Error('down') }, record: { run_id: '1', attempt: '1', started_at: '2026-11-03' } }))
 })
 
+// T7 (#3253): `epics/<n>.json` is rewritten on a hand retry. GitHub needs the file's sha to update it.
+function contentsApi({ existingSha = null, rejectShaless = false } = {}) {
+  const puts = []
+  const fetchImpl = async (url, init) => {
+    const method = init?.method || 'GET'
+    if (method === 'GET' && url.includes('/contents/')) {
+      return existingSha ? { status: 200, json: async () => ({ sha: existingSha }) } : { status: 404, json: async () => ({}) }
+    }
+    if (method === 'PUT') {
+      const body = JSON.parse(init.body)
+      puts.push(body)
+      if (rejectShaless && !body.sha) return { status: 422, json: async () => ({ message: 'sha wasn\'t supplied' }) }
+      return { status: 200, json: async () => ({}) }
+    }
+    return { status: 200, json: async () => ({}) } // branch exists
+  }
+  return { puts, fetchImpl }
+}
+const epicRecord = { epic: 7, runs: 8 }
+test('T7. overwrite: an existing file\'s sha is sent on the PUT; a new file (404) gets none', async () => {
+  const a = contentsApi({ existingSha: 'abc' })
+  await writeRecord({ repo: 'o/r', token: 't', record: epicRecord, path: 'epics/7.json', message: 'm', overwrite: true, fetchImpl: a.fetchImpl, sleep: async () => {} })
+  assert.equal(a.puts.at(-1).sha, 'abc')
+  const b = contentsApi()
+  await writeRecord({ repo: 'o/r', token: 't', record: epicRecord, path: 'epics/7.json', message: 'm', overwrite: true, fetchImpl: b.fetchImpl, sleep: async () => {} })
+  assert.equal('sha' in b.puts.at(-1), false)
+})
+test('T7. a file that already exists (422 without sha) fails without overwrite and is updated with it', async () => {
+  const a = contentsApi({ existingSha: 'abc', rejectShaless: true })
+  await assert.rejects(writeRecord({ repo: 'o/r', token: 't', record: epicRecord, path: 'epics/7.json', message: 'm', fetchImpl: a.fetchImpl, sleep: async () => {} }), /HTTP 422/)
+  assert.equal(a.puts.length, 3)
+  const b = contentsApi({ existingSha: 'abc', rejectShaless: true })
+  assert.equal(await writeRecord({ repo: 'o/r', token: 't', record: epicRecord, path: 'epics/7.json', message: 'm', overwrite: true, fetchImpl: b.fetchImpl, sleep: async () => {} }), 'epics/7.json')
+  assert.equal(b.puts.length, 1)
+})
+test('T7. overwrite re-reads the sha on a 409 retry, so a parallel writer\'s update is picked up', async () => {
+  let sha = 'one'; let n = 0; const puts = []
+  const fetchImpl = async (url, init) => {
+    const method = init?.method || 'GET'
+    if (method === 'GET' && url.includes('/contents/')) return { status: 200, json: async () => ({ sha }) }
+    if (method === 'PUT') { puts.push(JSON.parse(init.body).sha); if (++n === 1) { sha = 'two'; return { status: 409, json: async () => ({}) } } return { status: 200, json: async () => ({}) } }
+    return { status: 200, json: async () => ({}) }
+  }
+  await writeRecord({ repo: 'o/r', token: 't', record: epicRecord, path: 'epics/7.json', message: 'm', overwrite: true, fetchImpl, sleep: async () => {} })
+  assert.deepEqual(puts, ['one', 'two'])
+})
+
 test('record-run CLI exits 0 even when the API is unreachable', async () => {
   const { spawnSync } = await import('node:child_process')
   const r = spawnSync(process.execPath, ['scripts/eval-ledger/record-run.mjs'], {
@@ -161,6 +209,7 @@ const mkApi = (comments) => async (p) => {
   if (p.includes('/actions/runs/')) return { run_started_at: '2026-11-03T10:00:00Z' }
   if (p.includes('/actions/workflows/')) return { workflow_runs: runsList }
   if (p.includes('/pulls?')) return [{ number: 99 }]
+  if (p.endsWith('/issues/42')) return { number: 42, title: 'Fix the thing' }
   if (p.includes('/issues/42/')) return comments
   return []
 }
@@ -212,6 +261,68 @@ test('overlap needs the same issue/PR: overlapping runs on different issues are 
     const peer = await buildRecord({ env: { ...base, RUN_ID: '8' }, api: async (p) => p.includes('/actions/runs/') ? { run_started_at: win.run_started_at } : p.includes('/actions/workflows/') ? { workflow_runs: runsList } : p.includes('/pulls?') ? [{ number: 99 }] : [], listRecords: async () => [], rlEnd: { remaining: 1, reset: 5 }, now: new Date('2026-11-03T10:40:00Z') })
     assert.deepEqual(peer.overlap, ['9'])
   } finally { runsList = [] }
+})
+
+// ── real-shaped in-flight runs (#3364): agent runs all report head_branch main, pull_requests [] ──
+const real = (id, event, display_title, start = '2026-11-03T10:05:00Z', end = '2026-11-03T10:40:00Z') =>
+  ({ id, event, display_title, head_branch: 'main', pull_requests: [], run_started_at: start, updated_at: end })
+
+test('T1. two overlapping workflow_dispatch runs of work-issue-pidev on #42 flag each other (both sides)', async () => {
+  const env = { WORKFLOW_FILE: 'work-issue-pidev.yml', STAGE: 'plan' }
+  try {
+    runsList = [real(8, 'workflow_dispatch', '#42 · build'), real(9, 'workflow_dispatch', '#42 · plan', '2026-11-03T10:00:00Z', '2026-11-03T10:30:00Z')]
+    const a = await build({ ...env, RUN_ID: '9' }, [])
+    assert.deepEqual(a.overlap, ['8'])
+    assert.equal(a.attribution, 'shared')
+    const b = await build({ ...env, RUN_ID: '8' }, [])
+    assert.deepEqual(b.overlap, ['9'])
+    assert.equal(b.attribution, 'shared')
+  } finally { runsList = [] }
+})
+
+test('T2. two overlapping issue_comment runs of on-comment on #42 (title = the issue title) flag each other', async () => {
+  const env = { WORKFLOW_FILE: 'on-comment.yml', STAGE: 'interpret' }
+  try {
+    runsList = [real(8, 'issue_comment', 'Fix the thing'), real(9, 'issue_comment', 'Fix the thing', '2026-11-03T10:00:00Z', '2026-11-03T10:30:00Z')]
+    const a = await build({ ...env, RUN_ID: '9' }, [])
+    assert.deepEqual(a.overlap, ['8'])
+    assert.equal(a.attribution, 'shared')
+    const b = await build({ ...env, RUN_ID: '8' }, [])
+    assert.deepEqual(b.overlap, ['9'])
+    assert.equal(b.attribution, 'shared')
+  } finally { runsList = [] }
+})
+
+test('T3. overlapping runs on a different ticket are not flagged (#77, #420, another title, a comment run citing #42)', async () => {
+  try {
+    for (const [wf, r] of [
+      ['work-issue-pidev.yml', real(8, 'workflow_dispatch', '#77 · plan')],
+      ['work-issue-pidev.yml', real(8, 'workflow_dispatch', '#420 · plan')],
+      ['on-comment.yml', real(8, 'issue_comment', 'Another issue')],
+      ['on-comment.yml', real(8, 'issue_comment', 'Follow-up to the thing (#42)')],
+    ]) {
+      runsList = [r]
+      const rec = await build({ WORKFLOW_FILE: wf }, [])
+      assert.deepEqual(rec.overlap, [], r.display_title)
+      assert.equal(rec.attribution, 'exact', r.display_title)
+    }
+  } finally { runsList = [] }
+})
+
+test('T3. runMatchesSubject: #N on a word boundary for dispatch runs, exact title for comment runs, branch/PR fallback', () => {
+  const ctx = { subjects: [42, 99], title: 'Fix the thing', branch: 'work-42', pr: 99 }
+  const r = (event, display_title, extra = {}) => ({ event, display_title, head_branch: 'main', pull_requests: [], ...extra })
+  assert.equal(runMatchesSubject(r('workflow_dispatch', '#42 · plan'), ctx), true)
+  assert.equal(runMatchesSubject(r('workflow_dispatch', 'build-review #99'), ctx), true) // the PR number counts too
+  assert.equal(runMatchesSubject(r('workflow_dispatch', 'fix-ci #42'), ctx), true)
+  assert.equal(runMatchesSubject(r('workflow_dispatch', '#420 · plan'), ctx), false)
+  assert.equal(runMatchesSubject(r('workflow_dispatch', '#77 · plan'), ctx), false)
+  assert.equal(runMatchesSubject(r('issue_comment', 'Fix the thing'), ctx), true)
+  assert.equal(runMatchesSubject(r('issue_comment', 'Follow-up to the thing (#42)'), ctx), false)
+  assert.equal(runMatchesSubject(r('issue_comment', 'Fix the thing'), { ...ctx, title: null }), false)
+  assert.equal(runMatchesSubject(r('workflow_run', 'Build review (workflow run)'), ctx), false) // known gap: no number
+  assert.equal(runMatchesSubject(r('workflow_run', 'x', { head_branch: 'work-42' }), ctx), true)
+  assert.equal(runMatchesSubject(r('workflow_run', 'x', { pull_requests: [{ number: 99 }] }), ctx), true)
 })
 
 test('the unmarked auto-merge note from the real PR #3308 is the reason every workflow note carries the marker', () => {
@@ -280,4 +391,26 @@ test('buildRecord: the agent’s own reply without the marker is kept; with the 
   assert.deepEqual(kept.produced, ['comment'])
   const dropped = await buildC({ comments: [agent(6, `${NOTE_MARKER}\nAnswer to your question`)] })
   assert.deepEqual(dropped.produced, ['nothing'])
+})
+
+// #4317: a fix-ci record names why the run pushed no fix, and the precheck verdict.
+test('buildRecord (fix-ci): a guard refusal is recorded as no_commit_reason guard-refused, with the precheck', async () => {
+  const needs = {
+    fixbot: { result: 'success', outputs: { proceed: 'true', mode: 'fix', precheck: 'still-red' } },
+    fix: { result: 'success', outputs: { go: 'true', moved: 'false', refused: 'true', committed: 'true' } },
+  }
+  const env = { ...base, WORKFLOW_FILE: 'fix-ci-on-failure.yml', STAGE: 'fix-ci', PR: '42', ISSUE: '', NEEDS_JSON: JSON.stringify(needs) }
+  const rec = await buildRecord({ env, api: mkApi([]), listRecords: async () => [], rlEnd: { remaining: 1, reset: 5 }, now: new Date('2026-11-03T10:30:00Z') })
+  assert.equal(rec.no_commit_reason, 'guard-refused')
+  assert.equal(rec.precheck, 'still-red')
+  // validate keeps both fields (the record is what validate returned)
+  assert.equal(validate(rec).record.no_commit_reason, 'guard-refused')
+  assert.equal(validate(rec).record.precheck, 'still-red')
+})
+
+test('buildRecord: a non-fix-ci stage writes neither no_commit_reason nor precheck', async () => {
+  const needs = { fixbot: { result: 'success', outputs: { proceed: 'false', skip_reason: 'blocked', precheck: 'still-red' } } }
+  const rec = await buildRecord({ env: { ...base, NEEDS_JSON: JSON.stringify(needs) }, api: mkApi([]), listRecords: async () => [], rlEnd: { remaining: 1, reset: 5 }, now: new Date('2026-11-03T10:30:00Z') })
+  assert.ok(!('no_commit_reason' in rec))
+  assert.ok(!('precheck' in rec))
 })

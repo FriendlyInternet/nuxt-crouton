@@ -1,4 +1,7 @@
 {
+  "permissions": {
+    "translationsManage": "Gérer les traductions"
+  },
   "common": {
     "save": "Enregistrer",
     "cancel": "Annuler",

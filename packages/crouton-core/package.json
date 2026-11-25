@@ -17,6 +17,8 @@
     "./app/types/layout": "./app/types/layout.ts",
     "./app/types/layout-block": "./app/types/layout-block.ts",
     "./app/utils/layout-tree": "./app/utils/layout-tree.ts",
+    "./app/utils/layout-stores": "./app/utils/layout-stores.ts",
+    "./app/utils/layout-store-registry": "./app/utils/layout-store-registry.ts",
     "./app/composables/*": {
       "types": "./dist/app/composables/*.d.ts",
       "import": "./dist/app/composables/*.mjs"
@@ -27,6 +29,7 @@
     }
   },
   "scripts": {
+    "typecheck": "nuxt prepare && vue-tsc -b tsconfig.typecheck.json --noEmit",
     "build": "unbuild",
     "dev": "unbuild --stub",
     "prepack": "pnpm build",
@@ -39,8 +42,12 @@
     "shared",
     "types",
     "dist",
+    "i18n",
+    "modules",
     "nuxt.config.ts",
-    "crouton-hooks.d.ts"
+    "crouton-hooks.d.ts",
+    "docs/llms.txt",
+    "docs/components.md"
   ],
   "keywords": [
     "nuxt",

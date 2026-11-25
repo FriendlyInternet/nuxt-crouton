@@ -64,3 +64,15 @@ describe('collectionQueries', () => {
     expect(await (await q.getByIds())('t1', ['a', 'b'])).toEqual(['ids:t1:a+b'])
   })
 })
+
+describe('collectionQueries access (#3380)', () => {
+  it('resolves <Name>Access from the queries module', async () => {
+    const q = collectionQueries(async () => ({ SalesProductsAccess: { list: 'own' } }), 'SalesProducts')
+    expect(await q.access!()).toEqual({ list: 'own' })
+  })
+
+  it('resolves undefined when the module has no access export', async () => {
+    const q = collectionQueries(async () => ({}), 'SalesProducts')
+    expect(await q.access!()).toBeUndefined()
+  })
+})

@@ -9,6 +9,8 @@ name: Label router (work-this · delegate · plan:approved)
 #   • `delegate`/`delegate-pi` (Harness App ONLY)   → decompose-on-issue-pidev.yml.
 #   • `plan:approved`        (Harness App ONLY)     → build from the approved plan (handoff plan-build).
 # Routing rules are unchanged: scripts/epic-route.mjs, scripts/lib/plan-route.mjs, .claude/plan-routing.json.
+# `work-this` on a chat-made ticket under an epic with no ticket-review go → `scripts/ticket-review-gate.mjs`
+# starts that one review and holds it (#4456); the review's go puts `work-this` back and routes as today.
 #
 # Workflow-change: merge three labeled-event workflows into one router (#3312).
 
@@ -27,7 +29,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
-      issues: read
+      issues: write # #4202: HANDOFF_FALLBACK_TOKEN must be able to save a put-off hand-off
     env:
       ISSUE: ${{ github.event.issue.number }}
       LABEL: ${{ github.event.label.name }}
@@ -46,7 +48,18 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
+      - name: Ticket review gate
+        # Fails open (#4508): a fault in the gate prints a warning, writes no held, and exits 0, so
+        # Dispatch runs as before; it exits non-zero only if it took work-this off and lost it.
+        id: gate
+        if: env.LABEL == 'work-this'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          HANDOFF_FALLBACK_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node scripts/ticket-review-gate.mjs "$ISSUE"
       - name: Dispatch
+        if: steps.gate.outputs.held != 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           HANDOFF_FALLBACK_TOKEN: ${{ github.token }}
@@ -76,9 +89,10 @@ jobs:
                 dispatch work-issue-pidev.yml "$(jq -nc --arg i "$ISSUE" '{issue:$i}')"
                 exit 0
               fi
-              # #3208: a big (epic) issue is split, not built.
-              if [ "$(node scripts/epic-route.mjs "$LABELS" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).route)')" = "splitter" ]; then
-                echo "issue #$ISSUE is an epic → splitter"
+              # #3208: a big (epic) issue is split, not built; #3238: so is one asking for a design sign-off (mockup hold first).
+              SO="$(gh issue view "$ISSUE" --repo "$REPO" --json comments --jq '[.comments[] | {body}]' | node scripts/lib/signoff-route.mjs "$RUNNER_TEMP/route-issue.txt" /dev/stdin --route)"
+              if [ "$(node scripts/epic-route.mjs "$LABELS" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).route)')" = "splitter" ] || [ "$SO" = "signoff" ]; then
+                echo "issue #$ISSUE is an epic or asks for a design sign-off → decomposer"
                 dispatch decompose-on-issue-pidev.yml "$(jq -nc --arg i "$ISSUE" '{issue:$i,harness:"pi"}')"
                 exit 0
               fi

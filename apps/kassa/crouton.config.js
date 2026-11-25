@@ -6,11 +6,7 @@ export default {
   // Feature flags - which crouton packages to enable
   features: {
     sales: { config: { print: { enabled: true } } },
-    pages: true,
-    // crouton-layout is `bundled: true` (default-on). Kassa doesn't use the layout
-    // engine — its `0018` layout_configs table was dead weight — so opt out
-    // explicitly, or `crouton config` writes the extends back (#1455).
-    layout: false
+    pages: true
   },
 
   collections: [],

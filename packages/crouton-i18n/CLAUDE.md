@@ -101,7 +101,7 @@ When `showAITranslate` is enabled, a "Translate" button appears next to the Engl
 
 - `AITranslateButton.vue` — real one from `@fyit/crouton-ai`
 - `CroutonPagesEditorBlockEditor.vue` — real one from `@fyit/crouton-pages`
-- `CroutonPagesEditorBlockEditorWithPreview.vue` — real one from `@fyit/crouton-pages`
+- `CroutonPagesEditorBlockEditorWithPreview.vue` — real one from `@fyit/crouton-pages`. In tabs layout a `CroutonPagesEditorBlockEditorWithPreview` field fills the input's height (`flex-1`, min 350px) instead of a fixed 500px box (#4091).
 
 The `with-pages` e2e fixture asserts the real block editor (`.ProseMirror`) mounts rather than a stub.
 
@@ -198,7 +198,7 @@ defaultLocale: 'nl',
 
 ### Override system translation for team
 1. Insert into `translations_ui` with `teamId` set
-2. Or use admin UI at `/admin/translations`
+2. Or use the admin UI at `/admin/[team]/translations` — it loads every configured language first (`loadLocaleMessages`), since `@nuxtjs/i18n` 10 only loads the current language's file.
 
 ## Common Pitfalls
 
@@ -218,5 +218,5 @@ langDir: './locales'
 ## Testing
 
 ```bash
-npx nuxt typecheck  # MANDATORY after changes
+pnpm typecheck && pnpm typecheck:packages  # from the repo root; see root CLAUDE.md "Post-change checks"
 ```

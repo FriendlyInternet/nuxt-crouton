@@ -168,16 +168,16 @@ export async function updateSalesPrinter(
   teamId: string,
   userId: string,
   updates: Partial<SalesPrinter>,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(tables.salesPrinters.id, recordId),
     eq(tables.salesPrinters.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(tables.salesPrinters.owner, userId))
   }
 
@@ -204,16 +204,16 @@ export async function deleteSalesPrinter(
   recordId: string,
   teamId: string,
   userId: string,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(tables.salesPrinters.id, recordId),
     eq(tables.salesPrinters.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(tables.salesPrinters.owner, userId))
   }
 
@@ -230,4 +230,12 @@ export async function deleteSalesPrinter(
   }
 
   return { success: true }
+}
+
+// Referenced records must belong to this team (#3404)
+export async function assertSalesPrinterReferences(teamId: string, data: Record<string, any>) {
+  await assertRefsInTeam(useDB(), teamId, [
+    { field: 'eventId', table: eventsSchema.salesEvents, value: data.eventId },
+    { field: 'locationId', table: locationsSchema.salesLocations, value: data.locationId },
+  ])
 }

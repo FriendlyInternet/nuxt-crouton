@@ -11,16 +11,21 @@
     "./editor": "./app/editor/index.ts"
   },
   "scripts": {
+    "typecheck": "nuxt prepare --extends ../crouton-core && vue-tsc -b tsconfig.typecheck.json --noEmit",
     "build": "unbuild",
+    "test": "vitest run",
     "dev": "unbuild --stub",
     "prepack": "pnpm build"
   },
   "files": [
     "app",
     "server",
+    "shared",
     "schemas",
     "dist",
-    "nuxt.config.ts"
+    "nuxt.config.ts",
+    "docs/llms.txt",
+    "docs/components.md"
   ],
   "keywords": [
     "nuxt",

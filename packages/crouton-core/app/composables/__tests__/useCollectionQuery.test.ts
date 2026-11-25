@@ -92,8 +92,10 @@ vi.stubGlobal('console', {
 import useCollections from '../useCollections'
 import { useTeamContext } from '../useTeamContext'
 import { useRemoteCollectionRefresh } from '../useRemoteCollectionRefresh'
+import { useCollectionCacheKeys } from '../useCollectionCacheKeys'
 
 vi.stubGlobal('useCollections', useCollections)
+vi.stubGlobal('useCollectionCacheKeys', useCollectionCacheKeys)
 vi.stubGlobal('useTeamContext', useTeamContext)
 vi.stubGlobal('useRemoteCollectionRefresh', useRemoteCollectionRefresh)
 
@@ -103,6 +105,7 @@ import { useCollectionQuery } from '../useCollectionQuery'
 describe('useCollectionQuery', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    remoteHooks.clear()
     mockRoute = {
       path: '/dashboard/test-team/products',
       params: { team: 'test-team' }
@@ -117,6 +120,27 @@ describe('useCollectionQuery', () => {
 
   // Don't use vi.resetAllMocks() as it clears mock implementations
 
+  describe('skip while no team context', () => {
+    it('passes enabled=false and no __skip__ URL when there is no team', async () => {
+      mockRoute = { path: '/dashboard/products', params: {} }
+
+      await useCollectionQuery('products')
+
+      const call = mockUseFetch.mock.calls[0] as any
+      expect(call[1].enabled()).toBe(false)
+      expect(call[1].immediate).toBeUndefined()
+      expect(call[0]()).not.toContain('__skip__')
+    })
+  })
+
+  describe('refresh', () => {
+    it('delegates to useFetch refresh', async () => {
+      const { refresh } = await useCollectionQuery('products')
+      await refresh()
+      expect(mockFetchState.refresh).toHaveBeenCalled()
+    })
+  })
+
   describe('cache key generation', () => {
     it('generates key with collection name', async () => {
       await useCollectionQuery('products')
@@ -124,7 +148,7 @@ describe('useCollectionQuery', () => {
       expect(mockUseFetch).toHaveBeenCalledWith(
         expect.any(Function),
         expect.objectContaining({
-          key: expect.stringContaining('collection:products:')
+          key: expect.objectContaining({ value: expect.stringContaining('collection:products:') })
         })
       )
     })
@@ -137,13 +161,13 @@ describe('useCollectionQuery', () => {
       expect(mockUseFetch).toHaveBeenCalledWith(
         expect.any(Function),
         expect.objectContaining({
-          key: expect.stringContaining('collection:products:')
+          key: expect.objectContaining({ value: expect.stringContaining('collection:products:') })
         })
       )
 
       // Verify the key contains the serialized query
       const call = mockUseFetch.mock.calls[0] as any
-      expect(call[1].key).toContain('page')
+      expect(call[1].key.value).toContain('page')
     })
 
     it('different queries produce different keys', async () => {
@@ -151,35 +175,67 @@ describe('useCollectionQuery', () => {
       const query2 = computed(() => ({ page: 2 }))
 
       await useCollectionQuery('products', { query: query1 })
-      const key1 = (mockUseFetch.mock.calls[0] as any)[1].key
+      const key1 = (mockUseFetch.mock.calls[0] as any)[1].key.value
 
       mockUseFetch.mockClear()
 
       await useCollectionQuery('products', { query: query2 })
-      const key2 = (mockUseFetch.mock.calls[0] as any)[1].key
+      const key2 = (mockUseFetch.mock.calls[0] as any)[1].key.value
 
       expect(key1).not.toBe(key2)
+    })
+
+    it('key is reactive: changing the query on one instance changes the key', async () => {
+      const q = ref<Record<string, unknown>>({ status: 'a' })
+
+      await useCollectionQuery('products', { query: q as any })
+      const key = (mockUseFetch.mock.calls[0] as any)[1].key
+      const before = key.value
+      q.value = { status: 'b' }
+
+      expect(key.value).not.toBe(before)
+      expect(key.value).toContain('"status":"b"')
     })
 
     it('generates consistent key for same query', async () => {
       const query = computed(() => ({ status: 'active' }))
 
       await useCollectionQuery('products', { query })
-      const key1 = (mockUseFetch.mock.calls[0] as any)[1].key
+      const key1 = (mockUseFetch.mock.calls[0] as any)[1].key.value
 
       mockUseFetch.mockClear()
 
       await useCollectionQuery('products', { query })
-      const key2 = (mockUseFetch.mock.calls[0] as any)[1].key
+      const key2 = (mockUseFetch.mock.calls[0] as any)[1].key.value
 
       expect(key1).toBe(key2)
     })
 
-    it('generates key with empty object for no query', async () => {
+    // covers: T3
+    it('generates key with the team and an empty object for no query', async () => {
+      mockUseTeam = () => ({ currentTeam: ref({ id: 'team-a' }) })
+
       await useCollectionQuery('products')
 
       const call = mockUseFetch.mock.calls[0] as any
-      expect(call[1].key).toBe('collection:products:{}')
+      expect(call[1].key.value).toBe('collection:products:team-a:{}')
+    })
+
+    // covers: T3
+    it('switching team moves the key and the fetch URL to the new team (#4506)', async () => {
+      const currentTeam = ref<{ id: string }>({ id: 'team-a' })
+      mockUseTeam = () => ({ currentTeam })
+
+      await useCollectionQuery('products')
+
+      const call = mockUseFetch.mock.calls[0] as any
+      expect(call[1].key.value).toBe('collection:products:team-a:{}')
+      expect(call[0]()).toBe('/api/teams/team-a/shop-products')
+
+      currentTeam.value = { id: 'team-b' }
+
+      expect(call[1].key.value).toBe('collection:products:team-b:{}')
+      expect(call[0]()).toBe('/api/teams/team-b/shop-products')
     })
   })
 
@@ -238,11 +294,8 @@ describe('useCollectionQuery', () => {
       )
     })
 
-    // These tests are skipped because the implementation changed:
-    // When no team context is available, the implementation now:
-    // 1. Sets immediate: false to skip the initial fetch
-    // 2. Uses a computed ref that returns null (which becomes '/api/__skip__')
-    // 3. No longer logs an error - it silently waits for context to be available
+    // Skipped: when no team context is available the composable now passes
+    // `enabled: false` (no fetch, no error log) instead of the old __skip__ URL.
 
     it.skip('logs error when team context missing', async () => {
       mockRoute = {
@@ -500,6 +553,25 @@ describe('useCollectionQuery', () => {
       await useCollectionQuery('products')
       for (const fn of remoteHooks) await fn({ collection: 'products' })
       expect(mockFetchState.refresh).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not throw when a remote change arrives while the first load is pending', async () => {
+      let resolveFetch!: (v: any) => void
+      mockUseFetch.mockImplementationOnce(() => new Promise(r => { resolveFetch = r }) as any)
+      const pending = useCollectionQuery('products')
+      await Promise.resolve()
+      for (const fn of remoteHooks) await fn({ collection: 'products' })
+      expect(mockFetchState.refresh).toHaveBeenCalledTimes(0)
+      resolveFetch(mockFetchState)
+      await pending
+      for (const fn of remoteHooks) await fn({ collection: 'products' })
+      expect(mockFetchState.refresh).toHaveBeenCalledTimes(1)
+    })
+
+    it('ignores remote changes for another collection', async () => {
+      await useCollectionQuery('products')
+      for (const fn of remoteHooks) await fn({ collection: 'posts' })
+      expect(mockFetchState.refresh).not.toHaveBeenCalled()
     })
   })
 

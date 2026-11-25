@@ -8,14 +8,14 @@
  * row. The `cancelled` status stays as the soft alternative for real events;
  * this is the hard remove for mistaken / test orders.
  */
-import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
+import { requireCan } from '@fyit/crouton-auth/server/utils/team-auth'
 import { salesOrders } from '../../../../../../../../collections/orders/server/database/schema'
 import { salesOrderitems } from '../../../../../../../../collections/orderitems/server/database/schema'
 import { printJobs } from '@fyit/crouton-printing/server/database/schema'
 import { deleteOrderCascade, findOwnedOrder } from '../../../../../../../utils/delete-order'
 
 export default defineEventHandler(async (event) => {
-  const { team } = await requireTeamAdmin(event)
+  const { team } = await requireCan(event, 'sales:manage')
   const eventId = getRouterParam(event, 'eventId')
   const orderId = getRouterParam(event, 'orderId')
 

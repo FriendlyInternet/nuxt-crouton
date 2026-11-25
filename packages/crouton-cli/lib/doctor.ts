@@ -28,7 +28,7 @@ export async function doctor(appDir: string): Promise<DoctorResult> {
   }
 
   // Load crouton.config if it exists
-  const config = await loadConfig(appDir)
+  const config = await loadCroutonConfig(appDir)
 
   // Load package.json
   const pkg = await loadJson(join(appDir, 'package.json'))
@@ -72,7 +72,8 @@ async function loadJson(filePath: string): Promise<Record<string, any> | null> {
   }
 }
 
-async function loadConfig(appDir: string): Promise<Record<string, any> | null> {
+/** Load `<appDir>/crouton.config.{js,mjs,cjs}`; null when absent or unloadable. */
+export async function loadCroutonConfig(appDir: string): Promise<Record<string, any> | null> {
   const extensions = ['.js', '.mjs', '.cjs']
   for (const ext of extensions) {
     const configPath = resolve(appDir, `crouton.config${ext}`)
@@ -165,7 +166,10 @@ async function checkWranglerIds(appDir: string): Promise<DoctorCheck[]> {
 
 // ─── Check 3: Missing locale files ───────────────────────────────
 
-async function checkLocaleFiles(appDir: string, config: Record<string, any> | null): Promise<DoctorCheck[]> {
+/** The languages the crouton packages ship UI texts for (packages/crouton-i18n/locales, #4377). */
+export const BUILT_IN_UI_LOCALES = ['en', 'nl', 'fr']
+
+export async function checkLocaleFiles(appDir: string, config: Record<string, any> | null): Promise<DoctorCheck[]> {
   const results: DoctorCheck[] = []
   const targets = config?.targets || []
 
@@ -184,11 +188,25 @@ async function checkLocaleFiles(appDir: string, config: Record<string, any> | nu
     }
   }
 
+  const uiText = checkBuiltInUiLocales(config)
+  if (uiText) results.push(uiText)
+
   if (results.length === 0 && targets.length > 0) {
     results.push({ name: 'locales', status: 'pass', message: 'Locale directories present' })
   }
 
   return results
+}
+
+/** A configured locale with no built-in UI texts falls back to the default locale (#4377). */
+function checkBuiltInUiLocales(config: Record<string, any> | null): DoctorCheck | null {
+  const locales: unknown[] = Array.isArray(config?.locales) ? config!.locales : []
+  const missing = locales
+    .map(l => (typeof l === 'string' ? l : (l as { code?: string })?.code))
+    .filter((c): c is string => typeof c === 'string' && c.length > 0 && !BUILT_IN_UI_LOCALES.includes(c))
+  if (missing.length === 0) return null
+  const fallback = config?.defaultLocale ?? 'en'
+  return { name: 'locales', status: 'warn', message: `${missing.join(', ')}: no built-in UI texts — those show in ${fallback}.` }
 }
 
 // ─── Check 4: CF stubs ───────────────────────────────────────────

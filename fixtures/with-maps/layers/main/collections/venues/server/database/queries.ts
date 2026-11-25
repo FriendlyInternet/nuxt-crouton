@@ -127,16 +127,16 @@ export async function updateMainVenue(
   teamId: string,
   userId: string,
   updates: Partial<MainVenue>,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(tables.mainVenues.id, recordId),
     eq(tables.mainVenues.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(tables.mainVenues.owner, userId))
   }
 
@@ -163,16 +163,16 @@ export async function deleteMainVenue(
   recordId: string,
   teamId: string,
   userId: string,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(tables.mainVenues.id, recordId),
     eq(tables.mainVenues.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(tables.mainVenues.owner, userId))
   }
 

@@ -177,16 +177,16 @@ export async function updateSalesProduct(
   teamId: string,
   userId: string,
   updates: Partial<SalesProduct>,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(tables.salesProducts.id, recordId),
     eq(tables.salesProducts.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(tables.salesProducts.owner, userId))
   }
 
@@ -213,16 +213,16 @@ export async function deleteSalesProduct(
   recordId: string,
   teamId: string,
   userId: string,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(tables.salesProducts.id, recordId),
     eq(tables.salesProducts.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(tables.salesProducts.owner, userId))
   }
 
@@ -265,4 +265,13 @@ export async function reorderSiblingsSalesProducts(
   )
 
   return { success: true, updated: results.flat().length }
+}
+
+// Referenced records must belong to this team (#3404)
+export async function assertSalesProductReferences(teamId: string, data: Record<string, any>) {
+  await assertRefsInTeam(useDB(), teamId, [
+    { field: 'eventId', table: eventsSchema.salesEvents, value: data.eventId },
+    { field: 'categoryId', table: categoriesSchema.salesCategories, value: data.categoryId },
+    { field: 'locationId', table: locationsSchema.salesLocations, value: data.locationId },
+  ])
 }

@@ -16,6 +16,7 @@ import { pathToFileURL } from 'node:url'
 import { validate } from './schema.mjs'
 import { classify, joinRuns, legacyClassifyComment } from '../lib/run-outcome.mjs'
 import { readRateLimit, diffRateLimit } from '../lib/rate-limit.mjs'
+import { noCommitReason } from '../lib/fix-bot-precheck.mjs'
 
 const BOT = 'nuxt-harness[bot]'
 export const DATA_BRANCH = 'pipeline-data'
@@ -33,6 +34,36 @@ export function conclusionOf(needsJson) {
   if (results.includes('failure')) return 'failure'
   if (results.includes('success')) return 'success'
   return results.length ? 'skipped' : 'unknown'
+}
+
+/**
+ * Is an in-flight workflow run about the same ticket as ours? Agent runs all run on `main` with an
+ * empty `pull_requests`, so branch/PR matching alone never fires (#3364). Match on:
+ *  1. a non-comment run whose title names one of our subjects as `#N` (every dispatch run-name);
+ *     comment runs are skipped here — their title is the issue's free text, which can cite others;
+ *  2. a comment-triggered run whose title equals the subject issue's title;
+ *  3. fallback: its head branch is our work branch, or it lists our PR.
+ */
+export function runMatchesSubject(run, { subjects = [], title = null, branch = null, pr = null } = {}) {
+  if (!run) return false
+  const display = String(run.display_title ?? '')
+  const byTitle = run.event === 'issue_comment' ? Boolean(title) && display === title : titleNamesSubject(display, subjects)
+  return byTitle || onWorkBranchOrPr(run, branch, pr)
+}
+
+const titleNamesSubject = (display, subjects) =>
+  [...display.matchAll(/#(\d+)\b/g)].some((m) => subjects.includes(Number(m[1])))
+
+const onWorkBranchOrPr = (run, branch, pr) =>
+  Boolean(branch && run.head_branch === branch) || Boolean(pr && (run.pull_requests || []).some((p) => p.number === pr))
+
+/** The subject issue/PR title (comment-triggered runs carry it as their run title); null if unreadable. */
+export async function subjectTitle(api, repo, n) {
+  if (!n) return null
+  try {
+    const t = (await api(`/repos/${repo}/issues/${n}`))?.title
+    return typeof t === 'string' && t ? t : null
+  } catch { return null }
 }
 
 /**
@@ -88,12 +119,12 @@ export async function buildRecord({ env, api, listRecords, rlEnd, now = new Date
   } catch { /* ignore */ }
   // Runs still in flight have no record yet, so also list the workflow's runs: each of two
   // overlapping runs sees the other here, so BOTH rows are flagged (not only the later one).
+  const title = await subjectTitle(api, repo, issue || pr)
   try {
     const wf = await api(`/repos/${repo}/actions/workflows/${env.WORKFLOW_FILE}/runs?created=%3E%3D${encodeURIComponent(start.slice(0, 10))}&per_page=100`)
     for (const r of wf?.workflow_runs || []) {
-      // Same subject only: the run's head branch is the work branch, or it lists our PR.
-      const sameSubject = (branch && r.head_branch === branch) || (pr && (r.pull_requests || []).some((p) => p.number === pr))
-      if (!sameSubject || String(r.id) === String(env.RUN_ID) || siblings.some((x) => String(x.run_id) === String(r.id))) continue
+      // Same subject only (title `#N`, comment-run issue title, or branch/PR fallback).
+      if (!runMatchesSubject(r, { subjects, title, branch, pr }) || String(r.id) === String(env.RUN_ID) || siblings.some((x) => String(x.run_id) === String(r.id))) continue
       siblings.push({ run_id: r.id, start: r.run_started_at || r.created_at, end: r.updated_at || end })
     }
   } catch { /* ignore */ }
@@ -127,6 +158,12 @@ export async function buildRecord({ env, api, listRecords, rlEnd, now = new Date
     token: env.TOKEN_KIND === 'app' ? 'app' : 'github_token',
     ref: `https://github.com/${repo}/actions/runs/${env.RUN_ID}`,
   }
+  // #4317: a fixer run that pushed no fix names one reason; `precheck` is the still-red verdict.
+  if (env.STAGE === 'fix-ci') {
+    const needs = safeJson(env.NEEDS_JSON) || {}
+    record.no_commit_reason = noCommitReason(needs)
+    record.precheck = needs.fixbot?.outputs?.precheck || null
+  }
   const res = validate(record)
   if (!res.ok) throw new Error(`record invalid: ${res.errors.join('; ')}`)
   return res.record
@@ -134,9 +171,14 @@ export async function buildRecord({ env, api, listRecords, rlEnd, now = new Date
 
 const safeJson = (s) => { try { return JSON.parse(s) } catch { return null } }
 
-/** Write one file via the contents API. Creates the orphan branch on first use. Retries 409/422. */
+/**
+ * Write one file via the contents API. Creates the orphan branch on first use. Retries 409/422.
+ * `overwrite` (#3253): update the file if it exists — each attempt GETs its current `sha` (GitHub answers
+ * 422 to an update without one), so a parallel writer's update is picked up on retry. Default false:
+ * the per-run records are always new files.
+ */
 // fallow-ignore-next-line complexity -- contents-API write with bounded 409/422 retry and first-use branch creation; the branches are the retry policy (#3251)
-export async function writeRecord({ repo, token, record, path: customPath, message, fetchImpl = fetch, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+export async function writeRecord({ repo, token, record, path: customPath, message, overwrite = false, fetchImpl = fetch, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
   const base = process.env.GITHUB_API_URL || 'https://api.github.com'
   const call = async (method, path, body) => {
     const res = await fetchImpl(`${base}${path}`, {
@@ -164,7 +206,12 @@ export async function writeRecord({ repo, token, record, path: customPath, messa
   const path = customPath || `records/${record.started_at.slice(0, 10)}/${record.run_id}-${record.attempt}.json`
   const content = Buffer.from(JSON.stringify(record, null, 2) + '\n').toString('base64')
   for (let attempt = 1; attempt <= 3; attempt++) {
-    const put = await call('PUT', `/repos/${repo}/contents/${path}`, { message: message || `data: run ${record.run_id} (${record.workflow})`, content, branch: DATA_BRANCH })
+    let sha
+    if (overwrite) {
+      const cur = await call('GET', `/repos/${repo}/contents/${path}?ref=${DATA_BRANCH}`)
+      if (cur.status === 200 && cur.json?.sha) sha = cur.json.sha // 404 = a new file, no sha
+    }
+    const put = await call('PUT', `/repos/${repo}/contents/${path}`, { message: message || `data: run ${record.run_id} (${record.workflow})`, content, branch: DATA_BRANCH, ...(sha ? { sha } : {}) })
     if (put.status < 300) return path
     if ((put.status === 409 || put.status === 422) && attempt < 3) { await sleep(200 + Math.random() * 800 * attempt); continue }
     throw new Error(`write ${path} failed: HTTP ${put.status}`)

@@ -11,6 +11,7 @@
     "./collections/*/server/database/queries": "./collections/*/server/database/queries.ts"
   },
   "scripts": {
+    "typecheck": "nuxt prepare --extends @fyit/crouton-core && vue-tsc -b tsconfig.typecheck.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
@@ -23,7 +24,9 @@
     "assets-schema.json",
     "crouton.manifest.ts",
     "nuxt.config.ts",
-    "README.md"
+    "README.md",
+    "docs/llms.txt",
+    "docs/components.md"
   ],
   "keywords": [
     "nuxt",
@@ -50,7 +53,9 @@
   },
   "peerDependencies": {
     "nuxt": "^4.0.0",
-    "@fyit/crouton-core": "workspace:*",
-    "@vueuse/core": "^11.0.0"
+    "@fyit/crouton-auth": "workspace:0.x",
+    "@fyit/crouton-core": "workspace:0.x",
+    "@vueuse/core": "^11.0.0",
+    "zod": "^3.0.0"
   }
 }

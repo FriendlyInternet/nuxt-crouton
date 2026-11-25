@@ -170,6 +170,7 @@ interface CroutonAuthConfig {
   // Default team for single-tenant mode
   defaultTeamId?: string
   appName?: string
+  signup?: 'open' | 'invite'  // Default 'open'; 'invite' = only invited emails can create an account (site admin still can)
 
   // Authentication methods
   methods?: {
@@ -311,7 +312,7 @@ const {
   loginWithPasskey,        // () => Promise<void>
   loginWithPasskeyAutofill,// () => Promise<void>
   loginWithMagicLink,      // (email: string) => Promise<void>
-  register,                // (data: RegisterData) => Promise<void>
+  register,                // (data: RegisterData) => Promise<{ requiresVerification: boolean }> — with crouton-email installed, no session until the e-mail is verified
   logout,                  // () => Promise<void>
   forgotPassword,          // (email: string) => Promise<void>
   resetPassword,           // (token: string, password: string) => Promise<void>
@@ -732,13 +733,17 @@ export default defineEventHandler(async (event) => {
 
 ### Example: Admin-only endpoint
 
+Package code asks for an **action**, never a role name (#4108): with no site config owner and
+admin have every action and member none, and a site can grant an action to another role.
+Role guards (`requireTeamAdmin`, `requireTeamOwner`) stay available for app code.
+
 ```typescript
-// server/api/teams/[teamId]/settings.put.ts
-import { requireTeamAdmin } from '@crouton/auth/server'
+// server/api/teams/[id]/settings.put.ts
+import { requireCan } from '@fyit/crouton-auth/server/utils/team-auth'
 
 export default defineEventHandler(async (event) => {
-  // Only admins and owners can update settings
-  const { team, user } = await requireTeamAdmin(event)
+  // Only members whose role has site:manage (owner/admin by default)
+  const { team, user } = await requireCan(event, 'site:manage')
 
   const body = await readBody(event)
 
@@ -765,7 +770,7 @@ definePageMeta({
 
 ### `guest` Middleware
 
-Requires NO authentication. Redirects to home if authenticated.
+Requires NO authentication. Signed-in users are sent to the `?redirect=` target if it is on the same site (anything else falls back to `/`), otherwise to `ui.redirects.authenticated`.
 
 ```vue
 <script setup lang="ts">
@@ -804,6 +809,7 @@ export * from '@crouton/auth/server/database/schema/auth'
 | `invitation` | Pending invitations |
 | `passkey` | WebAuthn credentials |
 | `twoFactor` | 2FA settings |
+| `rateLimit` | Rate-limit counters for auth endpoints |
 | `subscription` | Stripe subscriptions |
 
 ### Generate Migrations

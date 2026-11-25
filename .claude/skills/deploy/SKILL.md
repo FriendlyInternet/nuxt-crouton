@@ -56,8 +56,8 @@ monorepo's convention, applied per app at its production cutover — #136 for tr
 The deploy logic lives in the app's **`package.json` scripts** — the same commands
 you run locally and that CI runs. Don't reinvent them step-by-step:
 
-- **`cf:deploy`** (production — run **only** via the `/deploy-production` skill): `build → wrangler deploy (auto-provision) → sync:ids → d1 migrations apply --remote`
-- **`cf:staging`** (isolated staging env): `build → inject-wrangler-env → wrangler deploy --env staging → sync:ids → inject-wrangler-env → d1 migrations apply --env staging --remote`
+- **`cf:deploy`** (production — run **only** via the `/deploy-production` skill): `build → wrangler deploy (auto-provision) → sync:ids → d1 migrations apply --remote` — the CLI scaffold's order (pins, booking-demo, crate, crouton-builder, gallery, notes, snippets and status instead run `sync:ids → scripts/deploy-order.mjs`, and velo and kassa run `scripts/deploy-order.mjs` straight after the build, which migrates first when the database already exists — #4319, #4367, #4389. alexdeforce, kvr and sintlukas deploy to Pages and loop-station has no database, so the order does not apply to them)
+- **`cf:staging`** (isolated staging env): `build → inject-wrangler-env → wrangler deploy --env staging → sync:ids → inject-wrangler-env → d1 migrations apply --env staging --remote` — the CLI scaffold's order (pins, booking-demo, crate, crouton-builder, gallery, notes, snippets and status instead run `sync:ids → scripts/deploy-order.mjs`, which migrates first when the database already exists — #4319, #4367. velo and kassa run `inject-wrangler-env → scripts/deploy-order.mjs` and skip the pre-sync because their ids are committed — #4389. alexdeforce, kvr and sintlukas deploy to Pages and loop-station has no database, so the order does not apply to them)
 - **`sync:ids`** — queries wrangler, writes provisioned ids back into `wrangler.jsonc`
 - **`db:migrate` / `db:migrate:prod` / `db:migrate:staging`** — D1 migrations (local / remote / staging-remote)
 
@@ -148,11 +148,12 @@ Two ways:
 
 ### Demo data on staging (#2366)
 Every **staging** and PR-preview deploy runs `crouton-seed` itself, once (the *Seed collection + demo data* (#1370)
-step in `deploy-app.yml`), so the app gets its packages' demo data and the `test1` team the
-review login joins — **no seed line in the app's `cf:staging` script**. The app only needs
+step in `deploy-app.yml`), so the app gets its packages' demo data and the review team the
+review login joins (`test1`, or `"reviewTeam": "<slug>"` in `deploy.config.json`; it must equal
+`croutonAuth.teams.defaultTeamSlug` when that is set, else the deploy fails — `scripts/review-team.mjs`, #4141) — **no seed line in the app's `cf:staging` script**. The app only needs
 `@fyit/crouton-cli` as a dependency. Opt out with `"seed": false` in `deploy.config.json`.
 
-**Live sync (collab):** add `extends: ['@fyit/crouton-collab']` + `"collab": true` in `deploy.config.json`; the deploy ships the collab Worker, migration and `NUXT_PUBLIC_COLLAB_WORKER_URL` for you (worker → migration → app). No manual worker setup.
+**Live sync (collab):** add `extends: ['@fyit/crouton-collab']` + `"collab": true` in `deploy.config.json`; the deploy ships the collab Worker, migration and `NUXT_PUBLIC_COLLAB_WORKER_URL` for you (worker → migration → app). No manual worker setup. Without `"collab": true` the app is not opted in: crouton-collab opens no socket and shows no presence, even when crouton-flow loads it (#3810).
 A failed seed warns on the run; it never fails the deploy. Production never seeds.
 
 ### Apps without a database or sign-in (#2377)

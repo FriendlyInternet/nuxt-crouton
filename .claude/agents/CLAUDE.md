@@ -49,7 +49,7 @@ a strong signal, not proof; the #865 eval scoreboard is where this gets validate
 (`type:fix`), names a `packages/` path, or touches auth / sync / scoped-access / team-filtered
 data starts in **plan mode**: the `route` job in `label-router.yml` (rules in
 `.claude/plan-routing.json`, logic in `scripts/lib/plan-route.mjs`) dispatches a plan run
-(#2755) → `plan-review.yml` has an independent top-model reviewer grade it (#2756) → on
+(#2755) → the `plan-review` job in `on-comment.yml` has an independent top-model reviewer grade it (#2756) → on
 `plan:approved`, `label-router.yml` dispatches the build with the approved plan comment as its
 instruction (`plan` input). The build implements exactly that plan, stops and says why if reality
 differs, links the plan in its PR body; the run's record step writes the ledger row to the
@@ -108,11 +108,13 @@ deterministic set (v3→v4 renames, redundant-overlay-`UCard` unwraps) under `fi
 
 | Agent | File | Recurses? | Writes code? | Model |
 |-------|------|-----------|--------------|-------|
-| `frontend-review` | `frontend-review.md` | no | only under `fix:true` (safe set) | `sonnet` |
+| `frontend-review` | `frontend-review.md` | no | only under `fix:true` (safe set) | `opus` |
 
 It's steered by the **`/frontend-review` skill** (on demand) and run by
-`.github/workflows/review.yml` (per-PR `quick`, fails the check on a 🔴
-critical convention break, diff-scoped so never the backlog). Its lens is conventions
+`.github/workflows/review.yml` (per-PR `quick`, on the `review` tier). The check fails on a
+lint hit (a plain `<button>`/`<input>`/`<select>`/`<textarea>` on an added line,
+`eslint.frontend-gate.config.mjs`) or a 🔴 whose `quote` matches an added line
+(`scripts/frontend-gate.mjs`, #4071), so never on the backlog. Its lens is conventions
 only — not visual taste (`/ui-proposal`), accessibility (`/a11y`), or security
 (`/red-team`).
 
@@ -155,7 +157,7 @@ conventions (`frontend-review`), a11y (`/a11y`), or visual taste (`/ui-proposal`
   opened, the file written — before you say it's done or end your turn. Describing the plan
   ("the worker is now creating the schemas…") is **not** doing it: that exact no-op (a run
   that exits `success` having produced nothing) is what the **artifact-gate** in
-  `decompose-on-issue.yml` now turns into a **red** run. Do the work, then prove it landed.
+  `decompose-on-issue-pidev.yml` (logic: `scripts/lib/decompose-artifact-gate.mjs`) now turns into a **red** run. Do the work, then prove it landed.
   **One first-class PASS shape worth knowing (#1076):** a PR opened this run + a
   `.github/workflows/**` patch embedded in its body for a human to apply (the token can't write
   there — see `task-worker.md` → "`.github/workflows/` boundary") already satisfies the gate via
@@ -194,7 +196,8 @@ conventions (`frontend-review`), a11y (`/a11y`), or visual taste (`/ui-proposal`
   as a **top-level** comment · idempotent `epic/<NN>-*` reuse · `.github/workflows/**` → embed-a-patch ·
   every PR body opens with `Closes #N` · the **decide-vs-ask carve-out**, below) lives in
   **`.claude/agents/pi-operating-contract.md`** and is
-  `cat` verbatim into the pi prompt by both `decompose-on-issue-pidev.yml` and `work-issue-pidev.yml`.
+  `cat` verbatim into the pi prompt by `decompose-on-issue-pidev.yml`, and prepended verbatim by
+  `scripts/pipeline-prompt.mjs` (called from `scripts/pi-run.mjs`) for `work-issue-pidev.yml`.
   Edit the contract **there** (one place, so the two flows can't drift — they were byte-identical hand-
   maintained copies before). Keep that file **pure prose**: it is injected raw, so no frontmatter/headers.
 - **A directly-dispatched child resolves to its parent's epic branch — never a new epic off
@@ -300,7 +303,7 @@ package). Threaded through `epic_branch` in the agent contract:
 ### Claude-action workflow standard (any `anthropics/claude-code-action` workflow)
 
 When you add or copy a workflow that runs `anthropics/claude-code-action` (the event→agent
-glue like `claude.yml` / `decompose-on-issue.yml` / `on-comment.yml`), it MUST carry
+glue like `claude.yml` / `on-comment.yml`), it MUST carry
 all of these by **default** — they're not optional extras; each one has burned us:
 
 - **`id-token: write` at the JOB level.** Job-level `permissions` *fully overrides* (does

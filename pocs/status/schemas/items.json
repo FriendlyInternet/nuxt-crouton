@@ -1,0 +1,73 @@
+{
+  "number": {
+    "type": "number",
+    "meta": { "required": true, "label": "Issue number" }
+  },
+  "title": {
+    "type": "string",
+    "meta": { "label": "Title" }
+  },
+  "url": {
+    "type": "string",
+    "meta": { "label": "URL" }
+  },
+  "stage": {
+    "type": "string",
+    "meta": {
+      "label": "Stage",
+      "displayAs": "optionsSelect",
+      "options": [
+        { "value": "queued", "label": "Queued" },
+        { "value": "working", "label": "Working" },
+        { "value": "review", "label": "In review" },
+        { "value": "you", "label": "Waits on you" },
+        { "value": "test", "label": "To test" },
+        { "value": "done", "label": "Done today" }
+      ]
+    }
+  },
+  "labels": {
+    "type": "string",
+    "meta": { "label": "Issue labels (comma-separated)" }
+  },
+  "prLabels": {
+    "type": "string",
+    "meta": { "label": "PR labels (comma-separated)" }
+  },
+  "prNumber": {
+    "type": "number",
+    "meta": { "label": "PR number" }
+  },
+  "prHeadSha": {
+    "type": "string",
+    "meta": { "label": "PR head sha" }
+  },
+  "prBase": {
+    "type": "string",
+    "meta": { "label": "PR base branch" }
+  },
+  "verdict": {
+    "type": "string",
+    "meta": { "label": "Build-review verdict" }
+  },
+  "verdictSha": {
+    "type": "string",
+    "meta": { "label": "Build-review sha" }
+  },
+  "checksRed": {
+    "type": "boolean",
+    "meta": { "default": false, "label": "CI checks red" }
+  },
+  "checksSha": {
+    "type": "string",
+    "meta": { "label": "CI checks sha" }
+  },
+  "closedAt": {
+    "type": "date",
+    "meta": { "label": "Closed at" }
+  },
+  "stageSince": {
+    "type": "date",
+    "meta": { "label": "In stage since" }
+  }
+}

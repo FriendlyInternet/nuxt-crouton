@@ -53,6 +53,10 @@ npx crouton-generate config ./crouton.config.js
 npx crouton-generate config ./crouton.config.js --force --dry-run
 ```
 
+### Removing a collection
+
+`crouton config` cleans up references (schema exports, `app.config`, layer `extends`) to collection folders that have been deleted. It never deletes files itself: a collection that is still on disk but no longer in `crouton.config` stays wired up, and the CLI warns you. To remove it, use `crouton rollback <layer> <collection>`.
+
 ### Config File Format
 
 ```javascript

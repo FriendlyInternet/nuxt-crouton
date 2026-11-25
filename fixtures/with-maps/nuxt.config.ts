@@ -21,15 +21,13 @@ export default defineNuxtConfig({
   },
 
   runtimeConfig: {
-    croutonMaps: {
-      style: 'liberty',
+    maps: {
       geocodingUrl: 'https://nominatim.openstreetmap.org',
     },
 
     public: {
-      croutonMaps: {
-        style: 'liberty',
-        geocodingUrl: 'https://nominatim.openstreetmap.org',
+      maps: {
+        style: 'positron',
       },
     },
   },

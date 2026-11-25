@@ -107,7 +107,7 @@ apps/*/.wrangler/deploy/
 !scripts/lib/__fixtures__/*.png
 # …and the design sign-off hold's renders (#1933). #1821 added these two paths and the matching
 # exceptions were never added, so `git add` silently no-opped and EVERY hold posted a dead image
-# link (#1823, #1825). 
+# link (#1823, #1825).
 !writeups/schema-reviews/*.png
 !writeups/ui-mockups/*.png
 # …and design handoff boards, one folder per epic (scripts/design-handoff.mjs, #2430).
@@ -134,6 +134,7 @@ fixtures/with-pages/.data
 fixtures/with-bookings/.data
 fixtures/with-assets/.data
 fixtures/with-collab/.data
+fixtures/with-relations/.data
 # Loose Excalidraw scenes — the editable scene is embedded in the committed PNG instead
 writeups/diagrams/*.excalidraw
 
@@ -160,3 +161,10 @@ pocs/snippets/.data
 pocs/crate/.data
 # Generator history, written per app by `crouton config`; read by crouton-devtools (#2290)
 .crouton-generation-history.json
+
+# Nuxt test env writes this inside the runtime-test project
+packages/crouton-core/tests/nuxt-runtime/.nuxtrc
+packages/crouton-core/tests/nuxt-runtime/.nuxt
+
+pocs/status/.data
+fixtures/with-mcp-oauth/.data

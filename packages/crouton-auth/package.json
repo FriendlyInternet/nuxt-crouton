@@ -50,6 +50,10 @@
     "./server/utils/auth": {
       "import": "./server/utils/auth.ts",
       "types": "./server/utils/auth.ts"
+    },
+    "./server/utils/permissions": {
+      "import": "./server/utils/permissions.ts",
+      "types": "./server/utils/permissions.ts"
     }
   },
   "main": "./nuxt.config.ts",
@@ -59,9 +63,14 @@
     "server",
     "seed",
     "types",
+    "i18n",
+    "shared",
+    "module.ts",
     "nuxt.config.ts",
     "CHANGELOG.md",
-    "LICENSE"
+    "LICENSE",
+    "docs/llms.txt",
+    "docs/components.md"
   ],
   "scripts": {
     "build": "unbuild",
@@ -72,7 +81,7 @@
     "test": "vitest",
     "test:unit": "vitest run --dir tests/unit",
     "test:integration": "vitest run --dir tests/integration",
-    "prepublishOnly": "pnpm run build",
+    "prepack": "pnpm run build",
     "release": "pnpm run build && npm publish --access public",
     "migrate:status": "tsx scripts/migrate.ts status",
     "migrate:generate": "tsx scripts/migrate.ts generate",
@@ -86,6 +95,8 @@
   },
   "dependencies": {
     "@better-auth/i18n": "^1.7.7",
+    "@better-auth/mcp": "1.7.7",
+    "@better-auth/oauth-provider": "1.7.7",
     "@better-auth/passkey": "^1.7.7",
     "@fyit/crouton-i18n": "workspace:*",
     "better-auth": "^1.7.7",
@@ -96,6 +107,7 @@
     "@nuxt/schema": "^3.14.0",
     "@types/better-sqlite3": "^7.6.0",
     "@vitejs/plugin-vue": "^5.2.4",
+    "better-sqlite3": "^12.4.1",
     "drizzle-kit": "catalog:",
     "jsdom": "^25.0.1",
     "nuxt": "catalog:",

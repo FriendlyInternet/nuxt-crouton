@@ -1,0 +1,121 @@
+# #3666 fixture: trimmed raw log of job 127976729733 (PR #3472, Node checks); ESC rendered as ^[
+2026-11-06T15:24:21.5224697Z   ...
+2026-11-06T15:24:21.5224897Z # Subtest: script under with: is measured; composite action keyed under runs
+2026-11-06T15:24:21.5225199Z ok 1517 - script under with: is measured; composite action keyed under runs
+2026-11-06T15:24:21.5225396Z   ---
+2026-11-06T15:24:21.5225499Z   duration_ms: 0.283163
+2026-11-06T15:24:21.5225616Z   type: 'test'
+2026-11-06T15:24:21.5225721Z   ...
+2026-11-06T15:24:21.5225852Z # Subtest: key ignores line position
+2026-11-06T15:24:21.5226025Z ok 1518 - key ignores line position
+2026-11-06T15:24:21.5226168Z   ---
+2026-11-06T15:24:21.5226271Z   duration_ms: 0.248912
+2026-11-06T15:24:21.5226401Z   type: 'test'
+2026-11-06T15:24:21.5226507Z   ...
+2026-11-06T15:24:21.5226678Z # Subtest: trailing blanks and single-line run are not counted
+2026-11-06T15:24:21.5226926Z ok 1519 - trailing blanks and single-line run are not counted
+2026-11-06T15:24:21.5227094Z   ---
+2026-11-06T15:24:21.5227206Z   duration_ms: 0.130725
+2026-11-06T15:24:21.5227323Z   type: 'test'
+2026-11-06T15:24:21.5227434Z   ...
+2026-11-06T15:24:21.5227610Z # Subtest: corpus: committed baseline covers the real tree
+2026-11-06T15:24:21.5227979Z not ok 1520 - corpus: committed baseline covers the real tree
+2026-11-06T15:24:21.5228152Z   ---
+2026-11-06T15:24:21.5228255Z   duration_ms: 22.776548
+2026-11-06T15:24:21.5228376Z   type: 'test'
+2026-11-06T15:24:21.5228632Z   location: '/home/runner/work/nuxt-crouton/nuxt-crouton/scripts/workflow-inline-size.test.mjs:92:1'
+2026-11-06T15:24:21.5228911Z   failureType: 'testCodeFailure'
+2026-11-06T15:24:21.5229237Z   error: |-
+2026-11-06T15:24:21.5229456Z     Expected values to be strictly deep-equal:
+2026-11-06T15:24:21.5229700Z     + actual - expected
+2026-11-06T15:24:21.5229833Z     
+2026-11-06T15:24:21.5229935Z     + [
+2026-11-06T15:24:21.5230541Z     +   '.github/workflows/automerge-epic-subpr.yml › automerge › merge › script: new inline block of 348 lines (limit 40) — move the logic into scripts/ with a test',
+2026-11-06T15:24:21.5231182Z     +   '.github/workflows/automerge-epic-subpr.yml › automerge › sweep › script: new inline block of 58 lines (limit 40) — move the logic into scripts/ with a test',
+2026-11-06T15:24:21.5231794Z     +   '.github/workflows/status.yml › pr-comment › #1 › script: grew from 446 to 467 lines — move logic out, or raise the baseline on purpose (--update)',
+2026-11-06T15:24:21.5232398Z     +   '.github/workflows/work-issue-pidev.yml › work-pi › finish › run: grew from 552 to 569 lines — move logic out, or raise the baseline on purpose (--update)'
+2026-11-06T15:24:21.5232722Z     + ]
+2026-11-06T15:24:21.5232825Z     - []
+2026-11-06T15:24:21.5232928Z     
+2026-11-06T15:24:21.5233035Z   code: 'ERR_ASSERTION'
+2026-11-06T15:24:21.5233164Z   name: 'AssertionError'
+2026-11-06T15:24:21.5233311Z   expected:
+…trimmed…
+2026-11-06T15:24:21.5261388Z   ...
+2026-11-06T15:24:21.5261559Z # Subtest: the job holding the app token runs no model
+2026-11-06T15:24:21.5261799Z ok 1532 - the job holding the app token runs no model
+2026-11-06T15:24:21.5261978Z   ---
+2026-11-06T15:24:21.5262088Z   duration_ms: 0.159908
+2026-11-06T15:24:21.5262226Z   type: 'test'
+2026-11-06T15:24:21.5262333Z   ...
+2026-11-06T15:24:21.5262538Z # Subtest: no workflow carries a helper-import fallback shim (\#3451)
+2026-11-06T15:24:21.5262837Z ok 1533 - no workflow carries a helper-import fallback shim (\#3451)
+2026-11-06T15:24:21.5263020Z   ---
+2026-11-06T15:24:21.5263148Z   duration_ms: 6.212208
+2026-11-06T15:24:21.5263281Z   type: 'test'
+2026-11-06T15:24:21.5263391Z   ...
+2026-11-06T15:24:21.5263587Z # Subtest: automerge keeps no inline copy of the required-check rule
+2026-11-06T15:24:21.5263875Z ok 1534 - automerge keeps no inline copy of the required-check rule
+2026-11-06T15:24:21.5264072Z   ---
+2026-11-06T15:24:21.5264194Z   duration_ms: 0.249842
+2026-11-06T15:24:21.5264367Z   type: 'test'
+2026-11-06T15:24:21.5264480Z   ...
+2026-11-06T15:24:21.5264721Z # Subtest: workflow-runs read for the live filter is gated on needsLiveFilter (\#3453)
+2026-11-06T15:24:21.5265181Z not ok 1535 - workflow-runs read for the live filter is gated on needsLiveFilter (\#3453)
+2026-11-06T15:24:21.5265415Z   ---
+2026-11-06T15:24:21.5265533Z   duration_ms: 0.604722
+2026-11-06T15:24:21.5265663Z   type: 'test'
+2026-11-06T15:24:21.5265947Z   location: '/home/runner/work/nuxt-crouton/nuxt-crouton/scripts/workflow-no-import-fallback.test.mjs:20:1'
+2026-11-06T15:24:21.5266271Z   failureType: 'testCodeFailure'
+2026-11-06T15:24:21.5266504Z   error: 'automerge-epic-subpr.yml uses needsLiveFilter'
+2026-11-06T15:24:21.5266702Z   code: 'ERR_ASSERTION'
+2026-11-06T15:24:21.5266851Z   name: 'AssertionError'
+2026-11-06T15:24:21.5267005Z   expected: true
+2026-11-06T15:24:21.5267151Z   actual: false
+2026-11-06T15:24:21.5267284Z   operator: '=='
+2026-11-06T15:24:21.5267414Z   stack: |-
+2026-11-06T15:24:21.5267738Z     TestContext.<anonymous> (file:///home/runner/work/nuxt-crouton/nuxt-crouton/scripts/workflow-no-import-fallback.test.mjs:24:12)
+2026-11-06T15:24:21.5268102Z     Test.runInAsyncScope (node:async_hooks:214:14)
+2026-11-06T15:24:21.5268322Z     Test.run (node:internal/test_runner/test:1047:25)
+2026-11-06T15:24:21.5268575Z     Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+2026-11-06T15:24:21.5268845Z     Test.postRun (node:internal/test_runner/test:1173:19)
+2026-11-06T15:24:21.5269187Z     Test.run (node:internal/test_runner/test:1101:12)
+2026-11-06T15:24:21.5269455Z     async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+2026-11-06T15:24:21.5269670Z   ...
+…trimmed…
+2026-11-06T15:24:21.5280940Z # todo 0
+2026-11-06T15:24:21.5281117Z # duration_ms 4678.717397
+2026-11-06T15:24:21.5322902Z ##[error]Process completed with exit code 1.
+2026-11-06T15:24:21.5438115Z Post job cleanup.
+2026-11-06T15:24:21.6005087Z [command]/usr/bin/git version
+…trimmed…
+2026-11-06T15:24:21.6064432Z Temporarily overriding HOME='/home/runner/work/_temp/c98e659d-a3e7-4cff-8b0f-f36f9ba66579' before making global git config changes
+2026-11-06T15:24:21.6065270Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-06T15:24:21.6067565Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/nuxt-crouton/nuxt-crouton
+2026-11-06T15:24:21.6099123Z Removing SSH command configuration
+2026-11-06T15:24:21.6103685Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-06T15:24:21.6161750Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-06T15:24:21.6423693Z Removing HTTP extra header
+2026-11-06T15:24:21.6424394Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-06T15:24:21.6457828Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-06T15:24:21.6682512Z Removing includeIf entries pointing to credentials config files
+2026-11-06T15:24:21.6688283Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-06T15:24:21.6710545Z includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git.path
+2026-11-06T15:24:21.6710902Z includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git/worktrees/*.path
+2026-11-06T15:24:21.6711370Z includeif.gitdir:/github/workspace/.git.path
+2026-11-06T15:24:21.6711742Z includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-11-06T15:24:21.6718120Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git.path
+2026-11-06T15:24:21.6738032Z /home/runner/work/_temp/git-credentials-66635ea8-1f73-4fce-9fae-ce7fa2346640.config
+2026-11-06T15:24:21.6745543Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git.path \/home\/runner\/work\/_temp\/git\-credentials\-66635ea8\-1f73\-4fce\-9fae\-ce7fa2346640\.config
+2026-11-06T15:24:21.6776643Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git/worktrees/*.path
+2026-11-06T15:24:21.6796843Z /home/runner/work/_temp/git-credentials-66635ea8-1f73-4fce-9fae-ce7fa2346640.config
+2026-11-06T15:24:21.6803260Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git/worktrees/*.path \/home\/runner\/work\/_temp\/git\-credentials\-66635ea8\-1f73\-4fce\-9fae\-ce7fa2346640\.config
+2026-11-06T15:24:21.6830673Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git.path
+2026-11-06T15:24:21.6849673Z /github/runner_temp/git-credentials-66635ea8-1f73-4fce-9fae-ce7fa2346640.config
+2026-11-06T15:24:21.6854660Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git.path \/github\/runner_temp\/git\-credentials\-66635ea8\-1f73\-4fce\-9fae\-ce7fa2346640\.config
+2026-11-06T15:24:21.6881591Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-11-06T15:24:21.6899721Z /github/runner_temp/git-credentials-66635ea8-1f73-4fce-9fae-ce7fa2346640.config
+2026-11-06T15:24:21.6904831Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git/worktrees/*.path \/github\/runner_temp\/git\-credentials\-66635ea8\-1f73\-4fce\-9fae\-ce7fa2346640\.config
+2026-11-06T15:24:21.6931498Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-06T15:24:21.7146496Z Removing credentials config '/home/runner/work/_temp/git-credentials-66635ea8-1f73-4fce-9fae-ce7fa2346640.config'
+2026-11-06T15:24:21.7267729Z Cleaning up orphan processes

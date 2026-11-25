@@ -16,7 +16,8 @@
     "server",
     "i18n",
     "nuxt.config.ts",
-    "README.md"
+    "README.md",
+    "docs/llms.txt"
   ],
   "keywords": [
     "nuxt",
@@ -45,9 +46,11 @@
   "peerDependencies": {
     "nuxt": "^4.0.0",
     "@nuxt/ui": "^4.3.0",
-    "@fyit/crouton-core": "workspace:*"
+    "@fyit/crouton-auth": "workspace:0.x",
+    "@fyit/crouton-core": "workspace:0.x"
   },
   "scripts": {
+    "typecheck": "nuxt prepare --extends @fyit/crouton-core && vue-tsc -b tsconfig.typecheck.json --noEmit",
     "test": "vitest run"
   }
 }

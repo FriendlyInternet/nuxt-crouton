@@ -1,6 +1,6 @@
 // Team-based endpoint - requires @fyit/crouton-auth package
 // The resolveTeamAndCheckMembership utility handles team resolution and auth
-import { createSalesEventsetting } from '../../../../database/queries'
+import { createSalesEventsetting, assertSalesEventsettingReferences } from '../../../../database/queries'
 import { captureConfigWrite } from '../../../../../../../server/utils/config-capture'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
 import { z } from 'zod'
@@ -20,6 +20,7 @@ export default defineEventHandler(async (event) => {
   authTimer.end()
 
   const body = await readValidatedBody(event, bodySchema.parse)
+  await assertSalesEventsettingReferences(team.id, body)
 
   // body is the validated payload (id is not part of the schema) — the database generates the id
   const dataWithoutId = body

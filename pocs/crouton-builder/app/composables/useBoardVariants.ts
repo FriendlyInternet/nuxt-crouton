@@ -2,13 +2,15 @@
  * Named layout variants per page (#942): a page holds several arrangements,
  * one of them live. Loads them from the page's `board` JSON (wrapping the
  * older `{ layout }` shape as variant "A"), owns the switcher menu, and
- * produces the `board` payload Save writes.
+ * produces the `board` payload Save writes. A variant's tree is `null` when the
+ * board is empty (#3808) — see `~/utils/board-empty`.
  */
 import type { Ref } from 'vue'
 import type { LayoutNode, LayoutTree } from '@fyit/crouton-core/app/types/layout'
 import { serializeLayoutTree, parseLayoutTree } from '@fyit/crouton-layout/app/utils/layout-serialize'
+import { loadBoard, variantLayout, type BoardVariant } from '~/utils/board-empty'
 
-export interface BoardVariant { id: string, name: string, tree: LayoutTree }
+export type { BoardVariant }
 
 export function useBoardVariants(opts: {
   page: Ref<{ board?: unknown } | null>
@@ -38,31 +40,21 @@ export function useBoardVariants(opts: {
   const loadedFor = ref<string | null>(null)
   watch([opts.page, opts.pageId] as const, ([p, id]) => {
     if (!p || loadedFor.value === id) return
-    const board = (p.board as Record<string, unknown> | null) ?? {}
-    const stored = Array.isArray(board.variants) ? board.variants as { id: string, name: string, layout: string }[] : null
-    // A page with nothing saved shows the starter — which is NOT saved yet, so it
-    // starts dirty: "Save" is live and "View page" stores it first. Otherwise the
-    // board shows blocks while the served page reads an empty board (#2598).
-    let unsaved = false
-    if (stored?.length) {
-      variants.value = stored.map(v => ({ id: v.id, name: v.name, tree: parseLayoutTree(v.layout) ?? starterTree() }))
-      liveId.value = typeof board.live === 'string' && variants.value.some(v => v.id === board.live) ? board.live : variants.value[0]!.id
-    }
-    else {
-      const parsed = typeof board.layout === 'string' ? parseLayoutTree(board.layout) : null
-      variants.value = [{ id: 'a', name: 'A', tree: parsed ?? starterTree() }]
-      liveId.value = 'a'
-      unsaved = !parsed
-    }
+    // A page with nothing saved starts EMPTY (#3808) — and is already saved, since
+    // the served page reads the same empty board. Only a stored layout that fails
+    // to parse falls back to the starter, unsaved so Save stores it (#2598).
+    const loaded = loadBoard((p.board as Record<string, unknown> | null) ?? null, starterTree)
+    variants.value = loaded.variants
+    liveId.value = loaded.liveId
     showVariant(liveId.value)
     loadedFor.value = id
-    dirty.value = unsaved
+    dirty.value = loaded.unsaved
   }, { immediate: true })
 
   function duplicateVariant() {
     const v = current.value
     if (!v) return
-    const copy: BoardVariant = { id: newId(), name: nextName(), tree: parseLayoutTree(serializeLayoutTree(v.tree)) ?? v.tree }
+    const copy: BoardVariant = { id: newId(), name: nextName(), tree: v.tree ? (parseLayoutTree(serializeLayoutTree(v.tree)) ?? v.tree) : null }
     variants.value = [...variants.value, copy]
     showVariant(copy.id)
     dirty.value = true
@@ -111,11 +103,11 @@ export function useBoardVariants(opts: {
   ])
 
   /** The `board` payload: every variant, plus `layout` = the live one for older readers. */
-  function serializeBoard(fallbackRoot: LayoutNode) {
+  function serializeBoard() {
     return {
       live: liveId.value,
-      variants: variants.value.map(v => ({ id: v.id, name: v.name, layout: serializeLayoutTree(v.tree) })),
-      layout: serializeLayoutTree(liveVariant.value?.tree ?? { renderer: 'panes', root: fallbackRoot }),
+      variants: variants.value.map(v => ({ id: v.id, name: v.name, layout: variantLayout(v.tree) })),
+      layout: variantLayout(liveVariant.value?.tree ?? null),
     }
   }
 

@@ -25,7 +25,7 @@ const { teamId } = useTeamContext()
 // the reactive URL key drives the fetch once teamId resolves.
 const { data: flows, pending, refresh } = await useFetch(
   () => `/api/crouton-flow/teams/${teamId.value}/flows`,
-  { default: () => [] as any[], immediate: !!teamId.value }
+  { default: () => [] as any[], enabled: () => !!teamId.value }
 )
 
 // Search
@@ -58,6 +58,30 @@ async function handleDelete(flowId: string) {
   } finally {
     deletingId.value = null
   }
+}
+
+const emptyMessage = computed(() =>
+  searchQuery.value ? t('flow.sidebar.noResults') : t('flow.sidebar.empty')
+)
+
+function isSelected(flow: any) {
+  return props.selectedId === flow.id
+}
+
+function rowClass(flow: any) {
+  return isSelected(flow)
+    ? 'bg-primary/10 border-l-2 border-primary'
+    : 'hover:bg-muted/50 border-l-2 border-transparent'
+}
+
+function flowMenuItems(flow: any) {
+  return [[{
+    label: t('flow.actions.delete'),
+    icon: 'i-lucide-trash-2',
+    color: 'error' as const,
+    loading: deletingId.value === flow.id,
+    onSelect: () => handleDelete(flow.id),
+  }]]
 }
 
 function focusSearch() {
@@ -95,7 +119,7 @@ defineExpose({ focusSearch, refresh })
     >
       <UIcon name="i-lucide-share-2" class="size-8 mb-2 opacity-50" />
       <p class="text-sm">
-        {{ searchQuery ? t('flow.sidebar.noResults') : t('flow.sidebar.empty') }}
+        {{ emptyMessage }}
       </p>
       <UButton
         v-if="!searchQuery"
@@ -115,15 +139,16 @@ defineExpose({ focusSearch, refresh })
         <li
           v-for="flow in filteredFlows"
           :key="flow.id"
-          class="group px-4 py-3 cursor-pointer transition-colors"
-          :class="[
-            selectedId === flow.id
-              ? 'bg-primary/10 border-l-2 border-primary'
-              : 'hover:bg-muted/50 border-l-2 border-transparent'
-          ]"
-          @click="emit('select', flow)"
+          class="group flex items-center pr-2 transition-colors"
+          :class="rowClass(flow)"
         >
-          <div class="flex items-center gap-2.5 min-w-0">
+          <UButton
+            color="neutral"
+            variant="ghost"
+            class="flex-1 min-w-0 justify-start gap-2.5 px-4 py-3 text-left"
+            :aria-current="isSelected(flow) || undefined"
+            @click="emit('select', flow)"
+          >
             <div class="size-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
               <UIcon name="i-lucide-share-2" class="size-3.5 text-primary" />
             </div>
@@ -138,22 +163,20 @@ defineExpose({ focusSearch, refresh })
                 />
               </div>
             </div>
-            <UDropdownMenu
-              :items="[
-                [{ label: t('flow.actions.delete'), icon: 'i-lucide-trash-2', color: 'error' as const, loading: deletingId === flow.id, onSelect: () => handleDelete(flow.id) }]
-              ]"
-              :content="{ align: 'end' as const }"
-            >
-              <UButton
-                size="xs"
-                color="neutral"
-                variant="ghost"
-                icon="i-lucide-ellipsis"
-                class="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                @click.stop
-              />
-            </UDropdownMenu>
-          </div>
+          </UButton>
+          <UDropdownMenu
+            :items="flowMenuItems(flow)"
+            :content="{ align: 'end' as const }"
+          >
+            <UButton
+              size="xs"
+              color="neutral"
+              variant="ghost"
+              icon="i-lucide-ellipsis"
+              :aria-label="t('flow.sidebar.flowMenu', { name: flow.name })"
+              class="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 transition-opacity shrink-0"
+            />
+          </UDropdownMenu>
         </li>
       </ul>
     </div>

@@ -1,20 +1,18 @@
 // Add crouton modules to a project
-// Usage: crouton add bookings i18n --skip-migrations
+// Usage: crouton add bookings i18n
 
-import { execSync, spawnSync } from 'node:child_process'
+import { execSync } from 'node:child_process'
 import { join } from 'node:path'
 import { readFile } from 'node:fs/promises'
 import consola from 'consola'
 
-import { loadModules, getModule, listModules } from './module-registry.ts'
+import { getModule, listModules } from './module-registry.ts'
 import { detectPackageManager, getInstallCommand } from './utils/detect-package-manager.ts'
 import { addToNuxtConfigExtends, isInNuxtConfigExtends } from './utils/update-nuxt-config.ts'
-import { addSchemaExport, getSchemaPath } from './utils/update-schema-index.ts'
-import { generateMigrations, manualMigrationSteps } from './utils/generate-migrations.ts'
+import { manualMigrationSteps } from './utils/generate-migrations.ts'
 
 interface AddModuleOptions {
   skipInstall?: boolean
-  skipMigrations?: boolean
   dryRun?: boolean
   force?: boolean
 }
@@ -60,7 +58,7 @@ async function checkDependencies(dependencies: string[], cwd: string = process.c
  * Add a single module to the project
  */
 export async function addModule(moduleName: string, options: AddModuleOptions = {}): Promise<{ success: boolean, message: string }> {
-  const { skipInstall, skipMigrations, dryRun, force } = options
+  const { skipInstall, dryRun, force } = options
   const cwd = process.cwd()
 
   // Get module info
@@ -148,85 +146,14 @@ export async function addModule(moduleName: string, options: AddModuleOptions = 
     }
   }
 
-  // Step 3: Update schema index (if module has schema)
-  if (module.schemaExport) {
-    const schemaPath = await getSchemaPath(cwd)
-
-    if (dryRun) {
-      console.log(`   • Would add schema export to ${schemaPath}`)
-    } else {
-      consola.start('Updating schema index...')
-      const result = await addSchemaExport(schemaPath, module.schemaExport)
-
-      if (result.added) {
-        if (result.created) {
-          consola.success(`Created ${schemaPath} with schema export`)
-        } else {
-          consola.success('Added schema export')
-        }
-      } else if (result.reason === 'already exported') {
-        consola.success('Schema already exported')
-      } else {
-        consola.error(`Could not update schema: ${result.reason}`)
-      }
-    }
-  }
-
-  // Step 4: Generate & apply migrations (if module has tables)
-  if (!skipMigrations && module.schemaExport && module.tables && module.tables.length > 0) {
-    if (dryRun) {
-      console.log('   • Would run: db:generate (drizzle-kit, no Nuxt build)')
-      console.log('   • Would run: npx nuxt db:migrate')
-    } else {
-      // Generate migrations directly — drizzle-kit resolves the schema from the
-      // app's layer graph (no Nuxt process, #1445 WS2). A duplicate-table clash
-      // throws (propagates non-zero); an unresolvable layer defers with a recipe.
-      const genResult = await generateMigrations(cwd)
-      const migrationsGenerated = genResult.generated
-      if (!genResult.generated) {
-        consola.warn(`Could not generate migrations (${genResult.reason})`)
-        if (genResult.reason === 'generate-failed' && genResult.detail) console.log(`   ${genResult.detail}`)
-        console.log('   Run manually when ready:')
-        for (const step of manualMigrationSteps()) console.log(`     ${step}`)
-      }
-
-      // Apply migrations (only if we actually generated some)
-      if (!migrationsGenerated) {
-        console.log('   • Skipping migrate (no migrations generated)')
-      } else {
-        consola.start('Applying migrations...')
-        try {
-          const migrateResult = spawnSync('npx', ['nuxt', 'db:migrate'], {
-            cwd,
-            stdio: 'pipe',
-            encoding: 'utf-8'
-          })
-
-          if (migrateResult.status !== 0) {
-            consola.warn('Migration application may have issues')
-            if (migrateResult.stderr) {
-              console.log(`   ${migrateResult.stderr.trim()}`)
-            }
-          } else {
-            consola.success('Applied migrations')
-          }
-        } catch (error) {
-          consola.warn('Could not apply migrations')
-          console.log(`   ${error.message}`)
-        }
-      }
-    }
-  } else if (module.schemaExport) {
-    console.log('   • Skipping migrations (build the schema bundle, then run db:generate && db:migrate when ready)')
-  }
+  // Step 3: Say plainly what `crouton add` does NOT do (#3998). Printed for
+  // every package — no guessing which packages bring tables.
+  console.log('   • crouton add does not create database tables. If this package brings tables, run next:')
+  for (const step of manualMigrationSteps()) console.log(`     ${step}`)
 
   // Success message
   console.log()
   consola.success(`✅ ${moduleName} module added successfully!`)
-
-  if (module.tables && module.tables.length > 0) {
-    console.log(`   Tables: ${module.tables.join(', ')}`)
-  }
 
   console.log()
   consola.info('Next steps:')
@@ -238,12 +165,8 @@ export async function addModule(moduleName: string, options: AddModuleOptions = 
     console.log('  3. Configure OAuth providers if needed')
   } else if (moduleName === 'i18n') {
     console.log('  2. Configure locales in nuxt.config.ts')
-  } else if (moduleName === 'bookings') {
-    // The package ships its collections (#2278) — nothing to generate.
-    console.log('  2. Run pnpm db:generate to add the bookings tables to your migrations')
   } else if (moduleName === 'assets') {
     console.log('  2. Enable hub.blob in nuxt.config.ts')
-    console.log('  3. Run pnpm db:generate to add the assets table to your migrations')
   }
 
   return { success: true, message: 'Module added successfully' }
@@ -310,6 +233,5 @@ export async function listAvailableModules(): Promise<void> {
   consola.info('Usage:')
   console.log('  crouton add auth')
   console.log('  crouton add bookings i18n')
-  console.log('  crouton add bookings --skip-migrations')
   console.log()
 }

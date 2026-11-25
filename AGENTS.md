@@ -70,6 +70,11 @@ not merge.** Every change is built by the pipeline, so traffic control sees all 
 - **Hand off** — open or mark the ticket for the pipeline, then report the PR and preview it produces.
 - **Follow up** — review the pipeline's PR; request changes by commenting on it, not by pushing.
 - **Never** commit to a feature branch, push, or merge from an interactive session.
+- **One driver per ticket** — a chat claims the epics/tickets it drives; never start, unblock or
+  rework a ticket another chat claimed — ask the owner. Don't start a ticket whose `Blocked-by:` is
+  still open.
+- **Write tickets one at a time** — a chat writes the epic's step list and the first ticket, not every
+  ticket up front; each later ticket is written just before it is built.
 
 The check: after a week, the history shows only pipeline authors, no interactive-session commits.
 
@@ -192,6 +197,8 @@ concern.)
 - **Status the moment you start** (`in-progress`), `blocked` when waiting, drop on close.
 - **Recurring chores are standalone**, never sub-issues of a deliverable epic (a never-closing child
   pins the epic open forever).
+- **Titles are plain sentences** — at most 140 characters, say what the owner will notice, no area
+  prefix (the component label shows the area).
 
 **Write as a hypothesis** (default; trivial chores opt out) — open the body with `## Hypothesis`:
 *We think that* if X then Y · *We'll do that by* … · *We'll be right if* … · *We'll know by* …
@@ -211,7 +218,7 @@ code: what changed, the concrete surface, numbered steps with before/after, test
 acceptance check.
 
 **The epic is the verification unit.** When the last child merges, post one `## 🧪 Verify the whole
-thing` rollup, **walk up the tree** (a parent never auto-closes), run the postmortem, close on
+thing` rollup, **walk up the tree** (a parent closes only once its work is on trunk, its test is confirmed and its postmortem is posted), run the postmortem, close on
 confirmation. Human-action tasks are discrete **assigned** issues closed by a confirming comment.
 
 **Agent comments carry provenance** — posted under a *human* account, disclaim it

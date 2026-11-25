@@ -8,34 +8,30 @@
  * that pane's rect — stateless per move. Release drops. The tree only changes
  * on drop, in the handler the page registers. No ghost in the tree, no
  * coordinate conversion, one shared state object.
+ *
+ * On the board (#3916) the target comes from the rectangles on screen instead —
+ * the page's edge, a group's edge, a block, or the space under a block — resolved
+ * by the pure `resolveTarget` (board-target.ts).
  */
 import type { NodePath, DropEdge } from '@fyit/crouton-layout/app/utils/layout-edit'
+import { edgeFor, resolveTarget, type BoardTarget, type BoardGeometry, type Rect } from './board-target'
+
+export { edgeFor }
+export type { BoardTarget }
 
 export type BoardDragPayload
   = { kind: 'block', blockId: string, label: string }
   | { kind: 'pane', path: NodePath, label: string }
 
-export interface BoardHover { path: NodePath, edge: DropEdge }
-
 const PANE_SELECTOR = '[data-handoff="board-pane"]'
+const HANDLE_SELECTOR = '[data-handoff="pane-resize-handle"]'
 
 const payload = ref<BoardDragPayload | null>(null)
-const hover = ref<BoardHover | null>(null)
+const hover = ref<BoardTarget | null>(null)
 const point = ref<{ x: number, y: number } | null>(null)
 /** Set when a drag completed, so the click that may follow (pointer capture) is ignored once. */
 let swallowClick = false
-let onDropHandler: ((at: NodePath, edge: DropEdge, p: BoardDragPayload) => void) | null = null
-
-/** Which edge of `rect` the point is nearest; the middle 50% is `center`. */
-export function edgeFor(x: number, y: number, rect: DOMRect): DropEdge {
-  const fx = (x - rect.left) / rect.width
-  const fy = (y - rect.top) / rect.height
-  const dx = Math.min(fx, 1 - fx)
-  const dy = Math.min(fy, 1 - fy)
-  if (dx > 0.25 && dy > 0.25) return 'center'
-  if (dx < dy) return fx < 0.5 ? 'left' : 'right'
-  return fy < 0.5 ? 'top' : 'bottom'
-}
+let onDropHandler: ((at: NodePath, edge: DropEdge, p: BoardDragPayload, target: BoardTarget) => void) | null = null
 
 export function samePath(a: NodePath, b: NodePath): boolean {
   return a.length === b.length && a.every((v, i) => v === b[i])
@@ -51,15 +47,35 @@ function pathOf(el: Element): NodePath {
   return raw === '' ? [] : raw.split('.').map(Number)
 }
 
-function resolveHover(x: number, y: number): BoardHover | null {
+function rectOf(el: Element): Rect {
+  const r = el.getBoundingClientRect()
+  return { left: r.left, top: r.top, right: r.right, bottom: r.bottom }
+}
+
+function resolveHover(x: number, y: number): BoardTarget | null {
   const p = payload.value
   if (!p) return null
-  const el = document.elementFromPoint(x, y)?.closest(PANE_SELECTOR)
-  if (!el) return null
-  const path = pathOf(el)
-  // A pane can't be dropped onto itself or into its own subtree.
-  if (p.kind === 'pane' && isWithin(path, p.path)) return null
-  return { path, edge: edgeFor(x, y, el.getBoundingClientRect()) }
+  const el = document.elementFromPoint(x, y)
+  const frame = el?.closest('[data-board-frame]')
+  const rootEl = frame?.querySelector('[data-board-root]')
+  if (!frame || !rootEl) {
+    // Off the board tree (the empty-board placeholder, …): only a pane under the finger.
+    const paneEl = el?.closest(PANE_SELECTOR)
+    if (!paneEl) return null
+    const path = pathOf(paneEl)
+    // A pane can't be dropped onto itself or into its own subtree.
+    if (p.kind === 'pane' && isWithin(path, p.path)) return null
+    const rect = rectOf(paneEl)
+    return { scope: 'pane', path, edge: edgeFor(x, y, rect), rect }
+  }
+  const geo: BoardGeometry = {
+    frame: rectOf(frame),
+    root: rectOf(rootEl),
+    groups: [...rootEl.querySelectorAll('[data-board-group]')].map(g => ({ path: pathOf(g), rect: rectOf(g) })),
+    panes: [...rootEl.querySelectorAll(PANE_SELECTOR)].map(g => ({ path: pathOf(g), rect: rectOf(g) })),
+    handles: [...rootEl.querySelectorAll(HANDLE_SELECTOR)].map(rectOf),
+  }
+  return resolveTarget(x, y, geo, p.kind === 'pane' ? p.path : undefined)
 }
 
 export function useBoardDrag() {
@@ -110,7 +126,7 @@ export function useBoardDrag() {
       if (active) {
         swallowClick = true
         const h = resolveHover(ev.clientX, ev.clientY)
-        if (h && onDropHandler) onDropHandler(h.path, h.edge, p)
+        if (h && onDropHandler) onDropHandler(h.path, h.edge, p, h)
       }
       cleanup()
     }

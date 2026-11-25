@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 // epic-ready.mjs — the pure "is this epic assembled and ready to PR into main?" decision (#1815).
 //
-// WHY a pure module. The GitHub I/O (list sub-issues, list PRs, compare branches) lives in
-// .github/workflows/epic-ready-pr.yml; this file is the deterministic predicate it calls, so the
+// WHY a pure module. The GitHub I/O lives in scripts/epic-ready-pr.mjs, called by the epic-ready-pr
+// job in .github/workflows/on-issue-close.yml; this file is the deterministic predicate it calls, so the
 // rule is unit-tested in isolation (mirrors apply-decompose-plan.mjs's pure-core / thin-executor
 // split). The workflow fires on `issues: closed` — by then schedule-waves.yml has already closed
 // the child whose sub-PR merged (a non-default-branch merge does NOT auto-close its `Closes #NN`,
 // so schedule-waves closes it explicitly), which is why "all sub-issues closed" is the correct
-// completeness signal and racing `pull_request: closed` is not.
+// completeness signal and racing `pull_request: closed` is not — except a `tickets:rolling` epic
+// (#3846), whose later tickets don't exist yet: there `stepsPending` (lib/epic-steps.mjs) must also be 0.
 
 /** epic/<n>-<slug> → n (number), else null. */
 export function parseEpicNumber(ref) {
@@ -45,23 +46,31 @@ export function resolveEpicTarget({ closedIssueNumber, blockEpicNumber = null, s
  * Decide whether to open the epic→main PR. PURE.
  *   subIssues:           [{ state: 'open'|'closed' }]  — the epic's DIRECT sub-issues
  *   existingEpicMainPrs: [ ... ]                        — OPEN PRs already head=epic-branch base=main
- *   aheadCount:          number                         — commits the epic branch is ahead of main
- * Open iff the epic HAS children, ALL are closed, the branch actually landed work, and no PR exists.
+ *   changedFiles:        number                         — files that differ between the epic branch and main
+ *                                                         (NOT commits ahead: the pipeline's own "merge main
+ *                                                         into epic" commits are ahead with nothing to land —
+ *                                                         empty PRs #4063, #4034, #3628)
+ *   pendingSteps:        number                         — steps of a rolling epic not finished yet
+ *                                                         (lib/epic-steps.mjs stepsPending; 0 = not rolling)
+ * Open iff the epic HAS children, ALL are closed, the branch differs from main, no step of a
+ * rolling epic is still pending, and no PR exists.
  * Any miss returns a human-readable `reason` (logged, never thrown — a false skip is safe, a false
  * open is not, so the predicate is deliberately conservative).
  */
-export function decideOpen({ subIssues = [], existingEpicMainPrs = [], aheadCount = 0 } = {}) {
+export function decideOpen({ subIssues = [], existingEpicMainPrs = [], changedFiles = 0, pendingSteps = 0 } = {}) {
   if (existingEpicMainPrs.length > 0) return { open: false, reason: 'epic→main PR already open' }
   if (subIssues.length === 0) return { open: false, reason: 'epic has no sub-issues' }
+  if (pendingSteps > 0) return { open: false, reason: `${pendingSteps} step(s) of the step list not finished yet (rolling epic)` }
   const openChildren = subIssues.filter(s => s.state !== 'closed').length
   if (openChildren > 0) return { open: false, reason: `${openChildren} child issue(s) still open` }
-  if (aheadCount <= 0) return { open: false, reason: 'epic branch has no commits ahead of main' }
-  return { open: true, reason: `all ${subIssues.length} children closed + branch ${aheadCount} ahead of main` }
+  if (changedFiles <= 0) return { open: false, reason: 'no file differs from main (nothing to land)' }
+  return { open: true, reason: `all ${subIssues.length} children closed + ${changedFiles} file(s) differ from main` }
 }
 
 // ── Shared-code sign-off carry (#2494) ─────────────────────────────────────────────
 import { packagesTouched, ATTESTATION_RE } from './packages-guard.mjs'
 import { isApproval } from './approval.mjs'
+import { ticketOutcome } from './lib/epic-steps.mjs'
 
 /** `Closes #NN` in prose only — never inside code (the #1021 rule, same as schedule-waves). */
 export function closesNumbers(body = '') {
@@ -106,21 +115,46 @@ export function packagesApprovalCarry({ subPrs = [], owner } = {}) {
   return { packagesPrs, approved, unapproved, line }
 }
 
+// `collectApprovalLines` (#2748) now lives in packages-guard.mjs (#3701) so the pi finish step
+// and the run-time notice share one parser; re-exported here for epic-ready-pr.mjs + its tests.
+export { collectApprovalLines } from './packages-guard.mjs'
+
 /**
- * Every `Packages-approved:` line found in the given bodies (epic body, children's bodies),
- * de-duplicated, in first-seen order. PURE (#2748). Code spans/fences are skipped so a quoted
- * example never counts as a declaration.
+ * Build the epic→main PR title + body. PURE (#3619 — moved verbatim from the workflow).
+ *   subIssues: [{ number, title }]; carry: packagesApprovalCarry() result;
+ *   declared:  collectApprovalLines() result (the carry line is de-duplicated here).
+ *   summary:   optional epic-steps.mjs stepSummary() (#4316) — names what was built and dropped.
  */
-export function collectApprovalLines(bodies = []) {
-  const seen = new Set()
-  for (const b of bodies) {
-    const prose = String(b || '').replace(/```[\s\S]*?```/g, '')
-    for (const l of prose.split('\n')) {
-      const t = l.trim()
-      if (ATTESTATION_RE.test(t) && !t.startsWith('`')) seen.add(t)
-    }
-  }
-  return [...seen]
+export function buildEpicMainPr({ epicNumber, epicBranch, epicTitle, subIssues = [], carry, declared = [], owner, summary }) {
+  const OWNER = owner
+  declared = declared.filter(l => l !== carry.line)
+  const declaredSection = declared.length ? `\n\n${declared.join('\n')}\n` : ''
+  const carrySection = declaredSection + (carry.packagesPrs.length === 0 ? '' :
+    carry.line
+      ? `\n\n${carry.line}\n`
+      : `\n\n## 🔒 Shared code not yet signed off\n` +
+        `These sub-PRs changed \`packages/**\` without an approval from @${OWNER} on the PR or its issue: ` +
+        `${carry.unapproved.map(n => `#${n}`).join(', ')}. The "Packages edit declared" check stays red until you ` +
+        `add the \`packages:approved\` label here or a \`Packages-approved:\` line. (#2494)\n`)
+  const childList = subIssues.map(s => `- #${s.number} ${s.title}${ticketOutcome(s) === 'not_planned' ? ' — not planned' : ''}`).join('\n')
+  const droppedLine = summary?.dropped?.length
+    ? `\n\n**Dropped steps (not planned, not built):** ${summary.dropped.map(d => `step ${d.step} — ${d.tickets.map(n => `#${n}`).join(', ')}`).join(', ')}`
+    : ''
+  const firstLine = summary
+    ? `Assembles epic #${epicNumber} into \`main\` — ${summary.line}.\n\n`
+    : `Assembles epic #${epicNumber} — all ${subIssues.length} children closed and merged into ` +
+      `\`${epicBranch}\`, ready for \`main\`.\n\n`
+  const cleanTitle = epicTitle.replace(/^Epic:\s*/i, '')
+  const title = `Epic #${epicNumber}: ${cleanTitle}`.slice(0, 250)
+  const body =
+    firstLine +
+    `> Referenced, not \`Closes\` — the epic closes via the \`/close-epic\` postmortem flow (#856), ` +
+    `not on this merge.\n\n` +
+    `## 👤 For humans\n${cleanTitle}\n\n**Children (${subIssues.length}):**\n${childList}${droppedLine}\n\n` +
+    `## 🧪 How to test\nReview the assembled \`${epicBranch}\` → \`main\` diff; CI runs on this PR. ` +
+    `Reply \`ok\` and it merges itself once green — you are the review gate. (\`not ok: what's wrong\` sends it back.)` + carrySection + `\n\n` +
+    `<sub>🤖 agent pipeline (CI) · epic→main assembler (#1815) · review requested from @${OWNER}</sub>`
+  return { title, body }
 }
 
 // The guard and the carry must agree on the attestation shape — asserted at import time too,

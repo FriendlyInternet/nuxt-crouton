@@ -1,10 +1,13 @@
 {
+  "permissions": {
+    "siteManage": "Manage the site: info, look and feel, redirects",
+    "collectionsManage": "Manage all collection items and team files"
+  },
   "form": {
     "collapse": "Collapse to sidebar",
     "expand": "Expand to fullscreen",
     "close": "Close",
     "dragToReorder": "Drag to reorder",
-    "removeItem": "Remove item",
     "metaSettings": "Meta settings",
     "sendingUpdate": "Sending update...",
     "maxDepthTitle": "Maximum depth reached",
@@ -28,6 +31,7 @@
     "create": "Create",
     "edit": "Edit",
     "delete": "Delete",
+    "view": "View",
     "cancel": "Cancel",
     "save": "Save",
     "yes": "Yes",
@@ -54,6 +58,7 @@
     "creationFailed": "Creation failed",
     "updateFailed": "Update failed",
     "deleteFailed": "Delete failed",
+    "deletePartial": "{done} of {total} deleted. {failed} could not be deleted: {error}",
     "moveFailed": "Move failed",
     "reorderFailed": "Reorder failed"
   },
@@ -82,7 +87,11 @@
     "percentComplete": "{percent}% complete",
     "itemsCreated": "{count} items created",
     "itemsFailed": "{count} items failed",
-    "rowsSkipped": "{count} rows skipped (validation errors)"
+    "rowsSkipped": "{count} rows skipped (validation errors)",
+    "readFailed": "Could not read the file",
+    "noFields": "This collection has no fields to import into",
+    "rowFailed": "Row {row}: {error}",
+    "moreFailed": "…and {count} more"
   },
   "errors": {
     "checkConnection": "Check your connection status.",
@@ -140,17 +149,32 @@
     "moveDown": "Move down",
     "moveToRoot": "Move to root",
     "add": "Add",
-    "createFirstItem": "Create your first item to see the tree structure."
+    "createFirstItem": "Create your first item to see the tree structure.",
+    "toggleChildren": "Children of {name} ({count})"
   },
   "image": {
     "cropImage": "Crop Image",
     "cropApply": "Crop & Apply",
     "cropPreview": "Crop preview",
-    "preview": "Image preview"
+    "preview": "Image preview",
+    "upload": "Upload image",
+    "change": "Change image",
+    "remove": "Remove image",
+    "rotateLeft": "Rotate left",
+    "rotateRight": "Rotate right",
+    "zoomOut": "Zoom out",
+    "zoomIn": "Zoom in",
+    "reset": "Reset crop",
+    "aspectRatio": "Shape"
   },
   "repeater": {
+    "componentMissing": "Can't show this item: component \"{name}\" was not found.",
     "emptyState": "No items yet. Click \"{label}\" to get started.",
-    "addItem": "Add Item"
+    "addItem": "Add Item",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "actions": "Actions for item {position} of {total}",
+    "moved": "Moved to position {position} of {total}"
   },
   "validation": {
     "fixErrors": "Please fix {count} validation error | Please fix {count} validation errors",
@@ -198,6 +222,7 @@
   },
   "table": {
     "previewOnly": "Preview only",
+    "actionWithName": "{action} {name}",
     "search": "Search",
     "display": "Display",
     "selectAll": "Select all",

@@ -5,15 +5,19 @@ import nodeFs from 'node:fs'
 import { execFileSync as nodeExecFileSync } from 'node:child_process'
 import { parseRunStart } from './run-start.mjs'
 import { decideDeliverable, pushedThisRun } from './run-deliverable.mjs'
+import { ranOutOfTime } from './pi-time-budget.mjs'
 
 // fallow-ignore-next-line complexity -- the pi worker's artifact-gate moved verbatim out of work-issue-pidev.yml; each branch is a distinct deliverable check, covered by artifact-gate.test.mjs (#3382)
-export async function artifactGate({ github, context, core, env = process.env, fs = nodeFs, execFileSync = nodeExecFileSync }) {
+export async function artifactGate({ github, context, core, env = process.env, fs = nodeFs, execFileSync = nodeExecFileSync, now = Date.now }) {
   const issue_number = Number(env.ISSUE_NUMBER)
   if (env.CONFLICT_ASKED === '1') { core.info('Merge conflict put to the owner on the PR — artifact OK (#2848)'); return }
   if (env.CONFLICT_FAILED === '1') { core.setFailed('Merge conflict resolution failed — explained on the PR (#3322).'); return }
   if (env.PLAN_OK === '1') { core.info('Plan comment verified — artifact OK (#2755).'); return }
+  if (env.PLAN_EXPLAINED === '1') { core.setFailed('Plan malformed — explained on the issue by the plan step (#3028).'); return }
   if (env.REVISE_CONFLICT === '1') { core.setFailed('Revision not pushed: the PR changed during the run — explained on the PR (#2446).'); return }
+  if (env.REQUEST_FAILED) { core.setFailed(`The worker failed (exit ${env.REQUEST_FAILED}) making the requested change — explained on the PR (#3775).`); return }
   if (env.REVISED === '1') { core.info('Revision delivered on the PR (commit or reply) — artifact OK (#2446).'); return }
+  if (env.MERGE_REFUSED === '1') { core.info('Nothing pushed: the worker left a merge in progress — explained on the PR (#3704).'); return }
   const rs = parseRunStart(env.RUN_START)
   if (!rs.ok) { core.setFailed('Artifact-gate cannot run: run-start time (t0) is empty or invalid — refusing to compare against it (#3324)'); return }
   const since = rs.since
@@ -182,6 +186,37 @@ export async function artifactGate({ github, context, core, env = process.env, f
     why = `the HARNESS failed after committing — \`work-${issue_number}\` (\`${workBranch.sha}\`) was pushed this run, but the finish step died before opening the PR`
     action = 'open the run log at the `finish` step — this is a workflow bug, NOT an underspecified issue. '
       + 'Do not edit the issue; fix the workflow, delete the branch, and re-apply the label'
+  }
+
+  // #4161 — the job was CANCELLED (its time limit, a person, or a newer run). pi never wrote its
+  // step outputs, so PI_EXEC_LOG is empty and the no-log branch below would blame the harness.
+  // Name the stop instead, with how long pi ran and how much it did, and point at the record.
+  if (!why && env.JOB_STATUS === 'cancelled') {
+    const minutes = Math.round((now() - sinceMs) / 60000)
+    const limit = Number(env.JOB_TIMEOUT_MIN) || 0
+    let steps = 0
+    try {
+      steps = Number(String(execFileSync('node',
+        [`${env.RUNNER_TEMP}/run-record.mjs`, 'tool-calls', `${env.RUNNER_TEMP}/pi-session`],
+        { encoding: 'utf8' })).trim()) || 0
+    } catch (e) { steps = 0 }
+    const artifact = `pi-session-${context.runId}`
+    // Setup before t0 takes a few minutes, so a kill within 10 minutes of the limit is the limit.
+    if (limit && minutes >= limit - 10) {
+      why = `the job hit its ${limit}-minute time limit — pi ran about ${minutes} minutes and made ${steps} tool calls before it was stopped`
+      action = `nothing is broken in the harness or the ticket. Download the \`${artifact}\` artifact from the run page to see where the time went, then narrow the ticket or re-dispatch`
+    } else {
+      why = `the run was cancelled after about ${minutes} minutes (${steps} tool calls)`
+      action = `re-dispatch when ready; the record is in the run's \`${artifact}\` artifact`
+    }
+  }
+
+  // #4183: the pi step FAILED at its own time limit (the job was not cancelled — a cancelled job
+  // is #4161's case). Its outputs are empty after a kill, so without this the `!hadLog` branch
+  // below blamed "upstream of pi, in the workflow".
+  if (!why && env.JOB_STATUS !== 'cancelled' && ranOutOfTime({ outcome: env.PI_OUTCOME, deadline: env.PI_DEADLINE, now: now() / 1000 })) {
+    why = `the worker ran out of time — the agent step hit its ${env.PI_MINUTES}-minute limit and was stopped`
+    action = 'do not edit the ticket. Reply `**Worker:** continue` (or re-dispatch) to resume; if it keeps running out, split the ticket'
   }
 
   try {

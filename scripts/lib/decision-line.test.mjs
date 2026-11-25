@@ -1,17 +1,28 @@
 // node --test scripts/lib/decision-line.test.mjs
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseDecision, decisionLine, appendDecision } from './decision-line.mjs'
+import { parseDecision, parseOverride, decisionLine, appendDecision, isOwnerVoice } from './decision-line.mjs'
 
-const owner = { authorAssociation: 'OWNER', userType: 'User' }
+// The owner is a login, not a role (#4168): `pmcp` unless `owner` says otherwise.
+const owner = { authorAssociation: 'OWNER', userType: 'User', userLogin: 'pmcp' }
 const url = 'https://github.com/o/r/issues/1#issuecomment-9'
 
 test('owner Decision: comment is parsed verbatim', () => {
   assert.equal(parseDecision({ ...owner, body: 'Decision: keep the gallery in the check' }), 'keep the gallery in the check')
 })
 test('non-owner Decision: is ignored', () => {
-  assert.equal(parseDecision({ authorAssociation: 'CONTRIBUTOR', userType: 'User', body: 'Decision: x' }), null)
-  assert.equal(parseDecision({ authorAssociation: 'OWNER', userType: 'Bot', body: 'Decision: x' }), null)
+  assert.equal(parseDecision({ authorAssociation: 'CONTRIBUTOR', userType: 'User', userLogin: 'someone-else', body: 'Decision: x' }), null)
+  assert.equal(parseDecision({ authorAssociation: 'OWNER', userType: 'Bot', userLogin: 'pmcp', body: 'Decision: x' }), null)
+})
+// covers: T4
+test('#4168 parseDecision decides by login, not role', () => {
+  assert.equal(parseDecision({ userLogin: 'pmcp', userType: 'User', body: 'Decision: x' }), 'x')
+  assert.equal(parseDecision({ authorAssociation: 'COLLABORATOR', userLogin: 'PMCP', userType: 'User', body: 'Decision: x' }), 'x')
+  assert.equal(parseDecision({ authorAssociation: 'OWNER', userLogin: 'someone-else', userType: 'User', body: 'Decision: x' }), null)
+  assert.equal(parseDecision({ authorAssociation: 'OWNER', userType: 'User', body: 'Decision: x' }), null)
+  assert.equal(parseDecision({ userLogin: 'pmcp', userType: 'Bot', body: 'Decision: x' }), null)
+  assert.equal(parseDecision({ userLogin: 'alice', owner: 'alice', userType: 'User', body: 'Decision: x' }), 'x')
+  assert.equal(parseDecision({ userLogin: 'pmcp', owner: '', userType: 'User', body: 'Decision: x' }), 'x')
 })
 test('Decision: mid-comment or quoted is ignored', () => {
   assert.equal(parseDecision({ ...owner, body: 'I think\nDecision: x' }), null)
@@ -47,8 +58,20 @@ test('#3060 generated-by trailer is not part of the decision', () => {
   assert.equal(parseDecision({ ...owner, body: 'Decision: Y' + T }), 'Y')
 })
 
+test('#3272 parseOverride: only an owner `ok: <reason>`', () => {
+  assert.equal(parseOverride({ ...owner, body: 'ok: the point is cosmetic' }), 'the point is cosmetic')
+  for (const body of ['ok:', 'ok', 'Decision: x', 'lgtm: x']) assert.equal(parseOverride({ ...owner, body }), null, body)
+  assert.equal(parseOverride({ ...owner, authorAssociation: 'CONTRIBUTOR', userLogin: 'someone-else', body: 'ok: x' }), null)
+  // covers: T4 — by login (#4168): the role alone does not make an owner
+  assert.equal(parseOverride({ ...owner, userLogin: 'someone-else', body: 'ok: x' }), null)
+  assert.equal(parseOverride({ ...owner, authorAssociation: 'COLLABORATOR', body: 'ok: x' }), 'x')
+  assert.equal(parseOverride({ ...owner, userType: 'Bot', body: 'ok: x' }), null)
+  assert.equal(parseOverride({ ...owner, body: '> ok: x' }), null)
+  assert.equal(parseOverride({ ...owner, body: '> quoted\nnot this' }), null)
+})
+
 test('#3341 relayed owner answers (COLLABORATOR account) are recorded', () => {
-  const c = { authorAssociation: 'COLLABORATOR', userType: 'User' }
+  const c = { authorAssociation: 'COLLABORATOR', userType: 'User', userLogin: 'pmcp' }
   const ans = "> 🤖 **Claude** · posted from `@pmcp`'s account (not Maarten) · _Maarten's answer to the held plan_\n\n"
   const dec = "> 🤖 **Claude** · posted from `@pmcp`'s account (not Maarten) · _Maarten's decision, from chat_\n\n"
   assert.equal(parseDecision({ ...c, held: true, body: ans + 'not ok: X' }), 'X')
@@ -56,4 +79,33 @@ test('#3341 relayed owner answers (COLLABORATOR account) are recorded', () => {
   assert.equal(parseDecision({ ...c, body: ans + 'not ok: X' }), null)
   assert.equal(parseDecision({ ...c, userType: 'Bot', body: 'Decision: Y' }), null)
   assert.equal(parseDecision({ ...c, body: "> 🤖 **Claude** · posted from `@pmcp`'s account (not Maarten) · _status update_\n\nDecision: Y" }), null)
+})
+
+// covers: T9
+test('#4192 isOwnerVoice: the owner typed, or a chat relaying the owner\'s answer/decision; never a status note', () => {
+  const me = { userType: 'User', userLogin: 'pmcp' }
+  const head = (ctx) => `> 🤖 **Claude Code** · interactive agent · posted from \`@pmcp\`'s account (not Maarten) · _${ctx}_\n\nA`
+  assert.equal(isOwnerVoice({ ...me, body: 'A — go' }), true, 'typed')
+  assert.equal(isOwnerVoice({ ...me, body: head('owner answer in chat 2026-11-17') }), true, 'relayed answer')
+  assert.equal(isOwnerVoice({ ...me, body: '> 🤖 **Claude Code** · owner decision\n\nA' }), true, 'owner decision header')
+  assert.equal(isOwnerVoice({ ...me, body: "> 🤖 **Claude Code** · interactive agent · chat 1be68d · posted from `@pmcp`'s account (not Maarten) · _claim_\n\n🪪" }), false, 'claim note')
+  assert.equal(isOwnerVoice({ ...me, body: head('status update') }), false, 'status note')
+  assert.equal(isOwnerVoice({ userType: 'User', userLogin: 'someone', body: 'A' }), false, 'non-owner')
+  assert.equal(isOwnerVoice({ userType: 'Bot', userLogin: 'pmcp', body: 'A' }), false, 'bot')
+  assert.equal(isOwnerVoice({ userType: 'User', userLogin: 'Boss', body: 'A' }, 'boss'), true, 'owner override, case-insensitive')
+})
+
+// covers: T9 (#4531)
+test('#4531 isOwnerVoice: a relay header whose context says it is NOT the owner\'s answer is not the owner speaking', () => {
+  const me = { userType: 'User', userLogin: 'pmcp' }
+  const head = (ctx) => `> 🤖 **Claude Code** · interactive agent · chat 01b3cd · posted from \`@pmcp\`'s account (not Maarten) · _${ctx}_\n\nA`
+  for (const ctx of [
+    'owner yes 25 Nov 02:10 to posting this mockup; this is not his answer to the plan review',
+    "not the owner's answer",
+    'answers to the two open points of the third plan review; the "block alone" wording was this chat\'s, not a decision of the owner\'s',
+  ]) assert.equal(isOwnerVoice({ ...me, body: head(ctx) }), false, ctx)
+  for (const ctx of ['owner answer in chat 2026-11-17', "Maarten's answer", 'owner answer']) {
+    assert.equal(isOwnerVoice({ ...me, body: head(ctx) }), true, ctx)
+  }
+  assert.equal(isOwnerVoice({ ...me, body: '> 🤖 **Claude Code** · owner decision\n\nA' }), true, 'owner decision header')
 })

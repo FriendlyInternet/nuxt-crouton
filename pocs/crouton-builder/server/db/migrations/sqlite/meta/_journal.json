@@ -22,6 +22,90 @@
       "when": 1793009317902,
       "tag": "0002_layout_configs_team_key",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1793955340414,
+      "tag": "0003_email_log_provider_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1794260078933,
+      "tag": "0004_tidy_ricochet",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1794394238234,
+      "tag": "0005_bookings_package",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1794486060950,
+      "tag": "0006_auth_rate_limit",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1794486209097,
+      "tag": "0007_verify_existing_users",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1794846020889,
+      "tag": "0008_bent_madame_masque",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1794860591722,
+      "tag": "0009_gray_scrambler",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1794860604086,
+      "tag": "0010_products_per_location",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1795081100791,
+      "tag": "0011_drop_inventory_mode",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1795157790554,
+      "tag": "0012_wooden_proudstar",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1795511789875,
+      "tag": "0013_aberrant_paper_doll",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1795541808588,
+      "tag": "0014_common_black_panther",
+      "breakpoints": true
     }
   ]
 }

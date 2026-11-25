@@ -129,16 +129,16 @@ export async function updateMainMembernote(
   teamId: string,
   userId: string,
   updates: Partial<MainMembernote>,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(tables.mainMembernotes.id, recordId),
     eq(tables.mainMembernotes.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(tables.mainMembernotes.owner, userId))
   }
 
@@ -165,16 +165,16 @@ export async function deleteMainMembernote(
   recordId: string,
   teamId: string,
   userId: string,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(tables.mainMembernotes.id, recordId),
     eq(tables.mainMembernotes.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(tables.mainMembernotes.owner, userId))
   }
 
@@ -192,3 +192,5 @@ export async function deleteMainMembernote(
 
   return { success: true }
 }
+
+export const MainMembernotesAccess = {"create":"member","list":"own"} as const

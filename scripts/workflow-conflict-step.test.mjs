@@ -91,6 +91,85 @@ test('clean verify: one two-parent commit, no failure comment, no flags', () => 
   assert.doesNotMatch(x.outputs, /failed=1|asked=1/)
 })
 
+// covers: T8
+test('the revise step copies log-tail beside the lone copy and records dist_ref before the checkout; conflict gets PKG_DIST_REF (#4374)', () => {
+  const rev = block('- id: revise', 'run').split('\n')
+  const checkout = rev.findIndex((l) => l.includes('git checkout -f -B'))
+  const copy = rev.findIndex((l) => l.includes('cp scripts/lib/log-tail.mjs "$RUNNER_TEMP/lib/log-tail.mjs"'))
+  const ref = rev.findIndex((l) => /^echo "dist_ref=\$\(git rev-parse HEAD\)" >> "\$GITHUB_OUTPUT"$/.test(l.trim()))
+  assert.ok(checkout >= 0, 'checkout line')
+  assert.ok(copy >= 0 && copy < checkout, `log-tail copied before the checkout (${copy} < ${checkout})`)
+  assert.ok(rev[copy].includes('mkdir -p "$RUNNER_TEMP/lib"'), rev[copy])
+  assert.ok(ref >= 0 && ref < checkout, `dist_ref written before the checkout (${ref} < ${checkout})`)
+  const at = YML.findIndex((l) => l.trim() === '- id: conflict')
+  const end = YML.findIndex((l, n) => n > at && /^\s+run: \|/.test(l))
+  assert.ok(YML.slice(at, end).some((l) => l.trim() === 'PKG_DIST_REF: ${{ steps.revise.outputs.dist_ref }}'), 'conflict env sets PKG_DIST_REF')
+})
+
+// ── The conflict tool's tests under the conflict step's own env (#4406) ──
+// CI runs the scripts suite with none of the names the conflict step sets, so #4374 (a new
+// PKG_DIST_REF) went green while breaking every real conflict run. These tests run the tool's
+// suite with every name from the step's `env:` block set to a stand-in.
+
+/** Names set by the `env:` block of the step `- id: <id>`, in order. */
+const indentOf = (l) => l.match(/^ */)[0].length
+
+/** The lines of step `- id: <id>` up to (not including) its `run: |`. */
+function stepHead(lines, id) {
+  const at = lines.findIndex((l) => l.trim() === `- id: ${id}`)
+  assert.ok(at >= 0, `step ${id}`)
+  const end = lines.findIndex((l, n) => n > at && (/^\s+run: \|/.test(l) || (l.trim() !== '' && indentOf(l) <= indentOf(lines[at]))))
+  return lines.slice(at + 1, end < 0 ? lines.length : end)
+}
+
+function stepEnvNames(lines, id = 'conflict') {
+  const head = stepHead(lines, id)
+  const env = head.findIndex((l) => /^\s+env:\s*$/.test(l))
+  if (env < 0) return []
+  const body = head.slice(env + 1).filter((l) => l.trim() !== '')
+  const stop = body.findIndex((l) => indentOf(l) <= indentOf(head[env]))
+  return body.slice(0, stop < 0 ? body.length : stop)
+    .map((l) => l.match(/^\s+([A-Za-z_][A-Za-z0-9_]*):/)?.[1])
+    .filter(Boolean)
+}
+
+/** A harmless value for a step env name: no real token, no real ref. */
+function standIn(name) {
+  if (name === 'PKG_DIST_REF') return '0123456789abcdef0123456789abcdef01234567' // 40 hex, not a real commit
+  if (name === 'GH_TOKEN') return 'stand-in-not-a-token'
+  if (name === 'ISSUE') return '1'
+  return 'stand-in'
+}
+
+// covers: T1
+// The child runs only these two files; neither imports or runs this file, so it can't start
+// itself again — keep it that way.
+test("the conflict tool's tests pass with every name the conflict step's env sets (#4406)", () => {
+  const names = stepEnvNames(YML)
+  assert.ok(names.includes('PKG_DIST_REF'), `conflict step env names: ${names.join(', ')}`)
+  const env = { ...process.env, ...Object.fromEntries(names.map((n) => [n, standIn(n)])) }
+  delete env.NODE_TEST_CONTEXT
+  const repoRoot = new URL('..', import.meta.url).pathname
+  const r = spawnSync(process.execPath, ['--test', 'scripts/conflict-resolution.test.mjs', 'scripts/conflict-resolution-migrations.test.mjs'], { cwd: repoRoot, encoding: 'utf8', env })
+  const failed = (r.stdout || '').split('\n').filter((l) => /^not ok /.test(l))
+  assert.equal(r.status, 0, `with ${names.join(', ')} set:\n${failed.join('\n') || r.stderr}`)
+})
+
+// covers: T2
+test('a name added to the conflict step env is picked up without editing the test (#4406)', () => {
+  const fixture = [...YML]
+  const at = fixture.findIndex((l) => l.trim() === '- id: conflict')
+  const ref = fixture.findIndex((l, n) => n > at && l.trim().startsWith('PKG_DIST_REF:'))
+  assert.ok(ref > at, 'PKG_DIST_REF line in the conflict step')
+  fixture.splice(ref + 1, 0, '          NEW_SETTING_4406: x')
+  const names = stepEnvNames(fixture)
+  assert.ok(names.includes('NEW_SETTING_4406'), names.join(', '))
+  for (const n of ['GH_TOKEN', 'ISSUE', 'PKG_DIST_REF', 'EPIC_BRANCH', 'BASE', 'REV_BRANCH']) assert.ok(names.includes(n), n)
+  assert.ok(!names.includes('FEEDBACK_ID'), 'the revise step env is not mixed in')
+  assert.ok(stepEnvNames(fixture, 'revise').includes('FEEDBACK_ID'))
+  assert.ok(!stepEnvNames(fixture, 'revise').includes('NEW_SETTING_4406'))
+})
+
 // ── Artifact-gate skips ──
 import { artifactGate } from './lib/artifact-gate.mjs'
 
@@ -118,4 +197,34 @@ test('gate: conflict asked the owner -> OK, no failure, no ticket comment', asyn
 test('gate: conflict failed -> run fails, but no ticket comment', async () => {
   const c = await gate({ CONFLICT_FAILED: '1' })
   assert.equal(c.failed.length, 1)
+})
+
+test("pi-request runs the owner's request only after the conflict merge is committed (#3775)", () => {
+  const at = (id) => YML.findIndex((l) => l.trim() === `- id: ${id}`)
+  const [conflict, request, finish] = [at('conflict'), at('pi-request'), at('finish')]
+  assert.ok(conflict >= 0 && request > conflict && finish > request, `order conflict(${conflict}) < pi-request(${request}) < finish(${finish})`)
+  const cond = YML.slice(request, request + 3).find((l) => l.trim().startsWith('if:'))
+  assert.ok(cond, 'pi-request has an if:')
+  assert.ok(cond.includes("steps.revise.outputs.conflict == '1'"), cond)
+  assert.ok(cond.includes("steps.conflict.outputs.rev_base != ''"), 'skipped unless the conflict step committed a merge')
+  const run = block('- id: pi-request', 'run')
+  assert.match(run, /pipeline-prompt\.mjs pi-reviser [^\n]*--var-file "feedback=/)
+  assert.match(run, /--session-dir "\$RUNNER_TEMP\/pi-session"/)
+  assert.match(run, /tee -a "decompose-pidev-exec-/)
+  // and the resolver itself is no longer handed the comment. The pi step builds its prompt in
+  // scripts/pi-run.mjs (#3620), so check the vars buildPrompt hands the resolver persona.
+  assert.match(block('- id: pi', 'run'), /node "\$RUNNER_TEMP\/pi-run\/scripts\/pi-run\.mjs" prompt > "\$PROMPT_FILE"/)
+})
+
+test('the conflict resolver prompt (scripts/pi-run.mjs buildPrompt) gets only pr/issue/branch/task, never feedback', async () => {
+  const { buildPrompt } = await import('./pi-run.mjs')
+  const rt = mkdtempSync(join(tmpdir(), 'conflict-prompt-'))
+  writeFileSync(join(rt, 'feedback.txt'), 'OWNER-COMMENT-MARKER\n')
+  writeFileSync(join(rt, 'conflict-task.txt'), 'merge conflicted in a.mjs\n')
+  const calls = []
+  const renderPrompt = (agent, vars) => { calls.push({ agent, vars }); return `${agent}:${JSON.stringify(vars)}` }
+  const gh = () => '77\n'
+  const out = await buildPrompt({ ISSUE: '1', REVISE: '1', REV_CONFLICT: '1', REV_BRANCH: 'epic/1--x', RUNNER_TEMP: rt, GITHUB_REPOSITORY: 'o/r' }, { gh, renderPrompt })
+  assert.deepEqual(calls, [{ agent: 'pi-conflict-resolver', vars: { pr: '77', issue: '1', branch: 'epic/1--x', task: 'merge conflicted in a.mjs\n' } }])
+  assert.doesNotMatch(out, /OWNER-COMMENT-MARKER/)
 })

@@ -45,6 +45,24 @@ test('message but nothing staged -> nothing committed', () => {
   assert.equal(g('rev-list', '--count', 'HEAD').trim(), '1')
 })
 
+// #4317: the commit writes committed=true to $GITHUB_OUTPUT; no message or nothing staged writes nothing.
+test('a commit writes committed=true to GITHUB_OUTPUT; no message / nothing staged writes nothing', () => {
+  const runOut = (d, msg) => {
+    const out = join(d, '..', `out-${Date.now()}-${Math.random()}`); writeFileSync(out, '')
+    execFileSync('bash', [script, msg], { cwd: d, encoding: 'utf8', env: { ...process.env, GITHUB_OUTPUT: out } })
+    return readFileSync(out, 'utf8')
+  }
+  const a = repo()
+  writeFileSync(join(a.d, 'a'), '2'); a.g('add', 'a')
+  const m = join(a.d, '..', `q-${Date.now()}`); writeFileSync(m, 'fix: q')
+  assert.equal(runOut(a.d, m), 'committed=true\n')
+  const b = repo()
+  writeFileSync(join(b.d, 'a'), '2'); b.g('add', 'a')
+  assert.equal(runOut(b.d, join(b.d, 'missing')), '')
+  const c = repo()
+  assert.equal(runOut(c.d, m), '')
+})
+
 test('leftovers (unstaged edits, untracked files) are wiped, staged or not', () => {
   const { d, g, run } = repo()
   writeFileSync(join(d, 'a'), '2'); writeFileSync(join(d, 'junk'), 'x')

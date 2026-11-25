@@ -5,8 +5,8 @@
  * Form for customizing team visual appearance.
  * Supports named presets (e.g. Black & White) or fully custom color/radius.
  *
- * When @fyit/crouton-themes is active, also shows the global theme switcher
- * (ko/minimal/kr11) so changes are reflected here in real-time.
+ * Shows the preset list only when this app ships more than one preset (or the
+ * team saved one) — see utils/theme-picker.ts.
  */
 import type {
   THEME_PRESETS } from '../composables/useTeamTheme'
@@ -18,13 +18,16 @@ import {
   type ThemePreset,
   type TeamThemeSettings
 } from '../composables/useTeamTheme'
+import { showPresetPicker, colorLabel, radiusLabel } from '../utils/theme-picker'
 
 const emit = defineEmits<{
   saved: [settings: TeamThemeSettings]
 }>()
 
 const { t } = useT()
-const { isAdmin } = useTeam()
+// Editing the team theme is the `site:manage` action (#4105)
+const isAdmin = useCan('site:manage')
+const { currentTeam } = useTeam()
 const notify = useNotify()
 const { theme, isLoading, updateTheme, applyTheme } = useTeamTheme()
 
@@ -126,6 +129,29 @@ const availablePresets = useAvailableThemePresets()
 const presetEntries = computed(() =>
   Object.entries(availablePresets.value) as [ThemePreset, (typeof THEME_PRESETS)['custom']][]
 )
+
+// Template helpers — keep the branching here, not in the template
+const controlsDisabled = computed(() => !isAdmin.value || isSaving.value)
+const presetListVisible = computed(() => showPresetPicker(availablePresets.value, localTheme.preset))
+const previewTitle = computed(() => currentTeam.value?.name || t('themeSettings.previewAppName'))
+const mainColorHeading = computed(() =>
+  `${t('themeSettings.mainColor')} · ${colorLabel(localTheme.primary ?? DEFAULT_THEME.primary)}`)
+const greysHeading = computed(() =>
+  `${t('themeSettings.greys')} · ${colorLabel(localTheme.neutral ?? DEFAULT_THEME.neutral)}`)
+const cornersHeading = computed(() =>
+  `${t('themeSettings.corners')} · ${radiusLabel(localTheme.radius ?? DEFAULT_THEME.radius, t)}`)
+
+function isSelectedPreset(key: ThemePreset): boolean {
+  return localTheme.preset === key || (key === 'custom' && !localTheme.preset)
+}
+
+function presetTitle(key: ThemePreset, preset: (typeof THEME_PRESETS)['custom']): string {
+  return key === 'custom' ? t('themeSettings.presetCustom') : preset.label
+}
+
+function presetDescription(key: ThemePreset, preset: (typeof THEME_PRESETS)['custom']): string {
+  return key === 'custom' ? t('themeSettings.presetCustomDescription') : preset.description
+}
 </script>
 
 <template>
@@ -151,7 +177,7 @@ const presetEntries = computed(() =>
       </div>
       <USwitch
         v-model="localTheme.allowUserThemes"
-        :disabled="!isAdmin || isSaving"
+        :disabled="controlsDisabled"
       />
     </div>
 
@@ -169,12 +195,66 @@ const presetEntries = computed(() =>
     </div>
 
     <template v-else>
-      <!-- Controls + preview: side by side when the pane is wide, stacked when narrow -->
+      <!-- Controls + preview: side by side when the pane is wide, stacked (preview on top) when narrow -->
       <div class="flex flex-col @2xl:flex-row gap-6 @2xl:gap-8 @2xl:items-start">
-        <!-- Left: Selection Controls -->
+        <!-- Preview: first in the DOM (top on a narrow pane), right on a wide pane -->
+        <div class="space-y-2 @2xl:order-last @2xl:w-64 @2xl:shrink-0 @2xl:sticky @2xl:top-4">
+          <div class="border border-muted rounded-(--ui-radius) overflow-hidden">
+            <div class="bg-primary text-inverted px-3 py-2 text-sm font-medium">
+              {{ previewTitle }}
+            </div>
+            <div class="p-3 space-y-3">
+              <UInput
+                :placeholder="t('themeSettings.previewInput')"
+                icon="i-lucide-search"
+              />
+              <div class="flex justify-between items-center text-sm">
+                <span>{{ t('themeSettings.previewItemOne') }}</span>
+                <UBadge
+                  color="primary"
+                  variant="soft"
+                >
+                  {{ t('themeSettings.previewSoft') }}
+                </UBadge>
+              </div>
+              <div class="flex justify-between items-center text-sm">
+                <span>{{ t('themeSettings.previewItemTwo') }}</span>
+                <UBadge
+                  color="primary"
+                  variant="outline"
+                >
+                  {{ t('themeSettings.previewOutline') }}
+                </UBadge>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <UButton
+                  color="primary"
+                  size="sm"
+                >
+                  {{ t('themeSettings.previewPrimary') }}
+                </UButton>
+                <UButton
+                  color="primary"
+                  variant="outline"
+                  size="sm"
+                >
+                  {{ t('themeSettings.previewOutline') }}
+                </UButton>
+              </div>
+            </div>
+          </div>
+          <p class="text-xs text-muted">
+            {{ t('themeSettings.previewCaption') }}
+          </p>
+        </div>
+
+        <!-- Selection controls -->
         <div class="flex-1 min-w-0 space-y-5">
-          <!-- Preset Picker (vertical) -->
-          <div class="space-y-2">
+          <!-- Preset Picker (vertical) — only when there is a real choice -->
+          <div
+            v-if="presetListVisible"
+            class="space-y-2"
+          >
             <p class="text-sm font-medium text-default">
               {{ $t('themeSettings.preset') }}
             </p>
@@ -186,9 +266,9 @@ const presetEntries = computed(() =>
                 :key="key"
                 color="neutral"
                 variant="outline"
-                :disabled="!isAdmin || isSaving"
+                :disabled="controlsDisabled"
                 class="relative w-full justify-start gap-3 p-3 text-left transition-colors"
-                :class="(localTheme.preset === key) || (key === 'custom' && !localTheme.preset)
+                :class="isSelectedPreset(key)
                   ? 'ring-primary bg-primary/5'
                   : 'hover:bg-elevated/50'"
                 @click="selectPreset(key)"
@@ -205,14 +285,14 @@ const presetEntries = computed(() =>
                 </div>
                 <div class="min-w-0 flex-1">
                   <div class="text-sm font-medium text-default">
-                    {{ key === 'custom' ? t('themeSettings.presetCustom') : preset.label }}
+                    {{ presetTitle(key, preset) }}
                   </div>
                   <div class="text-xs text-muted truncate">
-                    {{ key === 'custom' ? t('themeSettings.presetCustomDescription') : preset.description }}
+                    {{ presetDescription(key, preset) }}
                   </div>
                 </div>
                 <UIcon
-                  v-if="(localTheme.preset === key) || (key === 'custom' && !localTheme.preset)"
+                  v-if="isSelectedPreset(key)"
                   name="i-lucide-check-circle"
                   class="size-4 text-primary shrink-0"
                 />
@@ -222,114 +302,69 @@ const presetEntries = computed(() =>
 
           <!-- Individual pickers (only when custom) -->
           <template v-if="isCustom">
-            <USeparator />
+            <USeparator v-if="presetListVisible" />
 
-            <TeamColorSwatchPicker
-              v-model="localTheme.primary"
-              :colors="PRIMARY_COLORS"
-              :label="$t('themeSettings.primaryColor')"
-              :disabled="!isAdmin || isSaving"
-            />
+            <div class="p-4 border border-muted rounded-lg space-y-2">
+              <TeamColorSwatchPicker
+                v-model="localTheme.primary"
+                :colors="PRIMARY_COLORS"
+                :label="mainColorHeading"
+                :disabled="controlsDisabled"
+              />
+            </div>
 
-            <TeamColorSwatchPicker
-              v-model="localTheme.neutral"
-              :colors="NEUTRAL_COLORS"
-              :label="$t('themeSettings.neutralColor')"
-              :disabled="!isAdmin || isSaving"
-            />
+            <div class="p-4 border border-muted rounded-lg space-y-2">
+              <TeamColorSwatchPicker
+                v-model="localTheme.neutral"
+                :colors="NEUTRAL_COLORS"
+                :label="greysHeading"
+                :disabled="controlsDisabled"
+              />
+            </div>
 
-            <TeamRadiusPicker
-              v-model="localTheme.radius"
-              :disabled="!isAdmin || isSaving"
-            />
+            <div class="p-4 border border-muted rounded-lg space-y-2">
+              <TeamRadiusPicker
+                v-model="localTheme.radius"
+                :label="cornersHeading"
+                :disabled="controlsDisabled"
+              />
+            </div>
           </template>
+
+          <UButton
+            variant="link"
+            color="neutral"
+            size="xs"
+            :disabled="isSaving"
+            @click="handleReset"
+          >
+            {{ t('themeSettings.resetToDefaults') }}
+          </UButton>
         </div>
 
-        <!-- Right: Live Preview -->
-        <div class="space-y-2 @2xl:w-64 @2xl:shrink-0 @2xl:sticky @2xl:top-4">
-          <p class="text-sm font-medium text-default">
-            {{ $t('themeSettings.livePreview') }}
-          </p>
-          <div class="p-4 border border-muted rounded-lg bg-muted/10 space-y-4">
-            <div class="flex flex-wrap gap-2">
-              <UButton
-                color="primary"
-                size="sm"
-              >
-                {{ t('themeSettings.previewPrimary') }}
-              </UButton>
-              <UButton
-                color="primary"
-                variant="outline"
-                size="sm"
-              >
-                {{ t('themeSettings.previewOutline') }}
-              </UButton>
-              <UButton
-                color="primary"
-                variant="soft"
-                size="sm"
-              >
-                {{ t('themeSettings.previewSoft') }}
-              </UButton>
-              <UButton
-                color="primary"
-                variant="ghost"
-                size="sm"
-              >
-                {{ t('themeSettings.previewGhost') }}
-              </UButton>
-            </div>
-            <div class="flex flex-wrap gap-2">
-              <UBadge color="primary">
-                {{ t('themeSettings.previewBadge') }}
-              </UBadge>
-              <UBadge
-                color="primary"
-                variant="outline"
-              >
-                {{ t('themeSettings.previewOutline') }}
-              </UBadge>
-              <UBadge
-                color="primary"
-                variant="soft"
-              >
-                {{ t('themeSettings.previewSoft') }}
-              </UBadge>
-            </div>
-            <UInput
-              :placeholder="t('themeSettings.previewInput')"
-              icon="i-lucide-search"
-            />
-          </div>
-        </div>
       </div>
 
-      <USeparator />
-
-      <!-- Actions -->
-      <div class="flex flex-wrap justify-between items-center gap-3">
-        <UButton
-          variant="ghost"
-          color="neutral"
-          :disabled="isSaving"
-          @click="handleReset"
-        >
-          {{ $t('themeSettings.resetToDefaults') }}
-        </UButton>
-
-        <div class="flex gap-3">
+      <!-- Unsaved-changes bar: only while something differs from the saved theme -->
+      <div
+        v-if="hasChanges"
+        class="flex items-center justify-between gap-3 p-3 rounded-lg border border-primary/40 bg-primary/5 sticky bottom-4"
+      >
+        <p class="text-sm font-medium text-default">
+          {{ t('themeSettings.unsavedChanges') }}
+        </p>
+        <div class="flex gap-2">
           <UButton
             variant="ghost"
-            :disabled="isSaving || !hasChanges"
+            color="neutral"
+            :disabled="isSaving"
             @click="revertChanges"
           >
-            {{ $t('common.cancel') }}
+            {{ t('themeSettings.undo') }}
           </UButton>
           <UButton
             color="primary"
             :loading="isSaving"
-            :disabled="!hasChanges || !isAdmin"
+            :disabled="!isAdmin"
             @click="handleSave"
           >
             {{ $t('common.saveChanges') }}

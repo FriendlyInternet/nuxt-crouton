@@ -49,12 +49,15 @@ const hasThemePicker = typeof themeCompactPicker !== 'string'
 const { t } = useT()
 const route = useRoute()
 const { buildDashboardUrl, teamSlug } = useTeamContext()
-const { showTeamManagement, isAdmin } = useTeam()
+const { showTeamManagement } = useTeam()
+// Switching the site theme is `site:manage` (#4105); browser-only so a cached
+// public page never carries one visitor's answer to the next.
+const canManageSite = useCan('site:manage', { server: false })
 
 // Whether users are allowed to switch global themes.
 // Written by the team-theme plugin (crouton-admin); defaults true when not present.
 const allowUserThemes = useState<boolean>('crouton:allowUserThemes', () => true)
-const canSwitchTheme = computed(() => allowUserThemes.value || isAdmin.value)
+const canSwitchTheme = computed(() => allowUserThemes.value || canManageSite.value)
 
 // Get auto-discovered app routes
 const { dashboardRoutes, adminRoutes, settingsRoutes } = useCroutonApps()

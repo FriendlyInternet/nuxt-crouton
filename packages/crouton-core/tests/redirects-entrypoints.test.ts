@@ -18,15 +18,23 @@ vi.mock('../server/database/queries/redirects', () => ({
 }))
 
 vi.mock('@fyit/crouton-auth/server/utils/team', () => ({
-  getTeamBySlug: vi.fn(async (_e: any, slug: string) => (slugs[slug] ? { id: slugs[slug] } : null)),
-  requireTeamAdmin: vi.fn(async (event: any) => {
-    const role = event.role
-    if (role !== 'admin' && role !== 'owner') {
-      throw Object.assign(new Error('Forbidden'), { status: 403 })
-    }
-    return { team: { id: 'A' }, user: { id: 'u1' }, membership: { role } }
-  })
+  getTeamBySlug: vi.fn(async (_e: any, slug: string) => (slugs[slug] ? { id: slugs[slug] } : null))
 }))
+// requireCan / can (#4108) as the real ones answer with no site config: owner/admin
+// may every action, member none. The real can() is proven in crouton-auth's tests.
+const asked = vi.hoisted(() => [] as string[])
+vi.mock('@fyit/crouton-auth/server/utils/team-auth', () => {
+  const allowed = (role: string) => role === 'admin' || role === 'owner'
+  return {
+    requireCan: vi.fn(async (event: any, action: string) => {
+      asked.push(action)
+      if (!allowed(event.role)) throw Object.assign(new Error('Forbidden'), { status: 403 })
+      return { team: { id: 'A' }, user: { id: 'u1' }, membership: { role: event.role } }
+    }),
+    // the routes ask can() only after requireCan let an admin through
+    can: vi.fn(async (_t: string, _u: string, action: string) => { asked.push(action); return true })
+  }
+})
 
 import { invalidateRedirectCache } from '../server/utils/redirectCache'
 
@@ -88,6 +96,11 @@ describe('redirect review findings', () => {
     expect(await mw('/a/dup')).toEqual({ redirected: '/a/dup2', code: 301 })
     expect(await mw('/old', { resolvedDomainTeamId: 'A' })).toEqual({ redirected: '/new', code: 301 })
   })
+  it('8) custom domain + slug in path: legacy prefixed row still works, same team only (#3376)', async () => {
+    expect(await mw('/a/legacy', { resolvedDomainTeamId: 'A' })).toEqual({ redirected: '/a/legacy-new', code: 301 })
+    expect(await mw('/b/legacy', { resolvedDomainTeamId: 'A' })).toBeUndefined()
+    expect(await mw('/a/old', { resolvedDomainTeamId: 'A' })).toEqual({ redirected: '/new', code: 301 })
+  })
 })
 
 describe('redirect endpoints (real handlers)', () => {
@@ -100,15 +113,19 @@ describe('redirect endpoints (real handlers)', () => {
 
   it('7) member gets 403 on POST/PATCH/DELETE', async () => {
     const { post, patch, del } = await load()
+    asked.length = 0
     for (const h of [post, patch, del]) {
       await expect(h({ ...base, role: 'member' })).rejects.toMatchObject({ status: 403 })
     }
+    expect(asked).toEqual(['site:manage', 'site:manage', 'site:manage'])
   })
 
   it('7) team admin succeeds on POST/PATCH/DELETE', async () => {
     const { post, patch, del } = await load()
+    asked.length = 0
     for (const h of [post, patch, del]) {
       await expect(h({ ...base, role: 'admin' })).resolves.toBeDefined()
     }
+    expect(new Set(asked)).toEqual(new Set(['site:manage']))
   })
 })

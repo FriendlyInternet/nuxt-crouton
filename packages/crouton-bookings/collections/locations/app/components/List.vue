@@ -9,7 +9,7 @@
   - Collection name: bookingsLocations
   - API endpoint: /api/teams/[id]/bookings-locations
   - Columns composable: useBookingsLocations()
-  - Column fields: title, color, street, zip, city, location, content, allowedMemberIds, slots, openDays, slotSchedule, blockedDates, inventoryMode, quantity, maxBookingsPerMonth
+  - Column fields: title, color, street, zip, city, location, content, allowedMemberIds, slots, openDays, slotSchedule, blockedDates, maxBookingsPerMonth
 
   ## Common Modifications
   - Add column: Update columns array in composable
@@ -78,9 +78,6 @@
         </UBadge>
       </div>
       <span v-else class="text-gray-400">—</span>
-    </template>
-    <template #inventoryMode-cell="{ row }">
-      <CroutonBoolean :value="row.original.inventoryMode" />
     </template>
     <template #slots-cell="{ row }">
       <BookingsLocationsSlotCardMini :value="row.original.slots" />

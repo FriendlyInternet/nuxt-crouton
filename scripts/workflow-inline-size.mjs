@@ -12,6 +12,7 @@
 //   node scripts/workflow-inline-size.mjs --update   # rewrite the baseline from the tree
 import { readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 export const LIMIT = 40
@@ -87,19 +88,31 @@ export function inlineBlocks(text, file) {
   return blocks
 }
 
-/** Verdict for one block against the baseline: `{ fail }`, `{ stale }` or `{}`. */
-function judge(b, base, limit) {
-  if (base === undefined) {
-    return b.lines > limit ? { fail: `${b.key}: new inline block of ${b.lines} lines (limit ${limit}) — move the logic into scripts/ with a test` } : {}
-  }
-  if (b.lines > base) return { fail: `${b.key}: grew from ${base} to ${b.lines} lines — move logic out, or raise the baseline on purpose (--update)` }
-  if (b.lines < base) return { stale: `${b.key}: shrunk from ${base} to ${b.lines} — lower the baseline` }
-  return {}
+const NEW_MSG = (b, limit) => `${b.key}: new inline block of ${b.lines} lines (limit ${limit}) — move the logic into scripts/ with a test`
+const GREW_MSG = (b, from) => `${b.key}: grew from ${from} to ${b.lines} lines — move logic out, or raise the baseline with the owner's yes (Baseline-raise-approved: in the PR body)`
+const stale = (b, allowed) => (allowed !== undefined && b.lines < allowed ? { stale: `${b.key}: shrunk from ${allowed} to ${b.lines} — lower the baseline` } : {})
+
+/** Base mode: only growth relative to the PR's base (or a brand-new oversized block) fails. */
+function judgeVsBase(b, allowed, limit, atBase) {
+  if (atBase !== undefined && b.lines <= atBase) return {}
+  if (b.lines <= limit || (allowed !== undefined && b.lines <= allowed)) return stale(b, allowed)
+  return { fail: atBase !== undefined ? GREW_MSG(b, atBase) : NEW_MSG(b, limit) }
 }
 
-/** Compare blocks to the baseline. failures are fatal; stale are advisory. */
-export function check(blocks, baseline = {}, limit = LIMIT) {
-  const verdicts = blocks.map(b => judge(b, baseline[b.key], limit))
+/** Verdict for one block. `atBase` = its size on the PR's base (undefined: no base mode / new block). */
+function judge(b, allowed, limit, atBase, baseMode) {
+  if (baseMode) return judgeVsBase(b, allowed, limit, atBase)
+  if (allowed === undefined) {
+    return b.lines > limit ? { fail: NEW_MSG(b, limit) } : {}
+  }
+  if (b.lines > allowed) return { fail: GREW_MSG(b, allowed) }
+  return stale(b, allowed)
+}
+
+/** Compare blocks to the baseline (and, in base mode, to the PR's base). failures are fatal; stale advisory. */
+export function check(blocks, baseline = {}, limit = LIMIT, baseBlocks = undefined) {
+  const baseMode = baseBlocks !== undefined
+  const verdicts = blocks.map(b => judge(b, baseline[b.key], limit, baseMode ? baseBlocks[b.key] : undefined, baseMode))
   const seen = new Set(blocks.map(b => b.key))
   return {
     failures: verdicts.map(v => v.fail).filter(Boolean),
@@ -109,6 +122,8 @@ export function check(blocks, baseline = {}, limit = LIMIT) {
     ],
   }
 }
+
+export const blocksToMap = (blocks) => Object.fromEntries(blocks.map(b => [b.key, b.lines]))
 
 const listDir = (dir) => (existsSync(dir) ? readdirSync(dir) : [])
 
@@ -123,6 +138,33 @@ export function scan(root = '.') {
   return workflowFiles(root).flatMap(f => inlineBlocks(readFileSync(join(root, f), 'utf8'), f))
 }
 
+/** Same scan as `scan`, but from the files as committed at `rev`. Throws if git fails. */
+export function scanAtRev(rev, root = '.') {
+  const git = (...args) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 << 20 })
+  const files = git('ls-tree', '-r', '--name-only', rev, '.github/workflows', '.github/actions').split('\n').filter(f =>
+    /^\.github\/workflows\/[^/]+\.ya?ml$/.test(f) || /^\.github\/actions\/[^/]+\/action\.ya?ml$/.test(f)).sort()
+  return files.flatMap(f => inlineBlocks(git('show', `${rev}:${f}`), f))
+}
+
+/** Baseline numbers the PR raised (or added) versus the base's baseline (#3615). */
+export function baselineRaises(prBlocks, baseBlocks) {
+  return Object.entries(prBlocks).flatMap(([k, n]) => {
+    if (!(k in baseBlocks)) return [`${k}: new baseline entry (${n})`]
+    return n > baseBlocks[k] ? [`${k}: baseline raised from ${baseBlocks[k]} to ${n}`] : []
+  })
+}
+
+/** True iff the PR body carries a non-empty `Baseline-raise-approved:` line. */
+export const raiseApproved = (body) => /^[ \t]*Baseline-raise-approved:[ \t]*\S/m.test(body ?? '')
+
+/** The committed baseline's blocks at `rev`; undefined when the file is absent there. */
+export function baselineAtRev(rev, root = '.') {
+  const git = (...args) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 << 20 })
+  const path = 'scripts/workflow-inline-size.baseline.json'
+  if (!git('ls-tree', '--name-only', rev, path).trim()) return undefined
+  return JSON.parse(git('show', `${rev}:${path}`)).blocks
+}
+
 export function loadBaseline(path = BASELINE) {
   return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : { limit: LIMIT, blocks: {} }
 }
@@ -134,7 +176,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const entries = {}
     for (const b of blocks.filter(b => b.lines > LIMIT).sort((a, b) => a.key.localeCompare(b.key))) entries[b.key] = b.lines
     writeFileSync(BASELINE, JSON.stringify({
-      $comment: `Inline run:/script: blocks over ${LIMIT} lines that predate #3452. Logic belongs in scripts/*.mjs with a test. New blocks over the limit fail CI; baselined ones may not grow. Regenerate: node scripts/workflow-inline-size.mjs --update`,
+      $comment: `Inline run:/script: blocks over ${LIMIT} lines that predate #3452. Logic belongs in scripts/*.mjs with a test. New blocks over the limit fail CI; baselined ones may not grow, and a raised number needs \`Baseline-raise-approved:\` in the PR body (#3615). Regenerate: node scripts/workflow-inline-size.mjs --update`,
       limit: LIMIT,
       blocks: entries,
     }, null, 2) + '\n')
@@ -142,7 +184,26 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     process.exit(0)
   }
   const base = loadBaseline()
-  const { failures, stale } = check(blocks, base.blocks, base.limit ?? LIMIT)
+  const bi = process.argv.indexOf('--base')
+  let baseBlocks
+  const raiseFailures = []
+  if (bi > 0) {
+    const rev = process.argv[bi + 1]
+    try { baseBlocks = blocksToMap(scanAtRev(rev)) } catch (e) { console.error(`::error::workflow-inline-size: cannot read base ${rev}: ${e.message}`); process.exit(1) }
+    console.log(`compared against base ${rev}`)
+    let baseBaseline
+    try { baseBaseline = baselineAtRev(rev) } catch (e) { console.error(`::error::workflow-inline-size: cannot read base baseline ${rev}: ${e.message}`); process.exit(1) }
+    if (baseBaseline === undefined) console.log('note: no baseline at base — raise check skipped')
+    else {
+      const approved = raiseApproved(process.env.PR_BODY)
+      for (const r of baselineRaises(base.blocks, baseBaseline)) {
+        if (approved) console.log(`note: approved raise: ${r}`)
+        else raiseFailures.push(`${r} — a frozen block may not grow without the owner's yes. Move the logic into scripts/, or add "Baseline-raise-approved: <owner's words, date>" to the PR body and re-run CI.`)
+      }
+    }
+  }
+  const { failures: f0, stale } = check(blocks, base.blocks, LIMIT, baseBlocks) // LIMIT, not base.limit: a PR must not turn the gate off by editing the file's own limit (#3615)
+  const failures = [...f0, ...raiseFailures]
   for (const s of stale) console.log(`note: ${s}`)
   for (const f of failures) console.error(`FAIL: ${f}`)
   console.log(`checked ${blocks.length} blocks, ${Object.keys(base.blocks).length} baselined`)

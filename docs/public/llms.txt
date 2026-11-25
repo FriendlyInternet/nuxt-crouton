@@ -10,17 +10,14 @@ Nuxt Crouton is a code generator and composable library that generates working C
 
 - Getting Started: /getting-started
 - Installation: /getting-started/installation
-- Basic Usage: /getting-started/usage
+- Your First Collection: /getting-started/first-collection
 
-## Core Concepts
+## Fundamentals
 
-- Collections: /core-concepts/collections
-- Generated vs Core Code: /core-concepts/generated-vs-core
-- Forms & Modals: /core-concepts/forms-modals
-- Data Operations: /core-concepts/data-operations
-- Querying Data: /core-concepts/querying-data
-- Caching Strategy: /core-concepts/caching
-- Package Architecture: /core-concepts/packages
+- Collections and layers: /fundamentals/collections
+- Architecture: /fundamentals/architecture
+- Data operations (reading, saving, opening the form, caching): /fundamentals/data-operations
+- Generated code (and regenerating): /fundamentals/generated-code
 
 ## Generators
 
@@ -92,6 +89,10 @@ Designed to work with [SuperSaaS](https://supersaas.dev/), a Nuxt 4 starter temp
 - Payment processing
 - Drizzle ORM setup
 - Best practices and opinionated structure
+
+## How this repo is built
+
+- Agent pipeline (ticket → merged change): https://github.com/FriendlyInternet/nuxt-crouton/blob/main/docs/pipeline/how-it-works.md
 
 ## Related Links
 

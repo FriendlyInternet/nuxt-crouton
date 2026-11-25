@@ -19,6 +19,8 @@ e2e/                         # the harness (Playwright) — NOT a workspace pack
   maps.smoke.spec.ts         # generic, manifest-driven maps mount + live geocode check (optional)
   a11y.smoke.spec.ts         # generic, manifest-driven axe-core accessibility scan (per surface)
   assets.smoke.spec.ts       # with-assets only: upload a file via Media → it shows in the grid without a reload (#2315)
+  bookings-fullscreen.smoke.spec.ts # with-bookings only: phone: no inline calendar; full screen keeps week/filter/day/view across close+reopen (#3079), one toolbar row + one labelled close, month leaves ≥200px for the list (#3046); desktop keeps the inline calendar
+  tab-rows.smoke.spec.ts     # with-bookings + with-sales: at 390×844 the shared tab bar, the booking card's location tabs and kassa's category tabs (view + edit) scroll sideways only — computed overflow-y hidden, scrollTop 0 after a vertical wheel (#4330, #4386)
   printing.smoke.spec.ts     # with-sales only: four-tier order→print→done + transport-routing (#1324) + router self-pairing (#1366) smoke vs an in-test fake :9100 printer (optional)
   .auth/                     # generated storageState + team slug (gitignored)
 
@@ -31,6 +33,7 @@ fixtures/                    # the apps under test — real crouton apps, one pe
   with-maps/                 # + @fyit/crouton-maps    (maps: map mounts in form + live Nominatim geocode)
   with-sales/                # + @fyit/crouton-printing + @fyit/crouton-sales (four-tier print + pairing smoke vs an in-test fake :9100 printer)
   with-devtools/             # + @fyit/crouton-devtools + @fyit/crouton-feedback (feedback glasses launcher mounts via devtools installModule)
+  with-relations/            # core only: categories ← products (categoryId refTarget FK); CRUD both + CroutonFormReferenceSelect mounts
   <name>/                    # add more here
     e2e.manifest.json        # declares what to smoke (collections, fields)
 ```
@@ -76,11 +79,14 @@ pnpm typecheck:fixtures                            # all fixtures (root script)
 ```
 
 CI (`.github/workflows/e2e.yml`) **regenerates each fixture from its committed
-schemas, then type-checks it** before the Playwright smoke — so a generator
-template regression (the class of bug behind #195) turns CI red instead of only
-surfacing when someone scaffolds a new app. Keep the committed fixture output in
-sync: after changing a generator template, regenerate the fixtures
-(`cd fixtures/<name> && crouton config --force`) and commit the result.
+schemas, fails if the result differs from what is committed** (changed or new
+files — `scripts/fixture-drift.mjs`, #3152)**, then type-checks and lints it**
+before the Playwright smoke — so a generator template regression (the class of
+bug behind #195) turns CI red instead of only surfacing when someone scaffolds a
+new app. Keep the committed fixture output in sync: after changing a generator
+template, regenerate the fixtures (`cd fixtures/<name> && crouton config --force`)
+and commit the result. A generator PR that changes output is red until the
+regenerated fixtures are committed with it.
 
 ## How it works
 
@@ -154,7 +160,7 @@ E2E_FIXTURE=with-i18n pnpm test:e2e
 - `fixtures/<name>/**` → that fixture.
 - **Universal** (`crouton`, `crouton-core`, `crouton-i18n`, `crouton-cli`, `crouton-auth`,
   `e2e/**`, `pnpm-lock.yaml`, the workflow) → **all** fixtures.
-- **Backstops:** push to `main` and the **nightly schedule** always run the full matrix, so
+- **Backstops:** push to `main` and the **nightly clock run** (04:00 UTC, the status app's clock) always run the full matrix, so
   selection can never silently hide a regression.
 
 When you add a fixture, set its `packages` (step 3) **and** add it to `ALL` in the workflow

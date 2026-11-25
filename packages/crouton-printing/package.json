@@ -10,7 +10,9 @@
     "schemas",
     "dist",
     "nuxt.config.ts",
-    "README.md"
+    "README.md",
+    "docs/llms.txt",
+    "docs/components.md"
   ],
   "exports": {
     ".": "./nuxt.config.ts",
@@ -40,6 +42,7 @@
     }
   },
   "scripts": {
+    "typecheck": "nuxt prepare --extends @fyit/crouton-core && vue-tsc -b tsconfig.typecheck.json --noEmit",
     "build": "unbuild",
     "dev": "unbuild --stub",
     "test": "vitest run",
@@ -70,7 +73,7 @@
   },
   "peerDependencies": {
     "nuxt": "^4.0.0",
-    "@fyit/crouton-core": "workspace:*"
+    "@fyit/crouton-core": "workspace:0.x"
   },
   "dependencies": {
     "@vueuse/core": "^13.3.0",

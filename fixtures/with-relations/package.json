@@ -1,0 +1,28 @@
+{
+  "name": "e2e-fixture-with-relations",
+  "type": "module",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "typecheck": "nuxt typecheck",
+    "postinstall": "nuxt prepare 2>/dev/null || true",
+    "db:generate": "drizzle-kit generate"
+  },
+  "dependencies": {
+    "@fyit/crouton-core": "workspace:*",
+    "@fyit/crouton-i18n": "workspace:*",
+    "@fyit/crouton-layout": "workspace:*",
+    "drizzle-orm": "^0.45.1",
+    "nuxt": "^4.2.2",
+    "vue": "^3.5.26",
+    "vue-router": "^4.6.4"
+  },
+  "devDependencies": {
+    "@fyit/crouton-cli": "workspace:*",
+    "drizzle-kit": "^0.31.0"
+  }
+}

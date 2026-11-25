@@ -7,12 +7,17 @@
   "exports": {
     ".": "./nuxt.config.ts",
     "./types": "./app/types/collab.ts",
-    "./utils": "./app/utils/avatar.ts"
+    "./utils": "./app/utils/avatar.ts",
+    "./server/utils/collabServerDoc": "./server/utils/collabServerDoc.ts",
+    "./shared/tiptap-yjs": "./shared/tiptap-yjs.ts"
   },
   "files": [
     "app",
     "server",
-    "nuxt.config.ts"
+    "shared",
+    "nuxt.config.ts",
+    "docs/llms.txt",
+    "docs/components.md"
   ],
   "scripts": {
     "typecheck": "nuxt typecheck",
@@ -26,11 +31,13 @@
     "@vueuse/core": "^12.0.0"
   },
   "peerDependencies": {
-    "@fyit/crouton-core": "workspace:*",
+    "@fyit/crouton-auth": "workspace:0.x",
+    "@fyit/crouton-core": "workspace:0.x",
     "nuxt": "^3.0.0 || ^4.0.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241127.0",
+    "@tiptap/pm": "^3.32.0",
     "@vitejs/plugin-vue": "^5.0.0",
     "@vue/test-utils": "^2.4.0",
     "happy-dom": "catalog:",

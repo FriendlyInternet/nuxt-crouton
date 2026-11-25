@@ -12,7 +12,7 @@
   // deploys to *.workers.dev, while staging is live on velo.pmcp.dev.
   "name": "velo",
   "compatibility_date": "2024-09-02",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
 
   // Production custom domain (#133/#134): bound on `pnpm cf:deploy` now that
   // friendlyinter.net is a Cloudflare zone. Staging stays on velo.pmcp.dev (env.staging).

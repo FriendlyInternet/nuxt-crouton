@@ -12,10 +12,14 @@
     "server",
     "locales",
     "cli",
+    "config-utils.ts",
     "nuxt.config.ts",
-    "README.md"
+    "README.md",
+    "docs/llms.txt",
+    "docs/components.md"
   ],
   "scripts": {
+    "typecheck": "nuxt prepare --extends ../crouton-core && vue-tsc -b tsconfig.typecheck.json --noEmit",
     "crouton:i18n:seed": "npx tsx ./cli/seed.ts",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -48,6 +52,8 @@
   },
   "peerDependencies": {
     "nuxt": "^4.0.0",
+    "@fyit/crouton-auth": "workspace:0.x",
+    "@fyit/crouton-core": "workspace:0.x",
     "drizzle-orm": ">=0.30.0",
     "zod": "^4.0.0"
   }

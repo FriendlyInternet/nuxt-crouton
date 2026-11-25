@@ -8,19 +8,19 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '.github', 'workflows')
-const FILES = ['work-issue-pidev', 'decompose-on-issue-pidev', 'plan-review', 'build-review', 'ticket-review', 'fix-ci-on-failure', 'on-comment']
+const FILES = ['work-issue-pidev', 'decompose-on-issue-pidev', 'build-review', 'ticket-review', 'fix-ci-on-failure', 'on-comment']
 const SITE = /gh (?:issue|pr) comment|createComment|issues\/[^\s"]*\/comments"[^\n]*--method POST/
 const MARK = 'pipeline-note'
 const WINDOW = 8
 
 // Sites that are legitimately unmarked at the call. Each needs a reason.
 const ALLOW = [
-  { file: 'plan-review', has: 'comment.md', reason: 'the review verdict itself — carries its own verdict marker, counted as `verdict`' },
+  { file: 'on-comment', has: '--body-file "$D/comment.md"', reason: 'the plan review verdict itself (plan-review job, #3313) — carries its own verdict marker, counted as `verdict`' },
   { file: 'build-review', has: 'comment.md', reason: 'the review verdict itself' },
   { file: 'ticket-review', has: 'comment.md', reason: 'the review verdict itself' },
   { file: 'on-comment', has: 'const say = (brief, more)', reason: "the interpreter's own comment (posted by interpret-act) is agent output" },
   { file: 'work-issue-pidev', has: '--body-file "$REC"', reason: 'run-record file; its first line is the marker (asserted below)', fileHas: 'echo "<!-- pipeline-note -->"' },
-  { file: 'fix-ci-on-failure', has: 'handback.md', reason: 'hand-back file; its first line is the marker (asserted below)', fileHas: 'echo "<!-- pipeline-note -->"' },
+  { file: 'fix-bot-guard', has: 'handback.md', reason: 'hand-back file; its first line is the marker (asserted below)', fileHas: 'echo "<!-- pipeline-note -->"' },
 ]
 
 export function findUnmarked(file, text) {
@@ -58,7 +58,8 @@ test('lint over the real workflows: every non-output post carries the marker', (
 // Scripts the workflows call (via github-script import) that post pipeline notes themselves.
 // wave-release.mjs posts gate-formatted hold/release comments from the epic-wave workflows, which
 // are not agent runs and are not recorded; traffic-control.mjs posts into the agent run's thread.
-const SCRIPTS = ['traffic-control']
+// fix-bot-guard.sh is the fix-bot guard fix-ci-on-failure.yml runs (#3452); its posts moved there from the workflow.
+const SCRIPTS = ['traffic-control.mjs', 'fix-bot-guard.sh']
 const SCRIPT_DIR = join(DIR, '..', '..', 'scripts')
 
 test('lint over automerge-epic-subpr.yml: every note it posts carries the marker', () => {
@@ -69,8 +70,9 @@ test('lint over automerge-epic-subpr.yml: every note it posts carries the marker
 test('lint over the scripts the workflows call: every post carries the marker', () => {
   const all = []
   let sites = 0
-  for (const f of SCRIPTS) {
-    const text = readFileSync(join(SCRIPT_DIR, `${f}.mjs`), 'utf8')
+  for (const file of SCRIPTS) {
+    const f = file.replace(/\.(mjs|sh)$/, '')
+    const text = readFileSync(join(SCRIPT_DIR, file), 'utf8')
     sites += text.split('\n').filter((l) => SITE.test(l) && !/^\s*#/.test(l)).length
     all.push(...findUnmarked(f, text))
   }
@@ -93,4 +95,17 @@ test('record-outcome: runs after every other job, even failed or cancelled ones'
     assert.match(block, /if: \$\{\{ always\(\)/, `${f}: record-outcome must run with always()`)
     assert.match(block, /continue-on-error: true/, `${f}: a ledger failure must not fail the run`)
   }
+})
+
+test('on-comment plan-review job has its own record job, run even when the review fails (#3313)', () => {
+  const text = readFileSync(join(DIR, 'on-comment.yml'), 'utf8')
+  const at = text.indexOf('\n  plan-review-outcome:\n')
+  assert.ok(at > 0, 'no plan-review-outcome job')
+  const block = text.slice(at, text.indexOf('\n  record-outcome:\n'))
+  assert.match(block, /needs: \[plan-review\]/)
+  assert.match(block, /if: \$\{\{ always\(\) && needs\.plan-review\.result != 'skipped' \}\}/)
+  assert.match(block, /continue-on-error: true/)
+  assert.match(block, /WORKFLOW_FILE: on-comment\.yml/)
+  assert.match(block, /STAGE: plan-review/)
+  assert.match(block, /RL_START: \$\{\{ needs\.plan-review\.outputs\.rl_start \}\}/)
 })

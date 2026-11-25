@@ -1,7 +1,7 @@
 {
   "name": "@fyit/crouton-bookings",
   "version": "0.1.0",
-  "description": "Booking system layer for Nuxt Crouton - slot-based and inventory-based reservations",
+  "description": "Booking system layer for Nuxt Crouton - locations with or without time slots, each offering products with a stock",
   "type": "module",
   "main": "./nuxt.config.ts",
   "files": [
@@ -15,7 +15,9 @@
     "nuxt.config.ts",
     "crouton.manifest.ts",
     "README.md",
-    "SCHEMAS.md"
+    "SCHEMAS.md",
+    "docs/llms.txt",
+    "docs/components.md"
   ],
   "exports": {
     ".": "./nuxt.config.ts",
@@ -37,8 +39,10 @@
     "./collections/*/server/database/queries": "./collections/*/server/database/queries.ts"
   },
   "scripts": {
+    "typecheck": "nuxt prepare --extends @fyit/crouton-core --extends @fyit/crouton-maps && vue-tsc -b tsconfig.typecheck.json --noEmit",
     "build": "unbuild",
     "dev": "unbuild --stub",
+    "test": "vitest run",
     "prepack": "pnpm build"
   },
   "keywords": [
@@ -65,16 +69,18 @@
   },
   "dependencies": {
     "@fyit/crouton-calendar": "workspace:*",
+    "@fyit/crouton-catalog": "workspace:*",
     "@fyit/crouton-editor": "workspace:*"
   },
   "peerDependencies": {
     "nuxt": "^4.0.0",
-    "@fyit/crouton-core": "workspace:*",
+    "@fyit/crouton-auth": "workspace:0.x",
+    "@fyit/crouton-core": "workspace:0.x",
     "@nuxtjs/i18n": "^9.0.0 || ^10.0.0",
     "@internationalized/date": "^3.0.0",
     "@vueuse/core": "^11.0.0 || ^12.0.0",
     "zod": "^3.0.0",
-    "@fyit/crouton-maps": "workspace:*"
+    "@fyit/crouton-maps": "workspace:0.x"
   },
   "peerDependenciesMeta": {
     "@fyit/crouton-maps": {

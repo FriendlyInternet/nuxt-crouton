@@ -3,6 +3,8 @@
 import * as Y from 'yjs'
 import { verifyCollabToken, authorizeRoomRequest, parseRoomKey } from '../utils/collabToken'
 import { signInternalRequest } from '../utils/internalSignature'
+import { COLLAB_PRESENCE_HEADER, createServerPresenceStore, parseServerPresence } from '../utils/collabServerPresence'
+import type { CollabAwarenessState } from '../../app/types/collab'
 
 interface Env {
   DB: D1Database
@@ -29,12 +31,46 @@ interface Session {
  * - Merge updates from all clients via Yjs CRDTs
  * - Persist state to D1 (blob only - consumer handles domain syncing)
  * - Broadcast updates to all connected clients
- * - Track awareness/presence for all connected users
+ * - Track awareness/presence for all connected users, plus short-lived
+ *   presence of server editors sent with POST /update (#4094, never a session)
  *
  * Note: This DO does NOT sync to collection tables. That responsibility
  * belongs to the consumer (e.g., crouton-pages, crouton-flow) who can
  * observe Y.Doc changes and sync to their own tables.
  */
+/**
+ * App-server edit (#3982, the MCP pages tools): POST /update carries a raw Yjs update.
+ * The room token checked in fetch proves the caller may write this exact room — a WS
+ * client with the same token can already send updates. Origin 'server' is not a
+ * socket, so the update listener broadcasts to EVERY session and schedules the save.
+ *
+ * #4094: an optional `X-Collab-Presence` header carries the editor's short-lived
+ * presence (e.g. "Claude" + its caret); it goes to `onPresence`. A presence-only
+ * request (empty body) is allowed and changes no document state. A malformed
+ * presence is ignored — the edit still applies.
+ */
+export async function applyServerUpdate(
+  ydoc: Y.Doc,
+  request: Request,
+  onPresence?: (presence: CollabAwarenessState) => void
+): Promise<Response> {
+  if (request.method !== 'POST') {
+    return new Response('Method not allowed', { status: 405, headers: { Allow: 'POST' } })
+  }
+  const presence = parseServerPresence(request.headers.get(COLLAB_PRESENCE_HEADER))
+  const update = new Uint8Array(await request.arrayBuffer())
+  if (update.byteLength === 0 && !presence) return new Response('Empty update', { status: 400 })
+  if (update.byteLength > 0) {
+    try {
+      Y.applyUpdate(ydoc, update, 'server')
+    } catch {
+      return new Response('Invalid update', { status: 400 })
+    }
+  }
+  if (presence) onPresence?.(presence)
+  return new Response('ok', { status: 200 })
+}
+
 export class CollabRoom implements DurableObject {
   private ydoc: Y.Doc
   private sessions: Map<WebSocket, Session> = new Map()
@@ -47,6 +83,9 @@ export class CollabRoom implements DurableObject {
   /** Tracks the last time collab:synced was emitted to debounce high-frequency saves */
   private lastSyncEmitAt: number = 0
   private readonly SYNC_EMIT_DEBOUNCE_MS = 30_000
+  /** Server editors' presence (#4094) — never sessions; they expire by themselves. */
+  private serverPresence = createServerPresenceStore()
+  private presenceTimeout: ReturnType<typeof setTimeout> | null = null
 
   constructor(state: DurableObjectState, env: Env) {
     this.storage = state.storage
@@ -250,11 +289,13 @@ export class CollabRoom implements DurableObject {
       })
     }
 
+    if (url.pathname === '/update') {
+      return applyServerUpdate(this.ydoc, request, presence => this.setServerPresence(presence))
+    }
+
     if (url.pathname === '/users') {
       // HTTP endpoint to get current users (for Phase 6 global presence)
-      const users = Array.from(this.sessions.values())
-        .filter(s => s.awarenessState)
-        .map(s => s.awarenessState)
+      const users = this.awarenessUsers()
 
       return new Response(JSON.stringify({ users, count: users.length }), {
         headers: { 'Content-Type': 'application/json' }
@@ -349,12 +390,31 @@ export class CollabRoom implements DurableObject {
     }
   }
 
-  private broadcastAwareness(): void {
-    const users = Array.from(this.sessions.values())
+  /** People's awareness (one per session) plus live server presences (#4094). */
+  private awarenessUsers(): Record<string, unknown>[] {
+    const people = Array.from(this.sessions.values())
       .filter(s => s.awarenessState)
-      .map(s => s.awarenessState)
+      .map(s => s.awarenessState as Record<string, unknown>)
+    return [...people, ...this.serverPresence.list()]
+  }
 
-    const message = JSON.stringify({ type: 'awareness', users })
+  /**
+   * Show a server editor's presence for a few seconds (#4094). Not a session: it is
+   * not counted in join/leave/userCount, and a timer drops it and re-broadcasts.
+   */
+  private setServerPresence(presence: CollabAwarenessState): void {
+    this.serverPresence.set(presence)
+    this.broadcastAwareness()
+    if (this.presenceTimeout) clearTimeout(this.presenceTimeout)
+    this.presenceTimeout = setTimeout(() => {
+      this.presenceTimeout = null
+      if (this.serverPresence.prune()) this.broadcastAwareness()
+    }, this.serverPresence.ttlMs)
+  }
+
+  private broadcastAwareness(): void {
+    if (this.sessions.size === 0) return
+    const message = JSON.stringify({ type: 'awareness', users: this.awarenessUsers() })
 
     for (const [ws] of this.sessions) {
       if (ws.readyState === WebSocket.OPEN) {

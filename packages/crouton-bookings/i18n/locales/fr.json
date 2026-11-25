@@ -1,4 +1,8 @@
 {
+  "permissions": {
+    "bookingsCreate": "Créer des réservations",
+    "bookingsManage": "Gérer toutes les réservations"
+  },
   "bookings": {
     "title": "Réservations",
     "booking": "Réservation",
@@ -46,7 +50,9 @@
       "cancelled": "Annulée"
     },
     "admin": {
-      "openFullScreen": "Ouvrir en plein écran",
+      "openBookingsHint": "Touchez pour voir et gérer les réservations",
+      "openBookingsTool": "Ouvrir l'outil réservations",
+      "closeFullScreen": "Quitter le plein écran",
       "title": "Réservations",
       "sectionTitle": "Réservations",
       "overview": "Aperçu",
@@ -93,7 +99,6 @@
       "signIn": "Se connecter"
     },
     "calendar": {
-      "units": "Unités",
       "noBookings": "Aucune réservation",
       "bookingCount": "{count} réservation | {count} réservations",
       "closed": "Fermé",
@@ -104,6 +109,9 @@
     "card": {
       "activity": "Activité",
       "on": "le {date}",
+      "editBooking": "Modifier la réservation",
+      "showDayInCalendar": "Afficher le {date} dans le calendrier",
+      "emailPanel": "Statut des e-mails",
       "emailLabels": {
         "confirm": "Confirmation",
         "reminder": "Rappel",
@@ -142,10 +150,10 @@
     "createCard": {
       "editBookingFor": "Modifier la réservation pour",
       "newBookingFor": "Nouvelle réservation pour",
-      "howMany": "Combien en avez-vous besoin ?",
-      "pickTimeSlot": "Choisir un créneau horaire",
-      "left": "restant(s)",
-      "ofAvailable": "sur {count} disponible(s)",
+      "product": "Produit",
+      "time": "Heure",
+      "amount": "Quantité",
+      "amountLabel": "{booked} sur {free} disponible(s)",
       "selectLocation": "Sélectionner un lieu",
       "sure": "sûr ?",
       "cancel": "Supprimer",
@@ -199,13 +207,17 @@
       "allTeamMembers": "Tous les membres de l'équipe",
       "bookingRules": "Règles de réservation",
       "bookingRulesHint": "Contrôler le fonctionnement des réservations à ce lieu.",
-      "bookingMode": "Mode de réservation",
-      "timeSlots": "Créneaux horaires",
-      "timeSlotsDescription": "Réserver des créneaux nommés spécifiques par jour",
-      "inventory": "Inventaire",
-      "inventoryDescription": "Réserver à partir d'un pool d'unités disponibles",
-      "availableUnits": "Unités disponibles",
-      "availableUnitsHelp": "Nombre d'unités disponibles pour la réservation en même temps.",
+      "products": "Produits",
+      "productsHint": "Ce qui peut être réservé ici, et combien de chaque en même temps.",
+      "product": "Produit",
+      "stock": "Stock",
+      "addProduct": "Ajouter un produit",
+      "removeProduct": "Retirer le produit",
+      "pickProduct": "Choisir un produit",
+      "productInactive": "Inactif",
+      "productRemoved": "Supprimé",
+      "productsNone": "Ce lieu reçoit son propre produit à l'enregistrement.",
+      "productsEmpty": "Ce lieu ne peut pas être réservé tant qu'aucun produit n'est ajouté.",
       "maxBookingsPerMonth": "Max réservations par mois",
       "maxBookingsPerMonthHelp": "Limiter le nombre de réservations qu'un utilisateur peut faire par mois calendaire. Laisser vide pour illimité.",
       "unlimited": "Illimité",
@@ -506,12 +518,13 @@
       "openDays": "Jours d'ouverture",
       "slotSchedule": "Planning des créneaux",
       "blockedDates": "Dates bloquées",
-      "inventoryMode": "Mode inventaire",
       "maxBookingsPerMonth": "Réservations max par mois",
       "allowedMemberIds": "Membres autorisés",
       "translations": "Traductions",
       "statuses": "Statuts",
       "groups": "Tranches d'âge",
+      "sendEmails": "Envoyer les e-mails",
+      "sendEmailsHint": "Désactivé : les e-mails de réservation ne sont pas envoyés et chacun est consigné comme ignoré",
       "name": "Nom",
       "subject": "Objet",
       "body": "Corps",
@@ -555,7 +568,8 @@
     "emailStatus": {
       "pending": "En attente",
       "sent": "Envoyé",
-      "failed": "Échoué"
+      "failed": "Échoué",
+      "skipped": "Ignoré"
     }
   }
 }

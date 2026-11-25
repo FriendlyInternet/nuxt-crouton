@@ -1,5 +1,5 @@
 // Generator for seed data file using drizzle-seed
-import { AUTO_GENERATED_FIELDS, SYSTEM_FIELD_GROUPS } from '../utils/system-fields.ts'
+import { AUTO_FIELDS } from '../utils/system-fields.ts'
 import { getSeedGenerator, pascal, toLayerCamelCase } from '../utils/helpers.ts'
 
 /**
@@ -21,9 +21,6 @@ export function generateSeedFile(data: Record<string, any>, config: Record<strin
   const layerPascal = pascal(layer)
   const pluralPascal = pascal(plural)
   const functionName = `seed${layerPascal}${pluralPascal}`
-
-  // Fields that are auto-generated and should not be seeded manually
-  const AUTO_FIELDS = new Set([...AUTO_GENERATED_FIELDS, ...SYSTEM_FIELD_GROUPS.hierarchy])
 
   // Filter out auto-generated fields and generate seed mappings
   const seedableFields = fields.filter(f => !AUTO_FIELDS.has(f.name))

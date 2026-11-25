@@ -13,6 +13,10 @@ const CONSOLE_FAIL_PATTERNS = [
   {
     pattern: '[Vue warn]: Failed to resolve component',
     reason: 'a component looked up by name is missing, so a piece renders as a blank spot'
+  },
+  {
+    pattern: '[CroutonFormRepeater] Failed to resolve component',
+    reason: 'a repeater item component is missing from the build-time collection map, so every row renders as a warning notice instead of its fields'
   }
 ]
 

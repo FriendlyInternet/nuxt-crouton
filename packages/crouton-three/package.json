@@ -12,7 +12,9 @@
     "i18n",
     "nuxt.config.ts",
     "crouton.manifest.ts",
-    "README.md"
+    "README.md",
+    "docs/llms.txt",
+    "docs/components.md"
   ],
   "scripts": {
     "typecheck": "npx nuxt typecheck",
@@ -52,7 +54,7 @@
     "@types/three": "^0.171.0"
   },
   "peerDependencies": {
-    "@fyit/crouton-core": "workspace:*",
+    "@fyit/crouton-core": "workspace:0.x",
     "@nuxt/ui": "^4.0.0",
     "@vueuse/core": "^11.0.0 || ^12.0.0 || ^13.0.0",
     "nuxt": "^3.0.0 || ^4.0.0"

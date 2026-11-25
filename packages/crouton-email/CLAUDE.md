@@ -85,6 +85,10 @@ await sendWelcome({
 })
 ```
 
+## Delivery Confirmation (webhook)
+
+`POST /api/webhooks/resend` receives Resend delivery callbacks (Svix-signed; set `NUXT_EMAIL_RESEND_WEBHOOK_SECRET` = `whsec_…`). `server/utils/delivery-events.ts` is the provider seam: it translates Resend events into our own states (`delivered` / `bounced` / `delayed` / `complained`) and emits the `crouton:email:delivery` hook; crouton-auth's email logger updates the `auth_email_log` row whose `providerId` (Resend's message id, stored at send time) equals the event's id — never matched by address; unknown id = no update. Downstream code never sees Resend's format.
+
 ## Client Components
 
 ### EmailVerificationFlow
@@ -112,13 +116,13 @@ Complete verification code input flow with resend functionality.
 - `resend()` - Resend requested
 - `error(error: Error)` - Error occurred
 
-### MagicLinkSent
+### EmailMagicLinkSent
 
 "Check your email" message with resend option.
 
 ```vue
 <template>
-  <MagicLinkSent
+  <EmailMagicLinkSent
     :email="userEmail"
     @resend="handleResend"
     @change-email="handleChangeEmail"
@@ -134,13 +138,13 @@ Complete verification code input flow with resend functionality.
 - `resend()` - Resend requested
 - `change-email()` - Change email requested
 
-### ResendButton
+### EmailResendButton
 
 Timer-based resend button with cooldown.
 
 ```vue
 <template>
-  <ResendButton
+  <EmailResendButton
     :cooldown="60"
     :loading="isResending"
     @resend="handleResend"
@@ -343,7 +347,7 @@ RESEND_API_KEY=re_test_xxx
 ## Naming Conventions
 
 ```
-Component: EmailVerificationFlow, EmailInput, ResendButton
+Component: EmailVerificationFlow, EmailMagicLinkSent, EmailResendButton, EmailInput
 Server util: useEmailService, sendVerificationEmail, sendMagicLink
 Template: Verification.vue, MagicLink.vue, TeamInvite.vue
 Type: SendEmailOptions, VerificationEmailOptions

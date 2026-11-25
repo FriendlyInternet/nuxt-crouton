@@ -13,14 +13,14 @@
  * the real drizzle ops.
  */
 import { and, eq, inArray } from 'drizzle-orm'
-import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
+import { requireCan } from '@fyit/crouton-auth/server/utils/team-auth'
 import { printJobs } from '@fyit/crouton-printing/server/database/schema'
 import { requireTeamEvent } from '../../../../../../utils/team-event'
 import { deleteAllEventOrders, type DeleteEventOrdersOps } from '../../../../../../utils/delete-event-orders'
 
 export default defineEventHandler(async (event) => {
-  // Team admin only — bulk-destructive (#1519). Throws 403 for members.
-  await requireTeamAdmin(event)
+  // sales:manage only (owner/admin by default) — bulk-destructive (#1519). Throws 403 for members.
+  await requireCan(event, 'sales:manage')
   // Event must belong to this team; also hands back the db handle + eventId.
   const { db, eventId } = await requireTeamEvent(event)
 

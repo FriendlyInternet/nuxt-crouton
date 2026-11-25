@@ -10,6 +10,7 @@ import { eq } from 'drizzle-orm'
 import { invitation, organization, user } from '../../../../database/schema/auth'
 import { requireAuth } from '../../../../utils/auth'
 import { getOrganizationMembershipDirect } from '../../../../utils/team'
+import { can } from '../../../../utils/permissions'
 
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
@@ -58,9 +59,9 @@ export default defineEventHandler(async (event) => {
     throw createError({ status: 400, statusText: 'Invitation has expired' })
   }
 
-  // Verify the current user is an admin or owner of the organization
+  // Verify the current user may manage the team (`team:manage`, owner/admin by default)
   const membership = await getOrganizationMembershipDirect(result.organizationId, currentUserId)
-  if (!membership || !['admin', 'owner'].includes(membership.role)) {
+  if (!membership || !(await can(result.organizationId, currentUserId, 'team:manage', event))) {
     throw createError({ status: 403, statusText: 'Only team admins can resend invitations' })
   }
 
@@ -70,6 +71,7 @@ export default defineEventHandler(async (event) => {
     type: 'invitation',
     to: result.email,
     invitationId: result.id,
+    organizationId: result.organizationId,
     organizationName: result.organizationName,
     inviterName: result.inviterName || 'A team member',
     inviterEmail: result.inviterEmail,

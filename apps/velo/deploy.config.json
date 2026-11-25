@@ -2,7 +2,7 @@
   "collab": true,
   "stagingUrl": "https://velo.pmcp.dev",
   "productionUrl": "https://velo.friendlyinter.net",
-  "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-i18n @fyit/crouton-assets @fyit/crouton-bookings @fyit/crouton-email @fyit/crouton-pages @fyit/crouton-collab",
+  "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-i18n @fyit/crouton-assets @fyit/crouton-bookings @fyit/crouton-email @fyit/crouton-pages @fyit/crouton-collab @fyit/crouton-mcp-toolkit",
   "smoke": {
     "crud": {
       "create": {
@@ -59,6 +59,41 @@
     },
     "required": true,
     "reads": [
+      { "path": "/api/teams/{teamId}/bookings-settings" },
+      {
+        "path": "/api/teams/{teamId}/crouton-layouts/default",
+        "expectStatus": [200, 204]
+      },
+      {
+        "path": "/api/public/{teamId}/smoke-none",
+        "expectStatus": [404]
+      },
+      {
+        "path": "/api/public/{teamId}/smoke-none/smoke-item",
+        "expectStatus": [404]
+      },
+      {
+        "path": "/api/teams/{teamId}/pages/smoke-none/access-code",
+        "expectStatus": [404]
+      },
+      {
+        "path": "/api/crouton-bookings/teams/{teamId}/calendar-bookings"
+      },
+      {
+        "path": "/api/crouton-bookings/teams/{teamId}/admin-bookings"
+      },
+      {
+        "path": "/api/crouton-bookings/teams/{teamId}/charts/bookings-by-status"
+      },
+      {
+        "path": "/api/crouton-bookings/teams/{teamId}/customer-bookings"
+      },
+      {
+        "path": "/api/teams/{teamId}/bookings-emaillogs"
+      },
+      {
+        "path": "/api/teams/{teamId}/catalog-products"
+      },
       {
         "path": "/api/crouton-bookings/teams/{teamId}/availability?locationId=smoke-none&startDate=2026-01-01&endDate=2026-01-02"
       },
@@ -75,6 +110,63 @@
       {
         "path": "/api/collab/token?teamId={teamId}&room={teamId}:pagesPages:smoke",
         "expectIncludes": "token"
+      },
+      {
+        "path": "/api/webhooks/resend",
+        "expectStatus": 405
+      },
+      {
+        "path": "/mcp/pages",
+        "expectStatus": 404
+      },
+      {
+        "path": "/mcp",
+        "expectStatus": 401
+      },
+      {
+        "path": "/.well-known/oauth-authorization-server"
+      },
+      {
+        "path": "/.well-known/oauth-protected-resource"
+      },
+      {
+        "path": "/api/auth/oauth2/get-consents"
+      },
+      {
+        "path": "/api/teams/{teamId}/mcp-tokens"
+      },
+      {
+        "path": "/api/teams/{teamId}/domains"
+      },
+      {
+        "path": "/api/teams/{teamId}/crouton-events"
+      },
+      {
+        "path": "/api/teams/{teamId}/crouton-events/export"
+      },
+      {
+        "path": "/api/teams/{teamId}/crouton-operations"
+      },
+      {
+        "path": "/api/teams/{teamId}/bookings-bookings"
+      },
+      {
+        "path": "/api/teams/{teamId}/email-logs"
+      },
+      {
+        "path": "/api/teams/{teamId}/email-logs/stats"
+      },
+      {
+        "path": "/api/teams/{teamId}/settings/email"
+      },
+      {
+        "path": "/api/auth/organization/list-roles?organizationId={teamId}",
+        "expectStatus": 200
+      },
+      {
+        "path": "/api/teams/{teamId}/can?actions=team:manage",
+        "expectStatus": 200,
+        "expectIncludes": "\"team:manage\":true"
       }
     ]
   }

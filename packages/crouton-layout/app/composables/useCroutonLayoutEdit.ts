@@ -16,7 +16,7 @@ export interface LayoutEditApi {
   drop: (path: NodePath, blockId: string, edge: DropEdge) => void
   /** Remove the pane at `path` (collapses its parent split). */
   remove: (path: NodePath) => void
-  /** Persist reka-ui resize results for the split at `path`. */
+  /** Persist USplitter resize results for the split at `path`. */
   resize: (path: NodePath, sizes: number[]) => void
   /** Select the leaf at `path` (opens its config panel). */
   select: (path: NodePath) => void

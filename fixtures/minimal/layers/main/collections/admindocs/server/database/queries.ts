@@ -127,16 +127,16 @@ export async function updateMainAdmindoc(
   teamId: string,
   userId: string,
   updates: Partial<MainAdmindoc>,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(tables.mainAdmindocs.id, recordId),
     eq(tables.mainAdmindocs.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(tables.mainAdmindocs.owner, userId))
   }
 
@@ -163,16 +163,16 @@ export async function deleteMainAdmindoc(
   recordId: string,
   teamId: string,
   userId: string,
-  options?: { role?: string }
+  options?: { seesAll?: boolean }
 ) {
   const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+  const seesAll = options?.seesAll === true
 
   const conditions = [
     eq(tables.mainAdmindocs.id, recordId),
     eq(tables.mainAdmindocs.teamId, teamId),
   ]
-  if (!isAdmin) {
+  if (!seesAll) {
     conditions.push(eq(tables.mainAdmindocs.owner, userId))
   }
 
@@ -190,6 +190,8 @@ export async function deleteMainAdmindoc(
 
   return { success: true }
 }
+
+export const MainAdmindocsAccess = {"create":"admin","reorder":"admin"} as const
 
 // Tree hierarchy queries (auto-generated when hierarchy: true)
 // Type: MainAdmindoc with hierarchy fields

@@ -67,11 +67,16 @@ export function runWrangler(args, { cwd, capture = false } = {}) {
     stdio: ['inherit', capture ? 'pipe' : 'inherit', 'pipe']
   })
   if (res.stderr) process.stderr.write(res.stderr)
-  if (res.status !== 0) {
-    const detail = (res.stderr ?? '').trim()
-    throw new Error(`wrangler exited with code ${res.status}: npx ${full.join(' ')}${detail ? `\n${detail}` : ''}`)
-  }
+  const err = wranglerError(res, full)
+  if (err) throw new Error(err)
   return res.stdout ?? ''
+}
+
+/** Error message for a finished wrangler spawn, or null on success. Includes stdout: with `--json` wrangler prints its error JSON there, not on stderr. */
+export function wranglerError(res, full) {
+  if (res.status === 0) return null
+  const detail = [res.stderr, res.stdout].map(x => String(x ?? '').trim()).filter(Boolean).join('\n')
+  return `wrangler exited with code ${res.status}: npx ${full.join(' ')}${detail ? `\n${detail}` : ''}`
 }
 
 /**
@@ -90,9 +95,50 @@ export function isUserTable(name) {
   return !n.startsWith('sqlite_') && !n.startsWith('_cf_')
 }
 
+/** Lists a D1 database's tables (filter the result with isUserTable). Shared by db-clone + pr-preview-migrate. */
+export const LIST_TABLES_SQL = "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+
+/**
+ * Every foreign-key edge between user tables as `{ child, parent }` rows. The name filter must be
+ * in SQL, not only in JS: remote D1 refuses any read of its internal `_cf_*` tables with
+ * "not authorized: SQLITE_AUTH [code: 7500]", and an unfiltered pragma_foreign_key_list(m.name)
+ * reaches `_cf_KV`. `ESCAPE '\'` makes `_` literal (it is a LIKE wildcard). Same filter drizzle-kit
+ * uses when it introspects D1.
+ */
+export const LIST_FKS_SQL = "SELECT m.name AS child, f.\"table\" AS parent FROM sqlite_master m, pragma_foreign_key_list(m.name) f WHERE m.type='table' AND m.name NOT LIKE 'sqlite\\_%' ESCAPE '\\' AND m.name NOT LIKE '\\_cf\\_%' ESCAPE '\\'"
+
+/**
+ * Order tables so a child comes before the parent it references. Dropping a parent first makes the
+ * child's later implicit DELETE fail with "no such table: main.<parent>" (defer_foreign_keys does
+ * not cover that). A cycle falls through in the original order.
+ */
+export function orderForDrop(tables, edges) {
+  const left = new Set(tables)
+  const ordered = []
+  while (left.size) {
+    const leaves = [...left].filter(t => !edges.some(e => e.parent === t && e.child !== t && left.has(e.child)))
+    const batch = leaves.length ? leaves : [...left]
+    for (const t of batch) { ordered.push(t); left.delete(t) }
+  }
+  return ordered
+}
+
+/** SQL that drops every listed table in one batch; foreign keys are deferred so order does not matter. */
+export function dropTablesSql(tables) {
+  return 'PRAGMA defer_foreign_keys = TRUE;\n'
+    + tables.map(t => `DROP TABLE IF EXISTS "${t}";`).join('\n') + '\n'
+}
+
+/** The `wrangler d1 execute` args for a remote JSON query; `config` adds `--config <path>`. */
+export function queryD1Args(dbName, sql, { config } = {}) {
+  const args = ['d1', 'execute', dbName, '--remote', '--json', '--command', sql]
+  if (config) args.push('--config', config)
+  return args
+}
+
 /** Run a remote SELECT and return the first result set's rows (wrangler --json shape). */
-export function queryD1Json(dbName, sql, { cwd } = {}) {
-  const out = runWrangler(['d1', 'execute', dbName, '--remote', '--json', '--command', sql], { cwd, capture: true })
+export function queryD1Json(dbName, sql, { cwd, config } = {}) {
+  const out = runWrangler(queryD1Args(dbName, sql, { config }), { cwd, capture: true })
   const parsed = JSON.parse(out)
   return Array.isArray(parsed) ? (parsed[0]?.results ?? []) : (parsed.results ?? [])
 }

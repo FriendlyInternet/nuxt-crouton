@@ -1,6 +1,9 @@
 {
   "name": "@fyit/crouton-themes",
   "version": "0.1.0",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json"
+  },
   "description": "Swappable themes for Nuxt UI applications",
   "type": "module",
   "exports": {
@@ -30,7 +33,9 @@
     "./eink": "./eink/nuxt.config.ts",
     "./eink/*": "./eink/*",
     "./blueprint": "./blueprint/nuxt.config.ts",
-    "./blueprint/*": "./blueprint/*"
+    "./blueprint/*": "./blueprint/*",
+    "./editorial": "./editorial/nuxt.config.ts",
+    "./editorial/*": "./editorial/*"
   },
   "files": [
     "themes",
@@ -46,7 +51,10 @@
     "riso",
     "eink",
     "blueprint",
-    "lib"
+    "editorial",
+    "lib",
+    "docs/llms.txt",
+    "docs/components.md"
   ],
   "keywords": [
     "nuxt",
@@ -57,7 +65,8 @@
     "minimal",
     "minimalist",
     "korg",
-    "drum-machine"
+    "drum-machine",
+    "editorial"
   ],
   "author": "FYIT",
   "license": "MIT",

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { CroutonEvent, DateGroup } from '../types/events'
+import { useNow } from '@vueuse/core'
+import type { CroutonEvent, EventOperation } from '../types/events'
 
 const props = withDefaults(defineProps<{
   events: CroutonEvent[]
@@ -8,158 +9,89 @@ const props = withDefaults(defineProps<{
 }>(), {
   events: () => [],
   loading: false,
-  emptyMessage: 'No activity found'
+  emptyMessage: undefined
 })
 
 const emit = defineEmits<{
   eventClick: [event: CroutonEvent]
 }>()
 
-// Track expanded events
-const expandedEvents = ref<Set<string>>(new Set())
+const { t, locale } = useI18n()
+const appConfig = useAppConfig()
 
-function toggleExpand(event: CroutonEvent) {
-  if (expandedEvents.value.has(event.id)) {
-    expandedEvents.value.delete(event.id)
-  } else {
-    expandedEvents.value.add(event.id)
-  }
+// Re-render relative times every minute
+const now = useNow({ interval: 60_000 })
+
+const OPERATION_STYLE: Record<EventOperation, { icon: string, indicator: string }> = {
+  create: { icon: 'i-lucide-plus', indicator: 'bg-success text-inverted' },
+  update: { icon: 'i-lucide-pencil', indicator: 'bg-info text-inverted' },
+  delete: { icon: 'i-lucide-trash-2', indicator: 'bg-error text-inverted' }
 }
 
-function isExpanded(event: CroutonEvent): boolean {
-  return expandedEvents.value.has(event.id)
+const items = computed(() => [...(props.events || [])]
+  .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+  .map((event) => {
+    const style = OPERATION_STYLE[event.operation] ?? { icon: 'i-lucide-circle', indicator: '' }
+    const label = eventCollectionLabel(event.collectionName, appConfig.croutonCollections as Record<string, any> | undefined, t)
+    const itemTitle = eventItemTitle(event)
+    const action = t(`events.operation.${event.operation}`)
+    const who = t('events.log.byUser', { action, name: event.userName || t('events.log.unknownUser') })
+    const fieldCount = event.operation === 'update' ? (event.changes?.length || 0) : 0
+    return {
+      value: event.id,
+      event,
+      icon: style.icon,
+      title: itemTitle ? `${label} · ${itemTitle}` : label,
+      description: fieldCount ? `${who} · ${t('events.log.fieldsChanged', fieldCount)}` : who,
+      relative: formatRelativeTime(event.timestamp, now.value, locale.value),
+      full: new Date(event.timestamp).toLocaleString(locale.value),
+      class: 'cursor-pointer',
+      ui: { indicator: style.indicator }
+    }
+  }))
+
+function onSelect(_e: Event, item: { event?: CroutonEvent }) {
+  if (item.event) emit('eventClick', item.event)
 }
-
-// Group events by date
-const groupedEvents = computed<DateGroup[]>(() => {
-  if (!props.events?.length) return []
-
-  const groups = new Map<string, CroutonEvent[]>()
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-
-  const yesterday = new Date(today)
-  yesterday.setDate(yesterday.getDate() - 1)
-
-  props.events.forEach((event) => {
-    const eventDate = new Date(event.timestamp)
-    eventDate.setHours(0, 0, 0, 0)
-
-    let label: string
-    const dateKey = eventDate.toISOString().split('T')[0]!
-
-    if (eventDate.getTime() === today.getTime()) {
-      label = 'Today'
-    } else if (eventDate.getTime() === yesterday.getTime()) {
-      label = 'Yesterday'
-    } else {
-      label = eventDate.toLocaleDateString('en-US', {
-        weekday: 'long',
-        month: 'long',
-        day: 'numeric'
-      })
-    }
-
-    if (!groups.has(dateKey)) {
-      groups.set(dateKey, [])
-    }
-    groups.get(dateKey)!.push(event)
-  })
-
-  // Convert to array and sort by date (newest first)
-  return Array.from(groups.entries())
-    .sort(([a], [b]) => b.localeCompare(a))
-    .map(([date, events]) => {
-      const eventDate = new Date(date)
-      eventDate.setHours(0, 0, 0, 0)
-
-      let label: string
-      if (eventDate.getTime() === today.getTime()) {
-        label = 'Today'
-      } else if (eventDate.getTime() === yesterday.getTime()) {
-        label = 'Yesterday'
-      } else {
-        label = eventDate.toLocaleDateString('en-US', {
-          weekday: 'long',
-          month: 'long',
-          day: 'numeric'
-        })
-      }
-
-      return {
-        label,
-        date,
-        events: events.sort((a, b) =>
-          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-        )
-      }
-    })
-})
 </script>
 
 <template>
   <div class="crouton-activity-timeline">
-    <!-- Loading state -->
     <div
-      v-if="loading"
-      class="flex items-center justify-center py-12"
-    >
-      <div class="flex items-center gap-2 text-muted">
-        <UIcon
-          name="i-lucide-loader-2"
-          class="size-5 animate-spin"
-        />
-        <span>Loading activity...</span>
-      </div>
-    </div>
-
-    <!-- Empty state -->
-    <div
-      v-else-if="!events?.length"
-      class="flex flex-col items-center justify-center py-12 text-center"
-    >
-      <div class="rounded-full bg-muted/30 p-4 mb-4">
-        <UIcon
-          name="i-lucide-activity"
-          class="size-8 text-muted"
-        />
-      </div>
-      <p class="text-muted">{{ emptyMessage }}</p>
-    </div>
-
-    <!-- Timeline -->
-    <div
-      v-else
-      class="space-y-6"
+      v-if="loading && !events?.length"
+      class="flex flex-col gap-4"
     >
       <div
-        v-for="group in groupedEvents"
-        :key="group.date"
-        class="space-y-1"
+        v-for="n in 4"
+        :key="n"
+        class="flex items-center gap-3"
       >
-        <!-- Date header -->
-        <div class="sticky top-0 z-10 bg-background/95 backdrop-blur-sm py-2 px-2 -mx-2">
-          <div class="flex items-center gap-2">
-            <div class="h-px flex-1 bg-border" />
-            <span class="text-xs font-medium text-muted uppercase tracking-wider">
-              {{ group.label }}
-            </span>
-            <div class="h-px flex-1 bg-border" />
-          </div>
-        </div>
-
-        <!-- Events -->
-        <div class="space-y-0">
-          <CroutonActivityTimelineItem
-            v-for="event in group.events"
-            :key="event.id"
-            :event="event"
-            :expanded="isExpanded(event)"
-            @click="emit('eventClick', event)"
-            @toggle-expand="toggleExpand"
-          />
+        <USkeleton class="size-8 rounded-full" />
+        <div class="flex-1 flex flex-col gap-2">
+          <USkeleton class="h-4 w-1/3" />
+          <USkeleton class="h-3 w-1/2" />
         </div>
       </div>
     </div>
+
+    <UEmpty
+      v-else-if="!events?.length"
+      icon="i-lucide-activity"
+      :title="emptyMessage || t('events.log.empty')"
+      variant="naked"
+    />
+
+    <UTimeline
+      v-else
+      :items="items"
+      size="sm"
+      @select="onSelect"
+    >
+      <template #date="{ item }">
+        <UTooltip :text="item.full">
+          <span>{{ item.relative }}</span>
+        </UTooltip>
+      </template>
+    </UTimeline>
   </div>
 </template>

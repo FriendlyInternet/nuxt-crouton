@@ -14,14 +14,20 @@
  * ```
  */
 import { betterAuth } from 'better-auth'
+import { APIError } from 'better-auth/api'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { organization, twoFactor, magicLink, admin, haveIBeenPwned, type TwoFactorOptions } from 'better-auth/plugins'
+import { organization, twoFactor, magicLink, admin, haveIBeenPwned, jwt, type TwoFactorOptions } from 'better-auth/plugins'
 import { i18n } from '@better-auth/i18n'
+import { mcp } from '@better-auth/mcp'
+import { mcpScopes } from './mcp-scopes'
+import { mcpClientCleanup } from './mcp-oauth'
 import { passkey } from '@better-auth/passkey'
 import { sql } from 'drizzle-orm'
 import { useNitroApp } from 'nitropack/runtime'
 import { isSuperAdminUser } from '../../shared/utils/auth'
 import { resolveInitialOrgId, getOrgBySlug } from './session-org'
+import { buildAccessControl, setAccessControl, type CroutonAccessControl } from './access'
+import { buildAuthHooks, seedTeamAdminRole } from './team-admin-role'
 import type { BetterAuthOptions } from 'better-auth'
 import type { DrizzleD1Database } from 'drizzle-orm/d1'
 import type {
@@ -69,6 +75,29 @@ export interface CreateAuthOptions {
   baseURL: string
   /** Optional Drizzle schema for custom table names */
   schema?: Record<string, unknown>
+  /**
+   * Require a verified e-mail before password sign-in, and send the
+   * verification e-mail on sign-up (#3141). Default `false`. `useServerAuth`
+   * sets it from `isEmailVerificationRequired(runtimeConfig)` — on exactly when
+   * the app can send e-mail (crouton-email installed).
+   */
+  requireEmailVerification?: boolean
+  /**
+   * Crouton actions → Better Auth access control (#4104). `useServerAuth`
+   * builds it from every layer's `croutonActions` + `teams.roles`. When left
+   * out, it is built from `config.teams.roles` and the built-in actions.
+   */
+  access?: CroutonAccessControl
+}
+
+/**
+ * Can this app send e-mail? True only when the crouton-email layer is installed —
+ * it is the only package that defines `runtimeConfig.public.crouton.email` (#3141).
+ * Apps without it keep instant sign-up, since a verification e-mail could never
+ * arrive there.
+ */
+export function isEmailVerificationRequired(runtimeConfig: unknown): boolean {
+  return !!(runtimeConfig as { public?: { crouton?: { email?: unknown } } } | undefined)?.public?.crouton?.email
 }
 
 /**
@@ -77,7 +106,9 @@ export interface CreateAuthOptions {
  * This factory function creates a Better Auth instance with:
  * - Drizzle adapter for database operations
  * - Session configuration from @crouton/auth config
- * - Email/password authentication (configurable)
+ * - Email/password authentication (configurable); a password reset signs out
+ *   every session, and with `requireEmailVerification` sign-up needs a
+ *   verified e-mail before password sign-in (#3141)
  * - Base configuration that can be extended with plugins
  *
  * @param options - Configuration options
@@ -90,8 +121,13 @@ export function createAuth(options: CreateAuthOptions) {
     provider = 'sqlite',
     secret,
     baseURL,
-    schema
+    schema,
+    requireEmailVerification = false
   } = options
+
+  // One access-control definition for the organization plugin and can() (#4104).
+  const access = options.access ?? buildAccessControl({ roles: config.teams?.roles })
+  setAccessControl(access)
 
   // Build Better Auth configuration
   const authConfig: BetterAuthOptions = {
@@ -108,24 +144,19 @@ export function createAuth(options: CreateAuthOptions) {
     secret,
 
     // Email and password configuration
-    emailAndPassword: buildEmailPasswordConfig(config),
+    emailAndPassword: buildEmailPasswordConfig(config, requireEmailVerification),
 
-    // Email verification (required for changeEmail)
+    // Email verification (changeEmail; and, with crouton-email, sign-up — #3141)
     emailVerification: {
-      sendVerificationEmail: async ({ user, url }: { user: { email: string, name?: string }, url: string }) => {
-        if (config.debug) {
-          console.log(`[crouton/auth] Verification email for ${user.email}: ${url}`)
-        }
-        let _event: any; try { _event = useEvent() } catch {}
-        await useNitroApp().hooks.callHook('crouton:auth:email', {
-          _event,
-          type: 'verification',
-          to: user.email,
-          url,
-          userName: user.name
-        }).catch(() => {})
-      },
-      sendOnSignUp: false
+      sendVerificationEmail: (args: AuthEmailArgs) => sendAuthEmail(config, 'verification', args),
+      // Must follow the signal: better-auth uses `sendOnSignUp ?? requireEmailVerification`,
+      // so a hard-coded `false` would require verification but never send the e-mail.
+      sendOnSignUp: requireEmailVerification,
+      // An unverified user who tries to sign in gets a fresh link — the resend
+      // button on /auth/verify-email needs a session they cannot get.
+      sendOnSignIn: requireEmailVerification,
+      // The link signs them in and lands on the sign-up callbackURL (e.g. an invite page).
+      autoSignInAfterVerification: true
     },
 
     // User configuration (changeEmail)
@@ -137,11 +168,39 @@ export function createAuth(options: CreateAuthOptions) {
     // Session configuration
     session: buildSessionConfig(config.session),
 
+    // Rate limiting (#3142): one counter per client IP in the shared D1 table, so
+    // every Worker isolate sees the same count. better-auth's built-in limits are
+    // returned unchanged.
+    // - The three session/org READS the app makes on every page (SSR + client) are
+    //   not counted: each counted request costs a D1 read + write, and a 429 there
+    //   turns into a null session (the user looks signed out). They carry no
+    //   credentials, so they aren't a password-guessing target.
+    // - A request without cf-connecting-ip (local dev, e2e, self-hosted without
+    //   Cloudflare) is never limited, so those requests don't all share one counter.
+    // Order matters: better-auth uses the FIRST key that matches, so the exact
+    // read paths must come before '/**'.
+    rateLimit: {
+      enabled: true,
+      storage: 'database',
+      customRules: {
+        '/get-session': false,
+        '/organization/get-full-organization': false,
+        '/organization/list': false,
+        '/**': (request: Request, current: { window: number, max: number }) =>
+          request.headers.get('cf-connecting-ip') ? current : false
+      }
+    },
+
     // Advanced options
     advanced: {
       // Generate secure IDs - moved to database config in Better Auth 1.4.x
       database: {
         generateId: () => crypto.randomUUID()
+      },
+      // Real client IP (#3142): Cloudflare sets cf-connecting-ip and a client
+      // can't forge it. x-forwarded-for is deliberately not trusted.
+      ipAddress: {
+        ipAddressHeaders: ['cf-connecting-ip']
       }
     },
 
@@ -169,10 +228,14 @@ export function createAuth(options: CreateAuthOptions) {
     },
 
     // Plugins - Organization (Teams), Passkey, and 2FA support
-    plugins: buildPlugins(config, baseURL, config.debug, db),
+    plugins: buildPlugins(config, baseURL, config.debug, db, access),
+
+    // The team's admin row (#4130): seeded on first use, only the owner edits it,
+    // nobody renames or deletes it (server/lib/team-admin-role.ts).
+    hooks: buildAuthHooks(access, db),
 
     // Database hooks for single-tenant mode (auto-add users to default org)
-    databaseHooks: buildDatabaseHooks(config, db)
+    databaseHooks: buildDatabaseHooks(config, db, access)
   }
 
   // Create and return the Better Auth instance
@@ -182,7 +245,10 @@ export function createAuth(options: CreateAuthOptions) {
 /**
  * Build email/password configuration from @crouton/auth config
  */
-function buildEmailPasswordConfig(config: CroutonAuthConfig): BetterAuthOptions['emailAndPassword'] {
+function buildEmailPasswordConfig(
+  config: CroutonAuthConfig,
+  requireEmailVerification = false
+): BetterAuthOptions['emailAndPassword'] {
   const passwordConfig = config.methods?.password
 
   // Check if password auth is enabled
@@ -196,19 +262,10 @@ function buildEmailPasswordConfig(config: CroutonAuthConfig): BetterAuthOptions[
       enabled: true,
       autoSignIn: true,
       minPasswordLength: 8,
-      sendResetPassword: async ({ user, url }: { user: { email: string, name?: string }, url: string }) => {
-        if (config.debug) {
-          console.log(`[crouton/auth] Password reset email for ${user.email}: ${url}`)
-        }
-        let _event: any; try { _event = useEvent() } catch {}
-        await useNitroApp().hooks.callHook('crouton:auth:email', {
-          _event,
-          type: 'password-reset',
-          to: user.email,
-          url,
-          userName: user.name
-        }).catch(() => {})
-      }
+      requireEmailVerification,
+      // A reset signs out every session, everywhere (#3141).
+      revokeSessionsOnPasswordReset: true,
+      sendResetPassword: (args: AuthEmailArgs) => sendAuthEmail(config, 'password-reset', args)
     }
   }
 
@@ -218,23 +275,38 @@ function buildEmailPasswordConfig(config: CroutonAuthConfig): BetterAuthOptions[
     enabled: customConfig.enabled !== false,
     autoSignIn: true,
     minPasswordLength: customConfig.minLength ?? 8,
+    requireEmailVerification,
+    // A reset signs out every session, everywhere (#3141).
+    revokeSessionsOnPasswordReset: true,
     // Password reset
     sendResetPassword: customConfig.resetEnabled !== false
-      ? async ({ user, url }: { user: { email: string, name?: string }, url: string }) => {
-        if (config.debug) {
-          console.log(`[crouton/auth] Password reset email for ${user.email}: ${url}`)
-        }
-        let _event: any; try { _event = useEvent() } catch {}
-        await useNitroApp().hooks.callHook('crouton:auth:email', {
-          _event,
-          type: 'password-reset',
-          to: user.email,
-          url,
-          userName: user.name
-        }).catch(() => {})
-      }
+      ? (args: AuthEmailArgs) => sendAuthEmail(config, 'password-reset', args)
       : undefined
   }
+}
+
+interface AuthEmailArgs { user: { email: string, name?: string }, url: string }
+
+/**
+ * Hand a verification / password-reset e-mail to the `crouton:auth:email` hook (crouton-email
+ * sends it). Logs the link in debug mode; a failed send never fails the auth flow.
+ */
+async function sendAuthEmail(
+  config: CroutonAuthConfig,
+  type: 'verification' | 'password-reset',
+  { user, url }: AuthEmailArgs
+): Promise<void> {
+  if (config.debug) {
+    console.log(`[crouton/auth] ${type === 'verification' ? 'Verification' : 'Password reset'} email for ${user.email}: ${url}`)
+  }
+  let _event: any; try { _event = useEvent() } catch {}
+  await useNitroApp().hooks.callHook('crouton:auth:email', {
+    _event,
+    type,
+    to: user.email,
+    url,
+    userName: user.name
+  }).catch(() => {})
 }
 
 /**
@@ -368,8 +440,8 @@ function buildSessionConfig(sessionConfig?: SessionConfig): BetterAuthOptions['s
  * These hooks automatically:
  *
  * **defaultTeamSlug (company app pattern):**
- * 1. Create the default organization on first user signup (lazy creation)
- * 2. Add new users to the default organization
+ * 1. Create the default organization on the first sign-up or sign-in (lazy creation)
+ * 2. Add every user to it on sign-up and on every sign-in (`session.create.before`, #3786)
  * 3. Set the default organization as active for new sessions
  *
  * **autoCreateOnSignup (personal workspace pattern):**
@@ -393,9 +465,58 @@ function buildSessionConfig(sessionConfig?: SessionConfig): BetterAuthOptions['s
  * @param db - Drizzle database instance
  * @returns Database hooks configuration
  */
+/**
+ * Invite-only sign-up gate (#3340) — the `user.create.before` hook.
+ *
+ * better-auth runs `user.create.before` for EVERY user creation (email +
+ * password, magic link, OAuth first sign-in — they all go through its shared
+ * `createWithHooks`), so this one hook closes every sign-up path.
+ *
+ * - `signup !== 'invite'` → allowed (the default; other apps unchanged).
+ * - No `ctx.request` → allowed: a trusted server-side `auth.api.*` call that
+ *   didn't come through the HTTP handler (e.g. crouton-admin's super-admin
+ *   "create user" route calls `auth.api.signUpEmail` with no headers).
+ * - Otherwise the email must have a pending, unexpired invitation, else
+ *   403 `SIGNUP_INVITE_ONLY`.
+ *
+ * The lookup goes through better-auth's adapter (not raw SQL) because
+ * `invitation.expiresAt` is stored in unix SECONDS; the adapter hands back a
+ * Date, so the comparison is unit-safe (same lookup as better-auth's own
+ * `findPendingInvitation`).
+ *
+ * Known gap: a pending invitation doesn't prove the person owns the mailbox —
+ * whoever knows an invited address can register it first (#3138). With
+ * crouton-email installed (e-mail verification on, #3141) that pre-registered
+ * account can't sign in until the mailbox owner verifies it.
+ */
+export function signupGate(config: Pick<CroutonAuthConfig, 'signup'>) {
+  return async (user: { email: string }, ctx?: any): Promise<void> => {
+    if (config.signup !== 'invite') return
+    if (!ctx?.request) return
+
+    const email = String(user.email ?? '').toLowerCase()
+    const rows: Array<{ expiresAt: Date | string | number }> = await ctx.context.adapter.findMany({
+      model: 'invitation',
+      where: [
+        { field: 'email', value: email },
+        { field: 'status', value: 'pending' }
+      ]
+    })
+    const now = new Date()
+    const hasValidInvite = rows.some(r => new Date(r.expiresAt) > now)
+    if (!hasValidInvite) {
+      throw new APIError('FORBIDDEN', {
+        message: 'Sign-up is by invitation only',
+        code: 'SIGNUP_INVITE_ONLY'
+      })
+    }
+  }
+}
+
 function buildDatabaseHooks(
   config: CroutonAuthConfig,
-  db: DrizzleD1Database<Record<string, unknown>>
+  db: DrizzleD1Database<Record<string, unknown>>,
+  access?: CroutonAccessControl
 ): BetterAuthOptions['databaseHooks'] {
   const teams = config.teams ?? {}
   const hasDefaultTeam = !!teams.defaultTeamSlug
@@ -406,6 +527,8 @@ function buildDatabaseHooks(
   return {
     user: {
       create: {
+        // Invite-only sign-up (#3340) — no-op unless `signup: 'invite'`.
+        before: signupGate(config),
         after: async (user) => {
           // Emit operation event for new user registration
           useNitroApp().hooks.callHook('crouton:operation', {
@@ -420,7 +543,7 @@ function buildDatabaseHooks(
           if (hasDefaultTeam) {
             const defaultTeamSlug = teams.defaultTeamSlug!
             // 1. Ensure default org exists (lazy creation)
-            await ensureDefaultOrgExists(db, defaultTeamSlug, appName)
+            await ensureDefaultOrgExists(db, defaultTeamSlug, appName, access)
 
             // 2. Add user to default org as member
             await addUserToDefaultOrg(db, user.id, defaultTeamSlug)
@@ -432,7 +555,7 @@ function buildDatabaseHooks(
 
           // Handle auto-create personal workspace
           if (hasAutoCreate) {
-            const orgId = await createPersonalOrg(db, user.id, user.name, user.email, config.appName)
+            const orgId = await createPersonalOrg(db, user.id, user.name, user.email, config.appName, access)
 
             if (config.debug) {
               console.log(`[crouton/auth] Personal org ${orgId} created for user ${user.email}`)
@@ -450,6 +573,21 @@ function buildDatabaseHooks(
         // that null for up to five minutes. `before` merges its returned `data`
         // into the record actually created, so it lands in the cookie too.
         before: async (session) => {
+          // One-team apps: join the default team on every sign-in, not just at
+          // sign-up, so accounts made before `defaultTeamSlug` was set (or removed
+          // from the team later) aren't activated into a team they can't use (#3786).
+          // Both helpers are idempotent.
+          if (hasDefaultTeam) {
+            const defaultTeamSlug = teams.defaultTeamSlug!
+            try {
+              await ensureDefaultOrgExists(db, defaultTeamSlug, appName, access)
+              await addUserToDefaultOrg(db, session.userId, defaultTeamSlug)
+            } catch (error) {
+              // Never block sign-in over the default-team join (#3786)
+              console.error(`[crouton/auth] Could not add ${session.userId} to default org "${defaultTeamSlug}":`, error)
+            }
+          }
+
           const orgId = await resolveInitialOrgId(db, session.userId, teams)
 
           if (!orgId) {
@@ -476,16 +614,18 @@ function buildDatabaseHooks(
  * Ensure the default organization exists (lazy creation)
  *
  * Creates the default organization if it doesn't exist.
- * This is called on first user signup when defaultTeamSlug is set.
+ * Called on every sign-up and every sign-in when defaultTeamSlug is set (a cheap slug lookup once the org exists).
  *
  * @param db - Drizzle database instance
  * @param slug - Default team slug from config
  * @param appName - Application name for the default org
+ * @param access - Access control; the new org gets its admin row from it (#4130)
  */
 async function ensureDefaultOrgExists(
   db: DrizzleD1Database<Record<string, unknown>>,
   slug: string,
-  appName: string
+  appName: string,
+  access?: CroutonAccessControl
 ): Promise<void> {
   // Check if org exists by slug
   const existing = await getOrgBySlug(db, slug)
@@ -498,6 +638,7 @@ async function ensureDefaultOrgExists(
       INSERT INTO organization (id, name, slug, isDefault, personal, createdAt)
       VALUES (${orgId}, ${appName}, ${slug}, 1, 0, ${now})
     `)
+    await seedTeamAdminRole(db, orgId, access)
     console.log(`[crouton/auth] Created default organization "${appName}" (slug: ${slug})`)
   }
 }
@@ -562,6 +703,7 @@ async function addUserToDefaultOrg(
  * @param userName - User's name for workspace naming
  * @param userEmail - User's email (fallback for naming)
  * @param _appName - Application name (reserved for metadata)
+ * @param access - Access control; the new org gets its admin row from it (#4130)
  * @returns The created organization ID
  */
 async function createPersonalOrg(
@@ -569,7 +711,8 @@ async function createPersonalOrg(
   userId: string,
   userName: string | null,
   userEmail: string,
-  _appName?: string
+  _appName?: string,
+  access?: CroutonAccessControl
 ): Promise<string> {
   const orgId = crypto.randomUUID()
   const now = new Date().toISOString()
@@ -586,6 +729,7 @@ async function createPersonalOrg(
     INSERT INTO organization (id, name, slug, personal, isDefault, ownerId, createdAt)
     VALUES (${orgId}, ${orgName}, ${slug}, 1, 0, ${userId}, ${now})
   `)
+  await seedTeamAdminRole(db, orgId, access)
 
   // Add user as owner (member with 'owner' role)
   const memberId = crypto.randomUUID()
@@ -619,13 +763,14 @@ function buildPlugins(
   config: CroutonAuthConfig,
   baseURL: string,
   debug?: boolean,
-  db?: DrizzleD1Database<Record<string, unknown>>
+  db?: DrizzleD1Database<Record<string, unknown>>,
+  access?: CroutonAccessControl
 ) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- typing as BetterAuthPlugin[] widens the tuple betterAuth infers auth.api's plugin endpoints from
   const plugins: any[] = [
     // Organization plugin is always enabled (teams support)
     // Cast to any to work around strict typing - config is validated at runtime
-    organization(buildOrganizationConfig(config, db) as any),
+    organization(buildOrganizationConfig(config, db, access) as any),
 
     // Admin plugin - user management (ban, impersonate, revoke sessions, etc.)
     admin({
@@ -723,7 +868,43 @@ function buildPlugins(
     }))
   }
 
+  // Sign-in for Claude and other MCP apps (#4096). `mcp()` IS the OAuth
+  // provider (no separate oauthProvider()); jwt() signs its access tokens and
+  // serves /jwks. No cimd(): its pinned fetch can't run on Workers (#4120),
+  // so clients register through open DCR, rate-limited to 10/min per IP and
+  // cleaned up by mcpClientCleanup(). No postLogin / consentReferenceId and
+  // no team claim: the token names the user + scopes only; /mcp checks the
+  // team on every call.
+  if (config.mcpOAuth) {
+    plugins.push(
+      jwt(),
+      mcp(buildMcpOAuthOptions(baseURL)),
+      mcpClientCleanup()
+    )
+  }
+
   return plugins
+}
+
+/**
+ * Options for the `mcp()` sign-in provider (#4096). Exported for tests.
+ */
+export function buildMcpOAuthOptions(baseURL: string) {
+  const base = baseURL.endsWith('/') ? baseURL.slice(0, -1) : baseURL
+  return {
+    resource: `${base}/mcp`,
+    loginPage: '/auth/login',
+    consentPage: '/auth/consent',
+    // Replaces the library defaults. offline_access is needed for a refresh
+    // token (without it the connection dies after the 1-hour access token).
+    scopes: ['offline_access', ...mcpScopes],
+    allowDynamicClientRegistration: true,
+    // Claude is a public client: it registers without a login.
+    allowUnauthenticatedClientRegistration: true,
+    // 10 registrations per minute per IP (crouton's '/**' rule keeps this
+    // per cf-connecting-ip).
+    rateLimit: { register: { window: 60, max: 10 } }
+  }
 }
 
 // ============================================================================
@@ -1101,11 +1282,12 @@ function buildGenericProviderConfig(config: OAuthProviderConfig): SocialProvider
  * - `allowCreate`: Whether users can create new organizations
  * - `limit`: Maximum organizations per user (0 = unlimited)
  * - `autoCreateOnSignup`: Auto-create personal workspace
- * - `defaultTeamSlug`: Everyone joins this team on signup
+ * - `defaultTeamSlug`: Everyone joins this team on sign-up and on sign-in
  */
 export function buildOrganizationConfig(
   config: CroutonAuthConfig,
-  db?: DrizzleD1Database<Record<string, unknown>>
+  db?: DrizzleD1Database<Record<string, unknown>>,
+  access?: CroutonAccessControl
 ) {
   const teamsConfig = config.teams ?? {}
 
@@ -1137,6 +1319,16 @@ export function buildOrganizationConfig(
   }
 
   return {
+    // Roles carry crouton actions on top of Better Auth's own statements (#4104).
+    // A custom `roles` map replaces Better Auth's defaults, so buildAccessControl
+    // merges ownerAc/memberAc into each role. `admin` is left out on purpose
+    // (#4130): each team stores its own `admin` row (seeded below and by
+    // buildAuthHooks), which only the owner may change.
+    // Dynamic access control (#4106): each team can add its own roles (stored in
+    // `organizationRole`), which Better Auth's hasPermission — and so can() —
+    // loads per team. It needs `ac`, so it is tied to `access`.
+    ...(access && { ac: access.ac, roles: access.roles, dynamicAccessControl: { enabled: true } }),
+
     // Organization creation control
     allowUserToCreateOrganization: getAllowUserToCreateOrganization(),
 
@@ -1163,10 +1355,11 @@ export function buildOrganizationConfig(
       role: string
       expiresAt: Date
     }) => {
+      // Never log the invitee's email or the invite id (#3143) — the id is the
+      // secret in the accept link.
       if (config.debug) {
-        console.log(`[crouton/auth] Invitation for ${data.email} to ${data.organization.name} (id: ${data.id})`)
+        console.log(`[crouton/auth] Invitation email requested for org "${data.organization.name}"`)
       }
-      console.log(`[crouton/auth] 📧 sendInvitationEmail called for ${data.email} to org "${data.organization.name}" (invitationId: ${data.id})`)
       let _event: any; try { _event = useEvent() } catch {}
       try {
         await useNitroApp().hooks.callHook('crouton:auth:email', {
@@ -1174,21 +1367,21 @@ export function buildOrganizationConfig(
           type: 'invitation',
           to: data.email,
           invitationId: data.id,
+          organizationId: data.organization.id,
           organizationName: data.organization.name,
           inviterName: data.inviter.user.name,
           inviterEmail: data.inviter.user.email,
           role: data.role,
           expiresAt: data.expiresAt
         })
-        console.log(`[crouton/auth] ✅ crouton:auth:email hook completed for ${data.email}`)
       }
       catch (err) {
-        console.error(`[crouton/auth] ❌ crouton:auth:email hook FAILED for ${data.email}:`, err)
+        console.error('[crouton/auth] crouton:auth:email hook FAILED for invitation:', err)
       }
     },
 
     // Organization lifecycle hooks
-    organizationHooks: buildOrganizationHooks(config, db)
+    organizationHooks: buildOrganizationHooks(config, db, access)
   }
 }
 
@@ -1197,7 +1390,8 @@ export function buildOrganizationConfig(
  */
 function buildOrganizationHooks(
   config: CroutonAuthConfig,
-  db?: DrizzleD1Database<Record<string, unknown>>
+  db?: DrizzleD1Database<Record<string, unknown>>,
+  access?: CroutonAccessControl
 ) {
   const teams = config.teams ?? {}
 
@@ -1219,6 +1413,8 @@ function buildOrganizationHooks(
         } catch (e) {
           console.error(`[crouton/auth] Failed to set ownerId on organization:`, e)
         }
+        // The team's own admin row, from the config template (#4130).
+        if (access) await seedTeamAdminRole(db, ctx.organization.id, access)
       }
 
       // Emit operation event for team creation

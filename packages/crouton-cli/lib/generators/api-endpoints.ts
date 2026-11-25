@@ -1,6 +1,6 @@
 // API endpoint generators using @crouton/auth for team authentication
 import { collectFilterFields } from '../utils/filter-fields.ts'
-import { collectTeamRefFields } from '../utils/team-ref-fields.ts'
+import { collectTeamRefFields, collectPersonRefFields } from '../utils/team-ref-fields.ts'
 
 // Wire-facing body schema for the generated endpoints (#1403): accepts null on
 // non-required fields. Falls back to the client fieldsSchema for older callers
@@ -11,6 +11,9 @@ export interface CollectionAccess {
   create?: 'member' | 'admin'
   reorder?: 'member' | 'admin'
   list?: 'team' | 'own'
+  // The crouton action (`<pkg>:<verb>`) that 'admin' guards and "sees all rows"
+  // ask `can()` for (#4108). Default: 'collections:manage'.
+  action?: string
 }
 
 const ACCESS_VALUES: Record<string, string[]> = {
@@ -19,6 +22,9 @@ const ACCESS_VALUES: Record<string, string[]> = {
   list: ['team', 'own']
 }
 
+const ACTION_RE = /^[a-z][a-z0-9-]*:[a-z][a-z0-9-]*$/
+export const DEFAULT_ACCESS_ACTION = 'collections:manage'
+
 export function resolveAccess(data: Record<string, any>): CollectionAccess {
   const access = data.collectionConfig?.access
   if (access == null) return {}
@@ -26,8 +32,14 @@ export function resolveAccess(data: Record<string, any>): CollectionAccess {
     throw new Error(`Invalid access declaration for "${data.plural}": expected an object like { create: 'admin', list: 'own' }`)
   }
   for (const [key, value] of Object.entries(access)) {
+    if (key === 'action') {
+      if (typeof value !== 'string' || !ACTION_RE.test(value)) {
+        throw new Error(`Invalid access.action "${String(value)}" for "${data.plural}" (expected '<package>:<verb>', e.g. 'bookings:manage')`)
+      }
+      continue
+    }
     if (!ACCESS_VALUES[key]) {
-      throw new Error(`Invalid access key "${key}" for "${data.plural}" (allowed: ${Object.keys(ACCESS_VALUES).join(', ')})`)
+      throw new Error(`Invalid access key "${key}" for "${data.plural}" (allowed: ${[...Object.keys(ACCESS_VALUES), 'action'].join(', ')})`)
     }
     if (!ACCESS_VALUES[key].includes(value as string)) {
       throw new Error(`Invalid access.${key} "${String(value)}" for "${data.plural}" (allowed: ${ACCESS_VALUES[key].join(' | ')})`)
@@ -36,16 +48,24 @@ export function resolveAccess(data: Record<string, any>): CollectionAccess {
   return access as CollectionAccess
 }
 
-// Import + call for the auth step. A role-guarded handler uses requireTeamRole
-// (which resolves the team and checks membership itself); otherwise unchanged.
+/** The action this collection's guards ask `can()` for (#4108) — never a role name. */
+export function accessAction(data: Record<string, any>): string {
+  return resolveAccess(data).action ?? DEFAULT_ACCESS_ACTION
+}
+
+const CAN_IMPORT = `import { can } from '@fyit/crouton-auth/server/utils/team-auth'`
+
+// Import + call for the auth step. A guarded handler ('admin') uses requireCan
+// with the collection's action (it resolves the team and checks membership
+// itself); otherwise unchanged.
 function authImport(admin: boolean): string {
   return admin
-    ? `import { requireTeamRole } from '@fyit/crouton-auth/server/utils/team'`
+    ? `import { requireCan } from '@fyit/crouton-auth/server/utils/team-auth'`
     : `import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'`
 }
-function authCall(admin: boolean, destructure: string): string {
+function authCall(admin: boolean, destructure: string, action: string): string {
   return admin
-    ? `const { ${destructure} } = await requireTeamRole(event, 'admin')`
+    ? `const { ${destructure} } = await requireCan(event, '${action}')`
     : `const { ${destructure} } = await resolveTeamAndCheckMembership(event)`
 }
 
@@ -84,21 +104,21 @@ export function generateGetEndpoint(data: Record<string, any>, config: Record<st
   const pagCallOwn = own ? pagCall.replace(/ \}\)$/, ', ownerId })') : pagCall
   const ownerSetup = own
     ? `
-  // list: 'own' — admins/owners see the whole team, members only their own rows
-  const ownerId = membership.role === 'admin' || membership.role === 'owner' ? undefined : user.id
+  // list: 'own' — members with '${accessAction(data)}' see the whole team, others only their own rows
+  const ownerId = (await can(team.id, user.id, '${accessAction(data)}', event)) ? undefined : user.id
 `
     : ''
 
   return `// Team-based endpoint - requires @fyit/crouton-auth package
 // The resolveTeamAndCheckMembership utility handles team resolution and auth
 import { getAll${prefixedPascalCasePlural}, get${prefixedPascalCasePlural}ByIds } from '${queriesPath}'
-import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'${own ? `\n${CAN_IMPORT}` : ''}
 
 export default defineEventHandler(async (event) => {
   const timing = useServerTiming(event)
 
   const authTimer = timing.start('auth')
-  const { ${own ? 'team, user, membership' : 'team'} } = await resolveTeamAndCheckMembership(event)
+  const { ${own ? 'team, user' : 'team'} } = await resolveTeamAndCheckMembership(event)
   authTimer.end()
 ${ownerSetup}
   const query = getQuery(event)${hasTranslations
@@ -126,6 +146,25 @@ ${ownerSetup}
   dbTimer.end()
   return result
 })`
+}
+
+/**
+ * Import names + call lines for the write-time reference checks (#3378 same-team records,
+ * #1958 person fields must be team members). `lead`/`trail` wrap each call so POST and PATCH
+ * keep their own spacing. Split out to keep the endpoint generators small.
+ */
+function buildReferenceAsserts(data: Record<string, any>, prefixedPascalCase: string, lead: string, trail: string) {
+  const checks: Array<{ name: string, comment: string, args: string }> = []
+  if (collectTeamRefFields(data).length > 0) {
+    checks.push({ name: `assert${prefixedPascalCase}References`, comment: 'Referenced records must belong to this team (#3378)', args: 'team.id, body' })
+  }
+  if (collectPersonRefFields(data).length > 0) {
+    checks.push({ name: `assert${prefixedPascalCase}TeamMembers`, comment: 'Person fields must be members of this team (#1958)', args: 'event, team.id, body' })
+  }
+  return {
+    assertImport: checks.map(c => `, ${c.name}`).join(''),
+    assertCall: checks.map(c => `${lead}  // ${c.comment}\n  await ${c.name}(${c.args})${trail}`).join(''),
+  }
 }
 
 export function generatePostEndpoint(data: Record<string, any>, config: Record<string, any> | null = null): string {
@@ -163,12 +202,7 @@ export function generatePostEndpoint(data: Record<string, any>, config: Record<s
     : ''
 
   // Generate imports based on hierarchy needs
-  const hasTeamRefs = collectTeamRefFields(data).length > 0
-  const assertName = `assert${prefixedPascalCase}References`
-  const assertImport = hasTeamRefs ? `, ${assertName}` : ''
-  const assertCall = hasTeamRefs
-    ? `\n  // Referenced records must belong to this team (#3378)\n  await ${assertName}(team.id, body)\n`
-    : ''
+  const { assertImport, assertCall } = buildReferenceAsserts(data, prefixedPascalCase, '\n', '\n')
   const imports = hasHierarchy
     ? `import { create${prefixedPascalCase}, get${prefixedPascalCasePlural}ByIds${assertImport} } from '${queriesPath}'
 import { nanoid } from 'nanoid'`
@@ -231,7 +265,7 @@ export default defineEventHandler(async (event) => {
   const timing = useServerTiming(event)
 
   const authTimer = timing.start('auth')
-  ${authCall(adminCreate, 'team, user')}
+  ${authCall(adminCreate, 'team, user', accessAction(data))}
   authTimer.end()
 
   const body = await readValidatedBody(event, bodySchema.parse)
@@ -256,12 +290,7 @@ export function generatePatchEndpoint(data: Record<string, any>, config: Record<
 
   // Add imports based on translation needs
   const queriesPath = '../../../../database/queries'
-  const hasTeamRefs = collectTeamRefFields(data).length > 0
-  const assertName = `assert${prefixedPascalCase}References`
-  const assertImport = hasTeamRefs ? `, ${assertName}` : ''
-  const assertCall = hasTeamRefs
-    ? `\n\n  // Referenced records must belong to this team (#3378)\n  await ${assertName}(team.id, body)`
-    : ''
+  const { assertImport, assertCall } = buildReferenceAsserts(data, prefixedPascalCase, '\n\n', '')
   const imports = hasTranslations
     ? `import { update${prefixedPascalCase}, get${prefixedPascalCasePlural}ByIds${assertImport} } from '${queriesPath}'`
     : `import { update${prefixedPascalCase}${assertImport} } from '${queriesPath}'`
@@ -290,6 +319,7 @@ export function generatePatchEndpoint(data: Record<string, any>, config: Record<
 // The resolveTeamAndCheckMembership utility handles team resolution and auth
 ${imports}
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+${CAN_IMPORT}
 import { z } from 'zod'
 
 ${itemSchemasPrefix}const bodySchema = z.object({
@@ -305,7 +335,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const authTimer = timing.start('auth')
-  const { team, user, membership } = await resolveTeamAndCheckMembership(event)
+  const { team, user } = await resolveTeamAndCheckMembership(event)
   authTimer.end()
 
   const body = await readValidatedBody(event, bodySchema.parse)${assertCall}${hasTranslations
@@ -339,7 +369,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const dbTimer = timing.start('db')
-  const result = await update${prefixedPascalCase}(${camelCase}Id, team.id, user.id, updates, { role: membership.role })
+  const result = await update${prefixedPascalCase}(${camelCase}Id, team.id, user.id, updates, { seesAll: await can(team.id, user.id, '${accessAction(data)}', event) })
   dbTimer.end()
   return result
 })`
@@ -355,6 +385,7 @@ export function generateDeleteEndpoint(data: Record<string, any>, config: Record
 // The resolveTeamAndCheckMembership utility handles team resolution and auth
 import { delete${prefixedPascalCase} } from '${queriesPath}'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+${CAN_IMPORT}
 
 export default defineEventHandler(async (event) => {
   const timing = useServerTiming(event)
@@ -365,11 +396,11 @@ export default defineEventHandler(async (event) => {
   }
 
   const authTimer = timing.start('auth')
-  const { team, user, membership } = await resolveTeamAndCheckMembership(event)
+  const { team, user } = await resolveTeamAndCheckMembership(event)
   authTimer.end()
 
   const dbTimer = timing.start('db')
-  const result = await delete${prefixedPascalCase}(${camelCase}Id, team.id, user.id, { role: membership.role })
+  const result = await delete${prefixedPascalCase}(${camelCase}Id, team.id, user.id, { seesAll: await can(team.id, user.id, '${accessAction(data)}', event) })
   dbTimer.end()
   return result
 })`
@@ -398,7 +429,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const authTimer = timing.start('auth')
-  ${authCall(admin, 'team')}
+  ${authCall(admin, 'team', accessAction(data))}
   authTimer.end()
 
   const body = await readBody(event)
@@ -440,7 +471,7 @@ export default defineEventHandler(async (event) => {
   const timing = useServerTiming(event)
 
   const authTimer = timing.start('auth')
-  ${authCall(admin, 'team')}
+  ${authCall(admin, 'team', accessAction(data))}
   authTimer.end()
 
   const body = await readBody(event)

@@ -23,6 +23,7 @@ export default defineNuxtConfig({
   devServer: { port: 3007 },
   extends: [
     '@fyit/crouton-core',
+    '@fyit/crouton-layout',
     // Email sender (Resend) — provides the crouton:auth:email listener that
     // actually delivers team invites / verification mail. Without this layer the
     // hook fires and gets logged, but nothing sends (fanfare had no sender at
@@ -54,6 +55,7 @@ export default defineNuxtConfig({
     '@fyit/crouton-themes/riso',
     '@fyit/crouton-themes/eink',
     '@fyit/crouton-themes/blueprint',
+    '@fyit/crouton-themes/editorial',
   ],
   appConfig: {
     croutonApps: {

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Booking, LocationData, SettingsData } from '../types/booking'
+import type { BookingsStore } from '../composables/useBookingsStore'
 
 interface FilterState {
   statuses: string[]
@@ -29,6 +30,8 @@ interface Props {
   emptyMessage?: string
   /** Booking scope: 'personal' shows only the user's bookings, 'team' shows all team bookings */
   scope?: 'personal' | 'team'
+  /** Share one screen's state between several Panels (e.g. inline + full screen). */
+  store?: BookingsStore
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -41,6 +44,7 @@ const props = withDefaults(defineProps<Props>(), {
   title: undefined,
   emptyMessage: undefined,
   scope: 'personal',
+  store: undefined,
 })
 
 const emit = defineEmits<{
@@ -112,7 +116,8 @@ const panelMapRef = ref<{ flyToLocation: (locationId: string) => void } | null>(
 
 // Crouton form and team auth for location creation
 const { open: openCroutonForm } = useCrouton()
-const { isAdmin } = useTeam()
+// Managing bookings is the `bookings:manage` action (#4105)
+const isAdmin = useCan('bookings:manage')
 const notify = useNotify()
 
 // Preview mode - injected from admin page, defaults to false
@@ -127,7 +132,7 @@ const store = provideBookingsStore({
   locations: resolvedLocations,
   readOnly: previewMode,
   initialFilters: props.initialFilters,
-})
+}, props.store)
 
 // Closed days in the calendar: no location takes bookings that day.
 function isDateUnavailableForAll(date: Date): boolean {
@@ -199,7 +204,7 @@ const showLocations = ref(false)
 const showMap = ref(false)
 
 // Calendar view mode (lifted from Calendar component)
-const calendarView = ref<'week' | 'month'>('week')
+const calendarView = store.calendarView
 
 // Handle go-to-today from pill controls
 const onGoToToday = store.goToToday
@@ -341,7 +346,11 @@ defineExpose({
             @add-location="onAddLocation"
             @edit-location="onEditLocation"
             @focus-on-map="onFocusOnMap"
-          />
+          >
+            <template #toolbar-end>
+              <slot name="toolbar-end" />
+            </template>
+          </CroutonBookingsPanelFilters>
         </div>
 
         <!-- Calendar -->

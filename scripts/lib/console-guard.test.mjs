@@ -34,3 +34,8 @@ test('an allow-listed pattern is skipped', () => {
   const msgs = [{ type: 'error', text: '[Vue warn]: Failed to resolve component: Foo', url }]
   assert.deepEqual(evaluate(msgs, [{ pattern: 'component: Foo', reason: 'known' }]), [])
 })
+
+test('a missing repeater item component fails', () => {
+  const f = evaluate([{ type: 'warning', text: '[CroutonFormRepeater] Failed to resolve component: Foo', url }])
+  assert.equal(f.length, 1)
+})

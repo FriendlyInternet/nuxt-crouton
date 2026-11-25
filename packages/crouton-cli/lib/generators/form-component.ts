@@ -1,4 +1,5 @@
 // Generator for _Form.vue component
+import { isPersonRef } from '../utils/team-ref-fields.ts'
 import { toCase, jsString, htmlAttr, jsLiteral } from '../utils/helpers.ts'
 import { resolveRefCollectionKey } from '../utils/ref-collection.ts'
 
@@ -187,6 +188,47 @@ function renderOptionsCollectionField(field: Record<string, any>, ctx: FieldMark
         </UFormField>`
 }
 
+// Person field (#1958): team-scoped member picker instead of a reference to a non-existent collection
+function renderPersonField(field: Record<string, any>, ctx: FieldMarkupContext): string {
+  if (field.meta?.readOnly) {
+    return `        <UFormField ${ctx.labelAttr(field)} name="${field.name}" class="not-last:pb-4">
+          <CroutonUsersCardMini
+            v-if="props.activeItem?.${field.name}User"
+            :item="props.activeItem.${field.name}User"
+            :name="true"
+          />
+          <span v-else class="text-gray-400 text-sm">Not set</span>
+        </UFormField>`
+  }
+  return `        <UFormField ${ctx.labelAttr(field)} name="${field.name}" class="not-last:pb-4">
+          <USelectMenu
+            v-model="state.${field.name}"
+            :items="teamMemberItems"
+            value-key="value"
+            :loading="teamMembersLoading"${field.type === 'array' ? '\n            multiple' : ''}
+            class="w-full"
+            size="xl"
+          />
+        </UFormField>`
+}
+
+const PERSON_PICKER_SCRIPT = `
+
+// Team members for person fields (#1958)
+const { members: teamMembers, loadMembers: loadTeamMembers } = useTeam()
+const teamMembersLoading = ref(true)
+onMounted(async () => {
+  await loadTeamMembers()
+  teamMembersLoading.value = false
+})
+const teamMemberItems = computed(() => teamMembers.value
+  .filter((m: any) => m.user)
+  .map((m: any) => ({
+    label: m.user.name || m.user.email,
+    value: m.userId,
+    avatar: m.user.image ? { src: m.user.image } : undefined
+  })))`
+
 // Reference field (has refTarget): read-only card, multi-select or single reference select
 function renderReferenceField(field: Record<string, any>, ctx: FieldMarkupContext): string {
   let resolvedCollection
@@ -348,6 +390,11 @@ function generateFieldMarkup(field: Record<string, any>, ctx: FieldMarkupContext
     return renderOptionsCollectionField(field, ctx)
   }
 
+  // Person field (#1958)
+  if (isPersonRef(field)) {
+    return renderPersonField(field, ctx)
+  }
+
   // Check if this is a reference field (has refTarget)
   if (field.refTarget) {
     return renderReferenceField(field, ctx)
@@ -501,12 +548,16 @@ function buildParentPickerSection(hasHierarchy: boolean, parentField: string, la
 
 // Add CroutonI18nInput if there are translatable fields
 // Use fallback to empty string to ensure string type compatibility
-function buildTranslationField(hasTranslations: boolean, translatableFieldNames: string[], translatableFields: Record<string, any>[], plural: string): string {
+export function buildTranslationField(hasTranslations: boolean, translatableFieldNames: string[], translatableFields: Record<string, any>[], plural: string): string {
   // Build fieldComponents map for translatable fields with custom components
   const fieldComponentsMap: Record<string, string> = {}
   translatableFields.forEach((field) => {
     if (field.meta?.component) {
       fieldComponentsMap[field.name] = resolveComponentName(field.meta.component)
+    }
+    else if (field.component && !['UInput', 'UTextarea'].includes(field.component)) {
+      // Manifest-declared rich control (e.g. richText → editor); plain inputs are the I18nInput default
+      fieldComponentsMap[field.name] = resolveComponentName(field.component)
     }
   })
   const hasFieldComponents = Object.keys(fieldComponentsMap).length > 0
@@ -904,7 +955,8 @@ export function generateFormComponent(data: Record<string, any>, config: Record<
     hierarchyDefaultsCode: buildHierarchyDefaultsCode(hasHierarchy, hierarchy, parentField),
     hasHierarchy,
     dateInitCode: buildDateInitCode(hasDateFields, regularFields),
-    scriptAdditions: (formEnhancements.scriptAdditions || []).join('\n'),
+    scriptAdditions: (formEnhancements.scriptAdditions || []).join('\n')
+      + (fieldsToDisplay.some(isPersonRef) ? PERSON_PICKER_SCRIPT : ''),
     handleSubmitCode: buildHandleSubmitCode(hasDateFields, regularFields, useTabs)
   })
 

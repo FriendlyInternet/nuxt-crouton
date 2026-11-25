@@ -8,6 +8,90 @@
       "when": 1793012602690,
       "tag": "0000_empty_yellow_claw",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1793955340415,
+      "tag": "0001_email_log_provider_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1794067293448,
+      "tag": "0002_foamy_zarda",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1794070582243,
+      "tag": "0003_lean_silvermane",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1794486062566,
+      "tag": "0004_auth_rate_limit",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1794486210588,
+      "tag": "0005_verify_existing_users",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1794846022554,
+      "tag": "0006_futuristic_inhumans",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1794860592780,
+      "tag": "0007_strange_giant_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1794860605018,
+      "tag": "0008_products_per_location",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1795081102439,
+      "tag": "0009_drop_inventory_mode",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1795157791916,
+      "tag": "0010_warm_quasar",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1795511790916,
+      "tag": "0011_fantastic_blink",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1795541809965,
+      "tag": "0012_faithful_groot",
+      "breakpoints": true
     }
   ]
 }

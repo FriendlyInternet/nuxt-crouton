@@ -89,6 +89,7 @@ const appGroups = computed<NavigationMenuItem[]>(() => {
       const fullPath = buildAdminUrl(app.landingRoute.path)
       const isExactMatch = route.path === fullPath || route.path === `${fullPath}/`
       groups.push({
+        value: `app:${app.id}`,
         label: tLabel(app.name),
         icon: app.icon,
         to: fullPath,
@@ -119,6 +120,7 @@ const appGroups = computed<NavigationMenuItem[]>(() => {
     if (routeItems.length === 1) {
       const singleRoute = routeItems[0]!
       groups.push({
+        value: `app:${app.id}`,
         label: tLabel(app.name),
         icon: app.icon,
         to: singleRoute.to,
@@ -128,6 +130,7 @@ const appGroups = computed<NavigationMenuItem[]>(() => {
     } else {
       // Multi-item apps get a group header
       groups.push({
+        value: `app:${app.id}`,
         label: tLabel(app.name),
         icon: app.icon,
         defaultOpen: true,
@@ -161,6 +164,19 @@ const dashboardItem = computed<NavigationMenuItem | null>(() => {
   }
 })
 
+// Team pages from crouton-admin's one list — same as the team.vue tabs, only
+// pages this member can open (#4220). Called at setup, not inside the computed.
+const teamAdminPageList = useTeamAdminPages()
+
+// The Team group is only added once the sidebar is mounted in the browser. The
+// server can already know the member's rights while the browser's first render
+// does not yet, so drawing Team on the server made the two menus disagree; Vue
+// does not repair that, and the groups below Team (Bookings → Locations) were
+// left folded away (#4394). Both renders now leave Team out; it joins right
+// after mount, and `openGroups` below unfolds it.
+const isMounted = ref(false)
+onMounted(() => { isMounted.value = true })
+
 // Team group with sub-items (navigates to team section with horizontal tabs)
 const teamItem = computed<NavigationMenuItem | null>(() => {
   if (props.context === 'super') {
@@ -171,68 +187,17 @@ const teamItem = computed<NavigationMenuItem | null>(() => {
   const teamParam = teamSlugRef.value || teamIdRef.value || ''
   if (!teamParam) return null
 
-  const teamPath = `/admin/${teamParam}/team`
-  const translationsPath = `/admin/${teamParam}/translations`
+  if (!isMounted.value) return null
+
+  const children = toSidebarItems(teamAdminPageList.value, t, route.path)
+  if (children.length === 0) return null
+
   return {
+    value: 'team',
     label: t('navigation.team') || 'Team',
     icon: 'i-lucide-users',
     defaultOpen: true,
-    children: [
-      {
-        label: t('teams.teamSettings') || 'Settings',
-        icon: 'i-lucide-settings',
-        to: `${teamPath}/settings`,
-        active: route.path === `${teamPath}/settings` || route.path === `${teamPath}/settings/`
-      },
-      {
-        label: t('teams.members') || 'Members',
-        icon: 'i-lucide-users',
-        to: teamPath,
-        active: route.path === teamPath || route.path === `${teamPath}/`
-      },
-      {
-        label: t('teams.invitations') || 'Invitations',
-        icon: 'i-lucide-mail',
-        to: `${teamPath}/invitations`,
-        active: route.path === `${teamPath}/invitations` || route.path === `${teamPath}/invitations/`
-      },
-      {
-        label: t('teams.lookAndFeel') || 'Look and feel',
-        icon: 'i-lucide-palette',
-        to: `${teamPath}/look-and-feel`,
-        active: route.path === `${teamPath}/look-and-feel` || route.path === `${teamPath}/look-and-feel/`
-      },
-      {
-        label: t('teams.siteInfo.tab') || 'Site info',
-        icon: 'i-lucide-info',
-        to: `${teamPath}/site-info`,
-        active: route.path === `${teamPath}/site-info` || route.path === `${teamPath}/site-info/`
-      },
-      {
-        label: t('navigation.translations') || 'Translations',
-        icon: 'i-lucide-languages',
-        to: translationsPath,
-        active: route.path === translationsPath || route.path.startsWith(`${translationsPath}/`)
-      },
-      {
-        label: t('redirects.title') || 'Redirects',
-        icon: 'i-lucide-arrow-right-left',
-        to: `${teamPath}/redirects`,
-        active: route.path === `${teamPath}/redirects` || route.path === `${teamPath}/redirects/`
-      },
-      {
-        label: t('emailTemplates.title') || 'Email Templates',
-        icon: 'i-lucide-mail-open',
-        to: `${teamPath}/email-templates`,
-        active: route.path === `${teamPath}/email-templates` || route.path === `${teamPath}/email-templates/`
-      },
-      {
-        label: t('emailLogs.title') || 'Email Logs',
-        icon: 'i-lucide-mail-check',
-        to: `${teamPath}/email-logs`,
-        active: route.path === `${teamPath}/email-logs` || route.path === `${teamPath}/email-logs/`
-      }
-    ]
+    children
   }
 })
 
@@ -246,6 +211,7 @@ const collectionGroups = computed<NavigationMenuItem[]>(() => {
   const basePath = `/admin/${teamParam}/crouton`
 
   return collectionsByKind.value.map(group => ({
+    value: `collections:${group.kind}`,
     label: t(`navigation.${group.kind}`) || group.label,
     icon: group.icon,
     defaultOpen: group.kind === 'content',
@@ -334,6 +300,25 @@ const navItems = computed<NavigationMenuItem[][]>(() => {
 
   return [mainItems, bottomItems]
 })
+
+// Which groups are unfolded. Nuxt UI reads `defaultOpen` only once, when the
+// menu mounts, so a group that shows up later — the Team group once the
+// member's rights load (#4394) — or a menu that renders before its groups have
+// settled would leave a start-open group folded. So the sidebar holds the open
+// set itself: each group (by its fixed `value` above) opens the first time it
+// appears with `defaultOpen`, and after that the user's own fold/unfold wins.
+const openGroups = ref<string[]>([])
+const seenGroups = new Set<string>()
+watch(() => navItems.value[0]!, (items) => {
+  const added: string[] = []
+  for (const item of items) {
+    const value = item.value
+    if (typeof value !== 'string' || seenGroups.has(value)) continue
+    seenGroups.add(value)
+    if (item.defaultOpen) added.push(value)
+  }
+  if (added.length) openGroups.value = [...openGroups.value, ...added]
+}, { immediate: true })
 </script>
 
 <template>
@@ -378,6 +363,7 @@ const navItems = computed<NavigationMenuItem[][]>(() => {
 
     <template #default="{ collapsed }">
       <UNavigationMenu
+        v-model="openGroups"
         :collapsed="collapsed"
         :items="navItems[0]"
         orientation="vertical"

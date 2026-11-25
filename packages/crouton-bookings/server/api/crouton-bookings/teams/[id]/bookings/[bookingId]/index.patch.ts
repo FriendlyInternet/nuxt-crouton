@@ -1,19 +1,24 @@
 /**
- * Update a booking - allows any team member to update bookings
- * (not restricted to owner like the generated CRUD endpoint)
+ * Update a booking - the owner or a member with `bookings:manage` (#3135, #4108). Other members get 403.
  */
-import { eq, and } from 'drizzle-orm'
 import { z } from 'zod'
+import { eq, and } from 'drizzle-orm'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
-import { bookingsLocations } from '../../../../../../../collections/locations/server/database/schema'
+import { can } from '@fyit/crouton-auth/server/utils/team-auth'
+import { patchBookingGuarded } from '../../../../../../utils/booking-capacity'
 import { bookingsBookings } from '../../../../../../../collections/bookings/server/database/schema'
+import { bookingsLocations } from '../../../../../../../collections/locations/server/database/schema'
 
 const updateSchema = z.object({
   location: z.string().optional(),
   date: z.string().optional(),
-  slot: z.string().optional(),
+  slot: z.union([z.string(), z.array(z.string())]).optional(),
   group: z.string().nullable().optional(),
   status: z.enum(['pending', 'confirmed', 'cancelled']).optional(),
+  // Must be one the booking's location lists (#4044)
+  product: z.string().min(1).nullish(),
+  // Re-checked against the product's stock; 409 when it doesn't fit (#4112)
+  quantity: z.number().int().min(1).optional(),
 })
 
 export default defineEventHandler(async (event) => {
@@ -28,6 +33,15 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  const isAdmin = await can(team.id, user.id, 'bookings:manage', event)
+  if (!isAdmin) {
+    const [existing] = await db.select({ owner: bookingsBookings.owner }).from(bookingsBookings)
+      .where(and(eq(bookingsBookings.id as any, bookingId), eq(bookingsBookings.teamId as any, team.id)))
+    if (existing && existing.owner !== user.id) {
+      throw createError({ status: 403, statusText: 'Not your booking' })
+    }
+  }
+
   // Validate body
   const body = await readBody(event)
   const parsed = updateSchema.safeParse(body)
@@ -39,57 +53,19 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  // Check booking exists and belongs to this team
-  const [existing] = await db
-    .select()
-    .from(bookingsBookings)
-    .where(
-      and(
-        eq(bookingsBookings.id as any, bookingId),
-        eq(bookingsBookings.teamId as any, team.id),
-      ),
-    )
-
-  if (!existing) {
-    throw createError({
-      status: 404,
-      statusText: 'Booking not found',
-    })
-  }
-
   // A booking may only point at its own team's location (#3378)
   await assertRefsInTeam(db, team.id, [
     { field: 'location', table: bookingsLocations, value: parsed.data.location },
   ])
 
-  // Build update data
-  const updateData: Record<string, unknown> = {
-    updatedBy: user.id,
-    updatedAt: new Date(),
-  }
-
-  if (parsed.data.location !== undefined) {
-    updateData.location = parsed.data.location
-  }
-  if (parsed.data.date !== undefined) {
-    updateData.date = new Date(parsed.data.date)
-  }
-  if (parsed.data.slot !== undefined) {
-    updateData.slot = parsed.data.slot
-  }
-  if (parsed.data.group !== undefined) {
-    updateData.group = parsed.data.group
-  }
-  if (parsed.data.status !== undefined) {
-    updateData.status = parsed.data.status
-  }
-
-  // Update the booking
-  const [updated] = await db
-    .update(bookingsBookings)
-    .set(updateData as any)
-    .where(eq(bookingsBookings.id as any, bookingId))
-    .returning()
-
-  return updated
+  // Capacity is re-checked when the booking moves or comes back from cancelled (#3379)
+  const tz: string = (useRuntimeConfig(event) as any)?.croutonBookings?.timezone || 'Europe/Brussels'
+  return await patchBookingGuarded(db, {
+    teamId: team.id,
+    bookingId,
+    userId: user.id,
+    ownerId: isAdmin ? undefined : user.id,
+    tz,
+    patch: parsed.data,
+  })
 })

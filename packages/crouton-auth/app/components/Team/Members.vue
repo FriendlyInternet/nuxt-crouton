@@ -37,11 +37,18 @@ const {
   loadMembers,
   updateMemberRole,
   removeMember,
-  canManageMembers,
-  canInviteMembers,
   isOwner,
   loading: teamLoading
 } = useTeam()
+
+// Managing and inviting members is the `team:manage` action (#4105); the
+// owner-protection checks below stay role-based (they are about ownership).
+const canManageTeam = useCan('team:manage')
+const canManageMembers = canManageTeam
+const canInviteMembers = canManageTeam
+
+// The team's own roles (#4106), offered in the role picker after the base roles.
+const { roles: teamRoles, refresh: refreshTeamRoles } = useTeamRoles()
 
 const {
   sendPasswordReset,
@@ -71,12 +78,19 @@ const selectedMemberIds = ref<Set<string>>(new Set())
 // Load members on mount
 onMounted(async () => {
   await loadMembers()
+  if (canManageMembers.value) await refreshTeamRoles()
+})
+
+// Team roles load once the team:manage answer arrives (useCan is false while loading).
+watch(canManageMembers, async (allowed) => {
+  if (allowed) await refreshTeamRoles()
 })
 
 // Reload when team changes
 watch(currentTeam, async () => {
   await loadMembers()
   selectedMemberIds.value.clear()
+  if (canManageMembers.value) await refreshTeamRoles()
 })
 
 // Toggle selection for a single member
@@ -233,6 +247,9 @@ function getMemberActions(member: Member | MemberWithUser) {
   if (isOwner.value && !isSelf) {
     roleItems.push({ label: t('teams.owner'), icon: 'i-lucide-crown', disabled: member.role === 'owner', onSelect: () => handleRoleChange(member.id, 'owner') })
   }
+  for (const teamRole of teamRoles.value) {
+    roleItems.push({ label: teamRole.role, icon: 'i-lucide-badge-check', disabled: member.role === teamRole.role, onSelect: () => handleRoleChange(member.id, teamRole.role) })
+  }
   items.push(roleItems)
 
   // Admin actions group
@@ -269,12 +286,14 @@ function getMemberActions(member: Member | MemberWithUser) {
 
 // Sort members: owners first, then admins, then members
 const sortedMembers = computed(() => {
-  const roleOrder: Record<MemberRole, number> = {
+  // A team's own role (#4106) sorts between admin and member.
+  const roleOrder: Record<string, number> = {
     owner: 0,
     admin: 1,
     member: 2
   }
-  return [...members.value].sort((a, b) => roleOrder[a.role] - roleOrder[b.role])
+  const rank = (role: string) => roleOrder[role] ?? 1.5
+  return [...members.value].sort((a, b) => rank(a.role) - rank(b.role))
 })
 
 // Table columns
@@ -352,11 +371,12 @@ const columns = computed<TableColumn<MemberRow>[]>(() => {
       id: 'role',
       header: t('teams.role'),
       cell: ({ row }) => {
-        const color = ({
-          owner: 'primary' as const,
-          admin: 'info' as const,
-          member: 'neutral' as const
-        })[row.original.role]
+        const colors: Record<string, 'primary' | 'info' | 'neutral'> = {
+          owner: 'primary',
+          admin: 'info',
+          member: 'neutral'
+        }
+        const color = colors[row.original.role] ?? 'neutral'
         return h(UBadge, { color, variant: 'subtle', size: 'xs', class: 'capitalize' }, () => row.original.role)
       }
     }

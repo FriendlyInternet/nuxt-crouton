@@ -1,0 +1,79 @@
+# #3666 fixture: trimmed raw log of job 125887278738 (PR #3237, Node checks); ESC rendered as ^[
+2026-11-03T11:23:57.5353968Z   ...
+2026-11-03T11:23:57.5354360Z # Subtest: go: a later not ok does not merge
+2026-11-03T11:23:57.5354927Z ok 336 - go: a later not ok does not merge
+2026-11-03T11:23:57.5355387Z   ---
+2026-11-03T11:23:57.5355708Z   duration_ms: 0.152685
+2026-11-03T11:23:57.5356076Z   type: 'test'
+2026-11-03T11:23:57.5356387Z   ...
+2026-11-03T11:23:57.5356868Z # Subtest: go: no approval ignores with the reason
+2026-11-03T11:23:57.5357537Z ok 337 - go: no approval ignores with the reason
+2026-11-03T11:23:57.5358029Z   ---
+2026-11-03T11:23:57.5358339Z   duration_ms: 0.182431
+2026-11-03T11:23:57.5358693Z   type: 'test'
+2026-11-03T11:23:57.5359008Z   ...
+2026-11-03T11:23:57.5359688Z # Subtest: go: still ignores a draft / non-epic head
+2026-11-03T11:23:57.5360371Z ok 338 - go: still ignores a draft / non-epic head
+2026-11-03T11:23:57.5360851Z   ---
+2026-11-03T11:23:57.5361156Z   duration_ms: 0.106489
+2026-11-03T11:23:57.5361510Z   type: 'test'
+2026-11-03T11:23:57.5361832Z   ...
+2026-11-03T11:23:57.5362535Z # Subtest: approve-epic says `ok`, never `lgtm`, and never enables GitHub auto-merge
+2026-11-03T11:23:57.5363651Z not ok 339 - approve-epic says `ok`, never `lgtm`, and never enables GitHub auto-merge
+2026-11-03T11:23:57.5364320Z   ---
+2026-11-03T11:23:57.5364629Z   duration_ms: 4.919838
+2026-11-03T11:23:57.5364990Z   type: 'test'
+2026-11-03T11:23:57.5365745Z   location: '/home/runner/work/nuxt-crouton/nuxt-crouton/scripts/epic-ok-wiring.test.mjs:9:1'
+2026-11-03T11:23:57.5366579Z   failureType: 'testCodeFailure'
+2026-11-03T11:23:57.5367000Z   error: |-
+2026-11-03T11:23:57.5367768Z     The input was expected to not match the regular expression /enablePullRequestAutoMerge/. Input:
+2026-11-03T11:23:57.5368554Z     
+2026-11-03T11:23:57.5368853Z     '\n' +
+2026-11-03T11:23:57.5369576Z       '  approve-epic:\n' +
+2026-11-03T11:23:57.5370017Z       '    needs: route\n' +
+2026-11-03T11:23:57.5370570Z       "    if: needs.route.outputs.kind == 'approve-epic'\n" +
+2026-11-03T11:23:57.5371162Z       '    runs-on: ubuntu-latest\n' +
+2026-11-03T11:23:57.5371659Z       '    timeout-minutes: 10\n' +
+2026-11-03T11:23:57.5372143Z       '    permissions:\n' +
+2026-11-03T11:23:57.5372595Z       '      contents: read\n' +
+2026-11-03T11:23:57.5373086Z       '      pull-requests: read\n' +
+2026-11-03T11:23:57.5373564Z       '      issues: read\n' +
+2026-11-03T11:23:57.5374212Z       '      # #3105: start the CI fix-bot (workflow_dispatch) when the PR is red.\n' +
+2026-11-03T11:23:57.5374979Z       '      actions: write\n' +
+…trimmed…
+2026-11-03T11:24:00.7555052Z # todo 0
+2026-11-03T11:24:00.7555433Z # duration_ms 4522.662684
+2026-11-03T11:24:00.7602038Z ##[error]Process completed with exit code 1.
+2026-11-03T11:24:00.7763076Z Post job cleanup.
+2026-11-03T11:24:00.8667904Z [command]/usr/bin/git version
+…trimmed…
+2026-11-03T11:24:00.8757306Z Temporarily overriding HOME='/home/runner/work/_temp/a3d0ceac-d9d2-49fa-b4e6-2059ad16f401' before making global git config changes
+2026-11-03T11:24:00.8758741Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-03T11:24:00.8763130Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/nuxt-crouton/nuxt-crouton
+2026-11-03T11:24:00.8800287Z Removing SSH command configuration
+2026-11-03T11:24:00.8807063Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-03T11:24:00.8854817Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-03T11:24:00.9150352Z Removing HTTP extra header
+2026-11-03T11:24:00.9160770Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-03T11:24:00.9215560Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-03T11:24:00.9610563Z Removing includeIf entries pointing to credentials config files
+2026-11-03T11:24:00.9611236Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-03T11:24:00.9651907Z includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git.path
+2026-11-03T11:24:00.9659687Z includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git/worktrees/*.path
+2026-11-03T11:24:00.9661651Z includeif.gitdir:/github/workspace/.git.path
+2026-11-03T11:24:00.9662788Z includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-11-03T11:24:00.9673583Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git.path
+2026-11-03T11:24:00.9724315Z /home/runner/work/_temp/git-credentials-24d318ea-650e-4661-a749-8b3fb85f0c72.config
+2026-11-03T11:24:00.9742788Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git.path \/home\/runner\/work\/_temp\/git\-credentials\-24d318ea\-650e\-4661\-a749\-8b3fb85f0c72\.config
+2026-11-03T11:24:00.9803562Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git/worktrees/*.path
+2026-11-03T11:24:00.9843347Z /home/runner/work/_temp/git-credentials-24d318ea-650e-4661-a749-8b3fb85f0c72.config
+2026-11-03T11:24:00.9856737Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/nuxt-crouton/nuxt-crouton/.git/worktrees/*.path \/home\/runner\/work\/_temp\/git\-credentials\-24d318ea\-650e\-4661\-a749\-8b3fb85f0c72\.config
+2026-11-03T11:24:00.9902543Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git.path
+2026-11-03T11:24:00.9938256Z /github/runner_temp/git-credentials-24d318ea-650e-4661-a749-8b3fb85f0c72.config
+2026-11-03T11:24:00.9947271Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git.path \/github\/runner_temp\/git\-credentials\-24d318ea\-650e\-4661\-a749\-8b3fb85f0c72\.config
+2026-11-03T11:24:00.9993150Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-11-03T11:24:01.0028900Z /github/runner_temp/git-credentials-24d318ea-650e-4661-a749-8b3fb85f0c72.config
+2026-11-03T11:24:01.0051479Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git/worktrees/*.path \/github\/runner_temp\/git\-credentials\-24d318ea\-650e\-4661\-a749\-8b3fb85f0c72\.config
+2026-11-03T11:24:01.0085218Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-03T11:24:01.0354516Z Removing credentials config '/home/runner/work/_temp/git-credentials-24d318ea-650e-4661-a749-8b3fb85f0c72.config'
+2026-11-03T11:24:01.0521928Z Cleaning up orphan processes
