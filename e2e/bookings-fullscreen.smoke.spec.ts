@@ -10,9 +10,9 @@
  * ends in a single labelled close. Month view leaves room for the booking list.
  * Desktop keeps the inline calendar.
  *
- * #4516 — the top row is the calendar's month label plus the close X; a chevron button
- * under the calendar folds month ↔ week; tapping the label selects today; the
- * location tab row has one full-width line with the green underline on it.
+ * #4516 — the location tab row is the top row; under it the calendar's month label row
+ * (toggle · label · close X), where the toggle folds month ↔ week; tapping the label selects today; the
+ * fixed block keeps one full-width line, at its bottom under the calendar.
  *
  * Fixture-scoped: only the `with-bookings` fixture has the admin bookings page.
  */
@@ -232,7 +232,16 @@ test.describe(FIXTURE === 'with-bookings' ? 'bookings full screen' : 'bookings f
     expect(Math.abs(centreY(toggleBox) - centreY(labelBox))).toBeLessThanOrEqual(4)
     expect(toggleBox.x + toggleBox.width).toBeLessThanOrEqual(labelBox.x)
     expect(Math.abs(toggleBox.height - closeBox.height)).toBeLessThanOrEqual(1)
-    expect(labelBox.y - panelBox.y).toBeLessThanOrEqual(16)
+    // the location tab row (several locations) is the very top row, the label row under it (#4516)
+    const tabRow = dialog.locator('.booking-panel > :first-child').getByRole('tablist')
+    if (await tabRow.count() > 0) {
+      const tabBox = (await tabRow.first().boundingBox())!
+      expect(tabBox.y - panelBox.y).toBeLessThanOrEqual(16)
+      expect(labelBox.y).toBeGreaterThanOrEqual(tabBox.y + tabBox.height - 1)
+    }
+    else {
+      expect(labelBox.y - panelBox.y).toBeLessThanOrEqual(16)
+    }
 
     const scroll = dialog.locator('.booking-panel > :nth-child(2)')
     const positions = async () => ({
@@ -294,7 +303,8 @@ test.describe(FIXTURE === 'with-bookings' ? 'bookings full screen' : 'bookings f
     await expect(todayInMonth.first()).toHaveClass(/bg-elevated/)
   })
 
-  // covers: T11 — #4516 option A: the selected tab's underline sits on the one full-width line
+  // covers: T11 — #4516 option A: the tab row draws no line of its own; since the tab row moved to the
+  // top (owner, 25 Nov), the one divider sits under the calendar and the underline at the tab row's bottom
   test('phone: the selected location keeps its green underline on the one line', async ({ page, baseURL }) => {
     await ensureBookingLocations(page, baseURL, 3)
     await page.setViewportSize({ width: 390, height: 844 })
@@ -310,22 +320,20 @@ test.describe(FIXTURE === 'with-bookings' ? 'bookings full screen' : 'bookings f
       const ind = list.querySelector('[data-slot="indicator"]')!
       const r = ind.getBoundingClientRect()
       const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
-      const fixed = document.querySelector('[role=dialog] .booking-panel > :first-child')!
-      const fb = fixed.getBoundingClientRect()
-      const fixedBorder = parseFloat(getComputedStyle(fixed).borderBottomWidth)
+      const lb = list.getBoundingClientRect()
       return {
         scrollHeight: list.scrollHeight,
         clientHeight: list.clientHeight,
         border: getComputedStyle(list).borderBottomWidth,
         hitIsIndicator: hit === ind || ind.contains(hit),
         indBottom: r.bottom,
-        lineTop: fb.bottom - fixedBorder,
+        rowBottom: lb.bottom,
       }
     })
     expect(probe.scrollHeight).toBe(probe.clientHeight)
     expect(probe.border).toBe('0px')
     expect(probe.hitIsIndicator).toBe(true)
-    expect(Math.abs(probe.indBottom - probe.lineTop)).toBeLessThanOrEqual(1)
+    expect(Math.abs(probe.indBottom - probe.rowBottom)).toBeLessThanOrEqual(1)
   })
 
   test('desktop: no full-screen button, inline week navigation still works', async ({ page, baseURL }) => {

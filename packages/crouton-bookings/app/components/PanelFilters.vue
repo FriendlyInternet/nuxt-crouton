@@ -84,7 +84,7 @@ const settingsItems = computed(() => [
       </UButton>
     </div>
 
-    <!-- Location tab row on composed pages; the Panel renders its own under the calendar (#4471) -->
+    <!-- Location tab row on composed pages; the Panel renders its own above the calendar (#4471, #4516) -->
     <CroutonBookingsLocationTabs
       v-if="!viewToggles && locations.length > 0"
       :locations="locations"

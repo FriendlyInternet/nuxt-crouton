@@ -1,8 +1,10 @@
 /**
- * #4516 — the panel's top row is the calendar's own month/week label row, with the
- * full-screen close (`#toolbar-end`) at its right end and the month ↔ week toggle
- * at its left end (`#header-start`); no row under the calendar. Reads the real .vue templates (the SFCs need the Nuxt UI runtime to
- * mount), same style as location-tabs-template.test.ts.
+ * #4516 — the panel's top row is the location tab row; under it the calendar's own
+ * month/week label row, with the full-screen close (`#toolbar-end`) at its right end
+ * and the month ↔ week toggle at its left end (`#header-start`); no row under the
+ * calendar, whose bottom is the fixed block's one divider. Reads the real .vue
+ * templates (the SFCs need the Nuxt UI runtime to mount), same style as
+ * location-tabs-template.test.ts.
  */
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
@@ -78,6 +80,19 @@ describe('panel header row + fold handle (#4516)', () => {
     // exactly one toggle in the panel, so nothing is left under the calendar
     expect(find(panel.ast, 'CroutonBookingsCalendarFoldHandle')).toHaveLength(1)
     expect(panel.template).not.toMatch(/Drag\/tap handle/)
+  })
+
+  it('the fixed block runs: location tabs → calendar (label row) → the one divider', () => {
+    const [root] = elements(panel.ast)
+    const [block] = elements(root)
+    expect(block.props.find((p: Node) => p.name === 'class')?.value?.content).toMatch(/^shrink-0 .*border-b border-default/)
+    const rows = elements(block)
+    // first row holds the tabs (v-if: nothing with no locations; LocationTabs itself hides with one)
+    expect(find(rows[0], 'CroutonBookingsLocationTabs')).toHaveLength(1)
+    expect(directive(rows[0], 'if')).toBe('resolvedLocations.length > 0')
+    // last row holds the calendar, so nothing sits between it and the divider
+    expect(find(rows[rows.length - 1], 'CroutonBookingsCalendar')).toHaveLength(1)
+    expect(find(block, 'CroutonBookingsLocationTabs')).toHaveLength(1)
   })
 
   it('the handle label exists in every locale', () => {

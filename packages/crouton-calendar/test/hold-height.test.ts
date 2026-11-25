@@ -233,6 +233,23 @@ describe('Month strip is never shorter than its measured height (#3924)', () => 
     wrapper.unmount()
   })
 
+  it('a holdKey change re-measures from scratch, so fewer indicator rows shrink the strip (#4516)', async () => {
+    const { wrapper, strip } = mountMonth(new Date(2026, 10, 15))
+    await wrapper.setProps({ holdKey: 3 })
+    expect(strip.style.minHeight).toBe('304px')
+
+    // a filter hides two of three locations: the cells really get shorter
+    natural = 220
+    await wrapper.setProps({ holdKey: 1 })
+    expect(strip.style.minHeight).toBe('220px')
+
+    // without a holdKey change a shrink is still held (the #3924 swipe guard)
+    natural = 150
+    resize()
+    expect(strip.style.minHeight).toBe('220px')
+    wrapper.unmount()
+  })
+
   it('unmounting disconnects the observer and does not throw', () => {
     const { wrapper } = mountMonth(new Date(2026, 10, 15))
     expect(observers.size).toBe(1)
@@ -264,6 +281,22 @@ describe('Week strip is never shorter than its measured height (#3924)', () => {
     vi.advanceTimersByTime(2000)
     resize()
     expect(strip.style.minHeight).toBe('304px')
+    wrapper.unmount()
+  })
+
+  it('a holdKey change re-measures from scratch, so fewer indicator rows shrink the strip (#4516)', async () => {
+    const wrapper = mount(Week, {
+      attachTo: document.body,
+      props: { 'date': new Date(2026, 10, 11), 'onUpdate:date': () => {}, 'holdKey': 3 },
+      slots: { day: () => h(Probe) },
+      global: { stubs },
+    })
+    const strip = stripEl()!
+    expect(strip.style.minHeight).toBe('304px')
+
+    natural = 120
+    await wrapper.setProps({ holdKey: 1 })
+    expect(strip.style.minHeight).toBe('120px')
     wrapper.unmount()
   })
 })

@@ -79,11 +79,17 @@ describe('CroutonBookingsLocationTabs (#4471)', () => {
   })
 
   // covers: T4
-  it('(d) Panel renders it under the calendar, above the scroll area, with "All"', () => {
+  it('(d) Panel renders it as the first row of the fixed block, above the calendar, with "All" (#4516)', () => {
     const src = panel.template
     const at = src.indexOf('<CroutonBookingsLocationTabs')
-    expect(at).toBeGreaterThan(src.indexOf('<CroutonBookingsCalendar'))
+    expect(at).toBeGreaterThan(0)
+    expect(at).toBeLessThan(src.indexOf('<CroutonBookingsCalendar'))
     expect(at).toBeLessThan(src.indexOf('Scroll area'))
+    // its wrapper is the fixed block's first child
+    const { anc } = find(panel.ast, 'CroutonBookingsLocationTabs')[0]!
+    const block = anc[anc.length - 2]
+    expect(String(block.props.find((p: Node) => p.name === 'class')?.value?.content)).toMatch(/^shrink-0 .*border-b/)
+    expect(block.children.filter((c: Node) => c.type === 1)[0]).toBe(anc[anc.length - 1])
     const row = find(panel.ast, 'CroutonBookingsLocationTabs')
     expect(row).toHaveLength(1)
     expect(hasProp(row[0]!.node, 'show-all')).toBe(true)

@@ -287,8 +287,20 @@ defineExpose({
 
 <template>
   <div class="booking-panel flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-default bg-default">
-      <!-- Fixed on top: filters + calendar. Only the list below scrolls. -->
+      <!-- Fixed on top: location tabs, then the calendar; its border-b is the one line under it. Only the list below scrolls. -->
       <div class="shrink-0 flex flex-col gap-2 border-b border-default">
+        <!-- Location tabs: the very top row, above the calendar's label row (#4516); stays when the calendar folds (#4471); with one location it renders nothing -->
+        <div v-if="resolvedLocations.length > 0" class="px-2">
+          <CroutonBookingsLocationTabs
+            :locations="resolvedLocations"
+            :model-value="tabValueFor(filterState.locations)"
+            show-all
+            :can-add="effectiveIsAdmin"
+            @update:model-value="filterState.locations = locationsFor($event)"
+            @add="onAddLocation"
+          />
+        </div>
+
         <!-- Admin "no locations yet" prompt; renders nothing otherwise, so no empty band (#4516) -->
         <div v-if="resolvedLocations.length === 0 && effectiveIsAdmin" class="px-2 pt-2 pb-1.5 md:px-4 md:pt-3 md:pb-2">
           <CroutonBookingsPanelFilters
@@ -300,8 +312,8 @@ defineExpose({
           />
         </div>
 
-        <!-- Calendar: its label row is the panel's top row; the month ↔ week toggle sits at its left end, #toolbar-end (the close X) at its right end (#4516) -->
-        <div class="px-2">
+        <!-- Calendar: its label row sits under the location tabs; the month ↔ week toggle at its left end, #toolbar-end (the close X) at its right end (#4516) -->
+        <div class="px-2 pb-2">
           <CroutonBookingsCalendar
             v-model:filters="filterState"
             v-model:date="shownDate"
@@ -325,18 +337,6 @@ defineExpose({
               <slot name="toolbar-end" />
             </template>
           </CroutonBookingsCalendar>
-        </div>
-
-        <!-- Location tabs: one row under the calendar, stays when it folds (#4471); the block's own border-b is the one line under it -->
-        <div v-if="resolvedLocations.length > 0" class="px-2">
-          <CroutonBookingsLocationTabs
-            :locations="resolvedLocations"
-            :model-value="tabValueFor(filterState.locations)"
-            show-all
-            :can-add="effectiveIsAdmin"
-            @update:model-value="filterState.locations = locationsFor($event)"
-            @add="onAddLocation"
-          />
         </div>
       </div>
 
