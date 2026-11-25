@@ -2,7 +2,7 @@
  * #3651 — the `bookings` layout store: one copy per source, scope comes from the
  * source's options, and the feeds map the store to the List / Filters /
  * Locations blocks. `useBookingsList` is mocked (it needs Nuxt's useFetch);
- * `useNotify` / `useT` / `useTeam` / `useCrouton` / `useBookingCart` are Nuxt
+ * `useNotify` / `useT` / `useTeam` / `useCan` / `useCrouton` / `useBookingCart` are Nuxt
  * auto-imports, stubbed on globalThis as in `team-keyed-fetch.test.ts`. The
  * real `createBookingsStore` runs.
  */
@@ -49,6 +49,7 @@ beforeEach(() => {
   g.useNotify = () => ({ warning: (m: string) => warnings.push(m) })
   g.useT = () => ({ t: (k: string) => k })
   g.useTeam = () => ({ isAdmin: ref(true) })
+  g.useCan = () => ref(true) // #4105 — `bookings:manage` permission
   g.useCrouton = () => ({ open: (...args: unknown[]) => opened.push(args) })
   g.useBookingCart = () => ({ lastBookingCreatedAt })
 })

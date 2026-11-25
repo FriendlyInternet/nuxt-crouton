@@ -48,7 +48,8 @@ export const bookingsLayoutStore: CroutonLayoutStoreDefinition<BookingsLayoutSto
 
     const notify = useNotify()
     const { t } = useT()
-    const { isAdmin } = useTeam()
+    // Managing locations is the `bookings:manage` site permission (#4105)
+    const isAdmin = useCan('bookings:manage')
     const { open: openCroutonForm } = useCrouton()
 
     function newBooking(date: Date) {
