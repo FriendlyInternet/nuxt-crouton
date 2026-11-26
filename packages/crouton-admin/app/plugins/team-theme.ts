@@ -4,57 +4,32 @@
  * Fetches the team theme during SSR so the HTML renders with the correct colors.
  * Uses useState to transfer the theme data to the client (no double fetch).
  * On client hydration, applies the already-fetched theme immediately.
+ *
+ * Late loads (a team appears or changes on the client) belong to useTeamTheme();
+ * with no team at boot the plugin still sets that up on the client via
+ * useTeamFavicon() (#4563).
  */
 import type { TeamThemeSettings } from '../composables/useTeamTheme'
-import { applyThemeSettings } from '../composables/useTeamTheme'
-import { pickThemeOverride, shouldClearOverride } from '../utils/theme-override'
-
-// Storage + state keys owned by @fyit/crouton-themes useThemeSwitcher (its
-// STORAGE_KEY + the 'crouton-theme' useState). Named here so the coupling is
-// explicit and greppable.
-const OVERRIDE_KEY = 'nuxt-crouton-theme'
-
-/** The preset useThemeSwitcher's 'crouton-theme' state shows as active
- *  ('default' for a custom/absent preset) — keeps the pill in sync and makes its
- *  onMounted restore a no-op (guard: storedTheme !== currentTheme). */
-function activePresetName(theme: TeamThemeSettings): string {
-  const preset = theme.preset
-  return preset && preset !== 'custom' ? preset : 'default'
-}
-
-/**
- * Resolve the theme to actually apply (#1596): the team theme is the BASE; a
- * user's saved pick (the theme pill → useThemeSwitcher localStorage) WINS on
- * reload when the team allows it — without this the plugin re-applied the team
- * theme every load and stomped the override. Client-only — SSR paints the team
- * theme and the override settles just after hydration (one frame, like any
- * localStorage theme restore). ⚠️ No override stored ⇒ returns `teamTheme`
- * unchanged, byte-for-byte the previous behaviour.
- */
-function resolveEffectiveTheme(teamTheme: TeamThemeSettings, allowUserThemes: boolean): TeamThemeSettings {
-  if (!import.meta.client) return teamTheme
-  const stored = localStorage.getItem(OVERRIDE_KEY)
-  // Only themes this app ships (their variant is built) may apply — localStorage
-  // is per origin, so a pick from another app on the same host leaks in (#2257).
-  const registered = (useAppConfig() as any)?.ui?.button?.variants?.variant
-  if (shouldClearOverride(stored, allowUserThemes, registered)) localStorage.setItem(OVERRIDE_KEY, 'default')
-  const override = pickThemeOverride(stored, allowUserThemes, registered)
-  const effective = override ? { ...teamTheme, preset: override } : teamTheme
-  useState<string>('crouton-theme').value = activePresetName(effective)
-  return effective
-}
+import { applyThemeSettings, resolveEffectiveTheme } from '../composables/useTeamTheme'
 
 export default defineNuxtPlugin({
   name: 'team-theme',
   enforce: 'post',
   async setup() {
     const { teamId } = useTeamContext()
-    if (!teamId.value) return
+    if (!teamId.value) {
+      // Sets up the app-wide useTeamTheme() whose watch(teamId) loads the theme
+      // once a team appears (e.g. after a one-tap sign-in) (#4563).
+      if (!import.meta.server) useTeamFavicon()
+      return
+    }
 
     // Shared state — SSR result is serialized and hydrated on client
     const themeState = useState<TeamThemeSettings>('team-theme-data', () => ({}))
     // Flag prevents re-fetching on client when SSR already populated the state
     const themeFetched = useState<boolean>('team-theme-fetched', () => false)
+    // Which team the data belongs to — the composable loads per team (#4563)
+    const loadedFor = useState<string | null>('team-theme-team-id', () => null)
 
     if (!themeFetched.value) {
       try {
@@ -67,6 +42,7 @@ export default defineNuxtPlugin({
         // Theme fetch failed, use defaults
       }
       themeFetched.value = true
+      loadedFor.value = teamId.value
     }
 
     // Expose the allowUserThemes flag so crouton-auth components can read it
