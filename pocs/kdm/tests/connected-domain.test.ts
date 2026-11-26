@@ -1,5 +1,5 @@
-// T2 (#4559) — the committed config connects kasper.pmcp.dev as the kdm team's domain and
-// keeps kdm.pmcp.dev as the app's own address. Reads the real wrangler.jsonc and the
+// T1 (#4569) — the committed config keeps staging on kdm.pmcp.dev only, the app's own address;
+// no client domain is connected on staging. Reads the real wrangler.jsonc and the
 // evaluated nuxt.config.ts (the resolver reads runtimeConfig.public.croutonPages).
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -18,15 +18,14 @@ beforeAll(async () => {
   config = createRequire(import.meta.url)('../nuxt.config.ts').default
 })
 
-describe('kdm — connected domain (#4559)', () => {
-  it('staging serves both kdm.pmcp.dev and kasper.pmcp.dev as custom domains', () => {
+describe('kdm — staging address (#4569)', () => {
+  // covers: T1
+  it('staging routes list only kdm.pmcp.dev', () => {
     const routes = jsonc('wrangler.jsonc').env.staging.routes as Array<{ pattern: string, custom_domain?: boolean }>
-    for (const pattern of ['kdm.pmcp.dev', 'kasper.pmcp.dev']) {
-      expect(routes).toContainEqual({ pattern, custom_domain: true })
-    }
+    expect(routes).toEqual([{ pattern: 'kdm.pmcp.dev', custom_domain: true }])
   })
 
-  it('lists only kdm.pmcp.dev as the app\'s own address, so kasper.pmcp.dev stays a team domain', () => {
+  it('lists only kdm.pmcp.dev as the app\'s own address, with plain URLs', () => {
     const pages = config.runtimeConfig.public.croutonPages
     expect(pages.appDomains).toEqual(['kdm.pmcp.dev'])
     expect(pages.hideLocaleInUrl).toBe(true)

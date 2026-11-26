@@ -32,8 +32,7 @@
   "env": {
     "staging": {
       "routes": [
-        { "pattern": "kdm.pmcp.dev", "custom_domain": true },
-        { "pattern": "kasper.pmcp.dev", "custom_domain": true }
+        { "pattern": "kdm.pmcp.dev", "custom_domain": true }
       ],
       "d1_databases": [
         {
