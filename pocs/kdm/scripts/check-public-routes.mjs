@@ -7,7 +7,7 @@
 //   node pocs/kdm/scripts/check-public-routes.mjs <app address> [<connected domain>]
 //
 // Team `kdm` has no demo page: migration 0001 keeps the seed's `welcome` ("Welkom") out (#4559).
-// With a second address (the connected domain, e.g. https://kasper.pmcp.dev), cases 9a–9f
+// With a second address (the connected domain, e.g. https://<the client's domain>), cases 9a–9f
 // check that it answers like the team's site on the app address. Cases 7a–7c (#4493) check that
 // Claude's sign-in door at /mcp is shut to unsigned requests. Cases 5, 6 and 8 need a browser/login:
 // see check-browser-cases.mjs. Prints one line per case; exits 1 on any failure.
