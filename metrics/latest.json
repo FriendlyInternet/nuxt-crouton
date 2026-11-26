@@ -1,6 +1,6 @@
 {
-  "as_of": "2026-11-25T20:20:17Z",
-  "data_commit": "6b0d9509b0773f5fbb3fe85b8d04d32a3d01e95e",
+  "as_of": "2026-11-26T00:20:15Z",
+  "data_commit": "d432d6957d78a180e09fca7531bb1f09a6b15df6",
   "weeks": {
     "2026-W46": {
       "jobs": {
@@ -4374,7 +4374,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 824
+          "runs": 827
         },
         "build-review.yml/Record run outcome": {
           "failed": 0,
@@ -4386,7 +4386,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 138
+          "runs": 139
         },
         "build-review.yml/Release parked tickets": {
           "failed": 0,
@@ -4409,8 +4409,8 @@
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.029,
-          "runs": 138
+          "rate": 0.0288,
+          "runs": 139
         },
         "ci.yml/Actionlint workflows": {
           "failed": 0,
@@ -5118,7 +5118,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 311
+          "runs": 312
         },
         "housekeeping.yml/digest": {
           "failed": 0,
@@ -5154,7 +5154,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 142
+          "runs": 144
         },
         "loop-station-inventory.yml/inventory": {
           "failed": 0,
@@ -5214,7 +5214,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 94
+          "runs": 95
         },
         "on-comment.yml/approve-draft": {
           "failed": 0,
@@ -5298,7 +5298,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 94
+          "runs": 95
         },
         "on-comment.yml/receipt": {
           "failed": 0,
@@ -5465,8 +5465,8 @@
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0179,
-          "runs": 168
+          "rate": 0.0178,
+          "runs": 169
         },
         "on-issue-close.yml/strip-status": {
           "failed": 0,
@@ -5898,7 +5898,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 569
+          "runs": 572
         },
         "status.yml/pr-comment": {
           "failed": 0,
@@ -5910,7 +5910,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 1075
+          "runs": 1077
         },
         "sync-changelogs.yml/sync": {
           "failed": 0,
@@ -5946,7 +5946,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 55
+          "runs": 59
         },
         "ticket-review.yml/review": {
           "failed": 2,
@@ -5957,8 +5957,8 @@
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.0364,
-          "runs": 55
+          "rate": 0.0339,
+          "runs": 59
         },
         "ticket-revise.yml/Record run outcome": {
           "failed": 0,
@@ -5970,7 +5970,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 18
+          "runs": 19
         },
         "ticket-revise.yml/revise": {
           "failed": 0,
@@ -5982,7 +5982,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 18
+          "runs": 19
         },
         "verify-fix-evidence.yml/verify": {
           "failed": 0,
@@ -5994,7 +5994,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 187
+          "runs": 190
         },
         "warn-closes-blocked.yml/warn": {
           "failed": 0,
@@ -6066,7 +6066,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 273
+          "runs": 274
         },
         "work-issue-pidev.yml/Release parked tickets": {
           "failed": 0,
@@ -6089,20 +6089,20 @@
           "green_on_rerun": 0,
           "green_same_sha": 0,
           "never_green": 0,
-          "rate": 0.1365,
-          "runs": 271
+          "rate": 0.136,
+          "runs": 272
         }
       },
       "jobs_coverage": {
-        "eligible_runs": 6941,
-        "runs_with_jobs": 6941
+        "eligible_runs": 6964,
+        "runs_with_jobs": 6964
       },
       "lines": {
         "building": {
           "failed": 140,
-          "runs": 1826,
+          "runs": 1828,
           "schedule_total": 0,
-          "workflow_rate": 0.0767
+          "workflow_rate": 0.0766
         },
         "deploys": {
           "failed": 15,
@@ -6112,19 +6112,19 @@
         },
         "fixing": {
           "failed": 2,
-          "runs": 234,
+          "runs": 237,
           "schedule_total": 0,
-          "workflow_rate": 0.0085
+          "workflow_rate": 0.0084
         },
         "merging": {
           "failed": 0,
-          "runs": 2719,
+          "runs": 2728,
           "schedule_total": 0,
           "workflow_rate": 0
         },
         "planning": {
           "failed": 2,
-          "runs": 297,
+          "runs": 298,
           "schedule_total": 0,
           "workflow_rate": 0.0067
         },
@@ -6136,9 +6136,9 @@
         },
         "tickets": {
           "failed": 5,
-          "runs": 518,
+          "runs": 526,
           "schedule_total": 0,
-          "workflow_rate": 0.0097
+          "workflow_rate": 0.0095
         },
         "unmapped": {
           "failed": 0,
@@ -6152,12 +6152,12 @@
         "automerge-epic-subpr.yml": {
           "failed": 0,
           "rate": 0,
-          "runs": 824
+          "runs": 827
         },
         "build-review.yml": {
           "failed": 4,
-          "rate": 0.029,
-          "runs": 138
+          "rate": 0.0288,
+          "runs": 139
         },
         "ci.yml": {
           "failed": 39,
@@ -6212,7 +6212,7 @@
         "handoff-sweep.yml": {
           "failed": 0,
           "rate": 0,
-          "runs": 311
+          "runs": 312
         },
         "housekeeping.yml": {
           "failed": 0,
@@ -6227,7 +6227,7 @@
         "label-router.yml": {
           "failed": 0,
           "rate": 0,
-          "runs": 142
+          "runs": 144
         },
         "loop-station-inventory.yml": {
           "failed": 0,
@@ -6246,13 +6246,13 @@
         },
         "on-comment.yml": {
           "failed": 2,
-          "rate": 0.0074,
-          "runs": 272
+          "rate": 0.0073,
+          "runs": 273
         },
         "on-issue-close.yml": {
           "failed": 3,
-          "rate": 0.0179,
-          "runs": 168
+          "rate": 0.0178,
+          "runs": 169
         },
         "on-pr-close.yml": {
           "failed": 0,
@@ -6342,7 +6342,7 @@
         "status.yml": {
           "failed": 0,
           "rate": 0,
-          "runs": 1487
+          "runs": 1492
         },
         "sync-changelogs.yml": {
           "failed": 0,
@@ -6356,18 +6356,18 @@
         },
         "ticket-review.yml": {
           "failed": 2,
-          "rate": 0.0364,
-          "runs": 55
+          "rate": 0.0339,
+          "runs": 59
         },
         "ticket-revise.yml": {
           "failed": 0,
           "rate": 0,
-          "runs": 18
+          "runs": 19
         },
         "verify-fix-evidence.yml": {
           "failed": 0,
           "rate": 0,
-          "runs": 187
+          "runs": 190
         },
         "warn-closes-blocked.yml": {
           "failed": 0,
@@ -6381,8 +6381,8 @@
         },
         "work-issue-pidev.yml": {
           "failed": 37,
-          "rate": 0.1365,
-          "runs": 271
+          "rate": 0.136,
+          "runs": 272
         }
       }
     }
