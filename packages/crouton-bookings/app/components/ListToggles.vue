@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// The Show cancelled / Map text toggles the bookings list shows in the Panel (#4492)
+// The Show cancelled / Map text toggles the bookings list shows in the Panel, and PanelFilters shows (Show cancelled only) on composed pages (#4492, #4562)
 interface Props {
   /** Whether cancelled bookings are shown */
   showCancelled: boolean

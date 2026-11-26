@@ -17,7 +17,9 @@ const props = withDefaults(defineProps<{
   scope?: 'personal' | 'team'
 }>(), { scope: 'team' })
 
-const { bookings, loading, error } = useBookingsList({ scope: props.scope })
+// refresh: the list emits `updated` after a booking is edited or cancelled; it can't
+// refresh data it was handed, so this block refreshes the shared fetch (#4562)
+const { bookings, loading, error, refresh } = useBookingsList({ scope: props.scope })
 const { applyFilters, hasActiveFilters, filters } = useBookingsLayoutFilters()
 
 const filteredBookings = computed(() => applyFilters(bookings.value ?? []))
@@ -31,6 +33,7 @@ const filteredBookings = computed(() => applyFilters(bookings.value ?? []))
       :error="error"
       :has-active-filters="hasActiveFilters"
       :active-location-filter="filters.locations"
+      @updated="refresh()"
     />
   </div>
 </template>
