@@ -5,6 +5,13 @@
   },
   "bookings": {
     "title": "Réservations",
+    "charts": {
+      "byDate": { "title": "Réservations par mois" },
+      "byLocation": { "title": "Réservations par lieu" },
+      "byStatus": { "title": "Statut des réservations" },
+      "bySlot": { "title": "Réservations par créneau" },
+      "byGroup": { "title": "Réservations par groupe" }
+    },
     "booking": "Réservation",
     "location": "Lieu",
     "date": "Date",

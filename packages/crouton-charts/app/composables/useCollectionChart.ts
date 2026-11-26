@@ -25,6 +25,9 @@ export function useCollectionChart(
   // Theme-derived series colors (reactive to theme + dark mode); reads the
   // categories computed below so a theme change recolors the chart live.
   const { colorAt } = useChartPalette()
+  // The page's language, read once at setup (never inside the debounced fetch):
+  // sent to the endpoint so labels follow it, and watched so a switch refetches.
+  const { locale } = useI18n()
 
   const chartData = ref<Record<string, unknown>[]>([])
   const pending = ref(false)
@@ -71,7 +74,7 @@ export function useCollectionChart(
 
     try {
       const response = await $fetch<{ items: Record<string, unknown>[] }>(apiPath, {
-        query: { pageSize: limit, ...resolvedOptions.value.query }
+        query: { pageSize: limit, locale: locale.value, ...resolvedOptions.value.query }
       })
 
       const items = response?.items || []
@@ -135,7 +138,7 @@ export function useCollectionChart(
   const debouncedFetch = useDebounceFn(() => fetchAndTransform(), 300)
 
   watch(
-    [resolvedCollection, resolvedOptions],
+    [resolvedCollection, resolvedOptions, locale],
     () => debouncedFetch(),
     { immediate: true, deep: true }
   )

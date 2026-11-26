@@ -24,7 +24,7 @@ interface Props {
   xField?: string
   /** Comma-separated field names for Y axis values. Auto-detected if not set. */
   yFields?: string
-  /** Optional title above the chart */
+  /** Optional title above the chart — an i18n key or plain text */
   title?: string
   /** Chart height in pixels */
   height?: number
@@ -35,6 +35,8 @@ interface Props {
   /** Extra query params forwarded to the data endpoint (e.g. { eventId } to scope an aggregation). */
   query?: Record<string, string | number>
 }
+
+import { xTickLabel, rowTicks } from '../utils/chart-axis'
 
 const props = withDefaults(defineProps<Props>(), {
   collection: '',
@@ -80,10 +82,20 @@ const categoriesObject = computed(() =>
 // yAxis field names array for BarChart
 const yAxisNames = computed(() => categories.value.map((c) => c.name))
 
-// xFormatter for BarChart / AreaChart / LineChart: map array index → actual x-field value
+// Title: an i18n key (presets) or plain text (falls back to itself)
+const { t } = useT()
+
+// One series has no meaningful legend ("count")
+const hideLegend = computed(() => categories.value.length <= 1)
+
+// One tick per bar so every bar is labelled
+const barTicks = computed(() => rowTicks(chartData.value.length))
+
+// xFormatter for BarChart / AreaChart / LineChart: the tick VALUE is the row
+// index (the ordinal shifts when the axis skips ticks)
 const xFormatter = computed(() => {
   const xKey = xAxisKey.value
-  return (_: number, i = 0) => String(chartData.value[i]?.[xKey] ?? '')
+  return (tick: number) => xTickLabel(chartData.value, xKey, tick)
 })
 
 // DonutChart: data must be number[] (the Y values per row)
@@ -111,7 +123,7 @@ const donutCategories = computed(() =>
   <div class="crouton-charts-widget">
     <!-- Title -->
     <h3 v-if="title" class="text-lg font-semibold mb-3">
-      {{ title }}
+      {{ t(title, title) }}
     </h3>
 
     <!-- Loading state -->
@@ -155,6 +167,8 @@ const donutCategories = computed(() =>
       :y-axis="yAxisNames"
       :categories="categoriesObject"
       :x-formatter="xFormatter"
+      :x-explicit-ticks="barTicks"
+      :hide-legend="hideLegend"
       :height="height"
       :stacked="stacked"
     />
@@ -165,6 +179,7 @@ const donutCategories = computed(() =>
       :data="chartData"
       :categories="categoriesObject"
       :x-formatter="xFormatter"
+      :hide-legend="hideLegend"
       :height="height"
     />
 
@@ -174,6 +189,7 @@ const donutCategories = computed(() =>
       :data="chartData"
       :categories="categoriesObject"
       :x-formatter="xFormatter"
+      :hide-legend="hideLegend"
       :height="height"
       :stacked="stacked"
     />

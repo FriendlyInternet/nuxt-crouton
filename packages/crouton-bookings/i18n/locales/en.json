@@ -5,6 +5,13 @@
   },
   "bookings": {
     "title": "Bookings",
+    "charts": {
+      "byDate": { "title": "Bookings per month" },
+      "byLocation": { "title": "Bookings per location" },
+      "byStatus": { "title": "Booking status" },
+      "bySlot": { "title": "Bookings per time slot" },
+      "byGroup": { "title": "Bookings per group" }
+    },
     "booking": "Booking",
     "location": "Location",
     "date": "Date",

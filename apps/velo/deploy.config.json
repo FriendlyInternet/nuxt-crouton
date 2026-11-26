@@ -86,6 +86,18 @@
         "path": "/api/crouton-bookings/teams/{teamId}/charts/bookings-by-status"
       },
       {
+        "path": "/api/crouton-bookings/teams/{teamId}/charts/bookings-by-date"
+      },
+      {
+        "path": "/api/crouton-bookings/teams/{teamId}/charts/bookings-by-group"
+      },
+      {
+        "path": "/api/crouton-bookings/teams/{teamId}/charts/bookings-by-location"
+      },
+      {
+        "path": "/api/crouton-bookings/teams/{teamId}/charts/bookings-by-slot"
+      },
+      {
         "path": "/api/crouton-bookings/teams/{teamId}/customer-bookings"
       },
       {

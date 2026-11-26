@@ -23,10 +23,12 @@ Chart visualizations for Nuxt Crouton applications. Wraps `nuxt-charts` (free ba
 | `type` | `'bar'\|'line'\|'area'\|'donut'` | `'bar'` | Chart type |
 | `xField` | `string?` | auto from `display.title` | Field used as X axis |
 | `yFields` | `string?` | auto-detected numeric | Comma-separated field names for Y values |
-| `title` | `string?` | — | Optional heading above chart |
+| `title` | `string?` | — | Optional heading above chart; an i18n key or plain text (rendered with `t(title, title)`) |
 | `height` | `number` | `300` | Chart height in pixels |
 | `stacked` | `boolean` | `false` | Stack series (bar/area only) |
 | `orientation` | `'vertical'\|'horizontal'` | `'vertical'` | Chart orientation |
+
+A single-series chart hides its legend; bar charts get one x tick per bar, and x labels follow the tick value (row index) via `app/utils/chart-axis.ts` (`xTickLabel`, `rowTicks`; test `test/chart-axis.test.ts`). `useCollectionChart` sends the page's `locale` in the fetch query and refetches when it changes, so endpoint labels follow the site language (#4565; test `test/use-collection-chart.test.ts`).
 
 ## Usage
 
