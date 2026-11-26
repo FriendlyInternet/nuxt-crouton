@@ -38,7 +38,7 @@ File: `app/components/Widget.vue`
 | `type` | `"bar" \| "line" \| "area" \| "donut"` | `"bar"` | no | Chart type to render |
 | `xField` | `string` | - | no | Field to use as X axis. Auto-resolved from collection display.title if not set. |
 | `yFields` | `string` | - | no | Comma-separated field names for Y axis values. Auto-detected if not set. |
-| `title` | `string` | - | no | Optional title above the chart |
+| `title` | `string` | - | no | Optional title above the chart — an i18n key or plain text |
 | `height` | `number` | `300` | no | Chart height in pixels |
 | `stacked` | `boolean` | `false` | no | Stack series (bar/area charts) |
 | `orientation` | `"vertical" \| "horizontal"` | `"vertical"` | no | Chart orientation |

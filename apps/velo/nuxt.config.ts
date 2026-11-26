@@ -24,6 +24,7 @@ export default defineNuxtConfig({
     '@fyit/crouton-assets',
     '@fyit/crouton-pages',
     '@fyit/crouton-bookings',
+    '@fyit/crouton-charts',
     '@fyit/crouton-email',
     '@fyit/crouton-maps',
     '@fyit/crouton-events',

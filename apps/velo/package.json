@@ -26,6 +26,7 @@
     "@fyit/crouton-assets": "workspace:*",
     "@fyit/crouton-bookings": "workspace:*",
     "@fyit/crouton-catalog": "workspace:*",
+    "@fyit/crouton-charts": "workspace:*",
     "@fyit/crouton-collab": "workspace:*",
     "@fyit/crouton-core": "workspace:*",
     "@fyit/crouton-maps": "workspace:*",

@@ -248,6 +248,9 @@ importers:
       '@fyit/crouton-catalog':
         specifier: workspace:*
         version: link:../../packages/crouton-catalog
+      '@fyit/crouton-charts':
+        specifier: workspace:*
+        version: link:../../packages/crouton-charts
       '@fyit/crouton-collab':
         specifier: workspace:*
         version: link:../../packages/crouton-collab

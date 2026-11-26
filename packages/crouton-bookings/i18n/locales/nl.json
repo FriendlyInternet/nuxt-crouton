@@ -5,6 +5,13 @@
   },
   "bookings": {
     "title": "Boekingen",
+    "charts": {
+      "byDate": { "title": "Reserveringen per maand" },
+      "byLocation": { "title": "Reserveringen per locatie" },
+      "byStatus": { "title": "Reserveringsstatus" },
+      "bySlot": { "title": "Reserveringen per tijdslot" },
+      "byGroup": { "title": "Reserveringen per groep" }
+    },
     "booking": "Boeking",
     "location": "Locatie",
     "date": "Datum",

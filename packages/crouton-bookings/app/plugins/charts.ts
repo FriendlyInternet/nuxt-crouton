@@ -16,15 +16,15 @@ export default defineNuxtPlugin(() => {
     registerChartPreset({
       id: 'bookings:by-date',
       name: 'Bookings by Date',
-      description: 'Daily booking volume over time',
+      description: 'Monthly booking volume',
       icon: 'i-lucide-calendar',
       package: 'crouton-bookings',
       config: {
         apiPath: '/api/crouton-bookings/teams/{teamId}/charts/bookings-by-date',
-        type: 'area',
+        type: 'bar',
         xField: 'date',
         yFields: 'count',
-        title: 'Bookings over time'
+        title: 'bookings.charts.byDate.title'
       }
     })
 
@@ -39,7 +39,7 @@ export default defineNuxtPlugin(() => {
         type: 'bar',
         xField: 'location',
         yFields: 'count',
-        title: 'Bookings per location'
+        title: 'bookings.charts.byLocation.title'
       }
     })
 
@@ -54,7 +54,7 @@ export default defineNuxtPlugin(() => {
         type: 'donut',
         xField: 'status',
         yFields: 'count',
-        title: 'Booking status distribution'
+        title: 'bookings.charts.byStatus.title'
       }
     })
 
@@ -69,7 +69,7 @@ export default defineNuxtPlugin(() => {
         type: 'bar',
         xField: 'slot',
         yFields: 'count',
-        title: 'Bookings per time slot'
+        title: 'bookings.charts.bySlot.title'
       }
     })
 
@@ -84,7 +84,7 @@ export default defineNuxtPlugin(() => {
         type: 'bar',
         xField: 'group',
         yFields: 'count',
-        title: 'Bookings per group'
+        title: 'bookings.charts.byGroup.title'
       }
     })
   }

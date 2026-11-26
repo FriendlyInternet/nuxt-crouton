@@ -5,11 +5,12 @@
  * Used by the 'bookings:by-status' chart preset.
  */
 import { count, eq } from 'drizzle-orm'
-import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { requireCan } from '@fyit/crouton-auth/server/utils/team-auth'
 import { bookingsBookings } from '../../../../../../collections/bookings/server/database/schema'
 
 export default defineEventHandler(async (event) => {
-  const { team } = await resolveTeamAndCheckMembership(event)
+  // Team-wide statistics: only roles that may manage bookings (#4565)
+  const { team } = await requireCan(event, 'bookings:manage')
   const db = useDB()
 
   const rows = await db
