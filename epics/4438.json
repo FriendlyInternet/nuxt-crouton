@@ -1,0 +1,52 @@
+{
+  "epic": 4438,
+  "runs": 18,
+  "epicRuns": 3,
+  "silent": [
+    {
+      "ref": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/45268457448",
+      "workflow": "ticket-revise.yml",
+      "stage": "ticket-revise",
+      "child": null
+    },
+    {
+      "ref": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/45274160433",
+      "workflow": "work-issue-pidev.yml",
+      "stage": "work",
+      "child": 4437
+    },
+    {
+      "ref": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/45289184008",
+      "workflow": "fix-ci-on-failure.yml",
+      "stage": "fix-ci",
+      "child": 4436
+    }
+  ],
+  "perChild": [
+    {
+      "issue": 4436,
+      "runs": 10,
+      "planRounds": 2,
+      "buildRounds": 2,
+      "revises": 2,
+      "silent": 1
+    },
+    {
+      "issue": 4437,
+      "runs": 5,
+      "planRounds": 1,
+      "buildRounds": 1,
+      "revises": 0,
+      "silent": 1
+    }
+  ],
+  "timeToMainHours": 75.2,
+  "ownerTouches": {
+    "typed": 0,
+    "viaAgent": 0,
+    "links": []
+  },
+  "stepLine": "2 merged, 0 not planned",
+  "run": "https://github.com/FriendlyInternet/nuxt-crouton/actions/runs/45914984058",
+  "stored_at": "2026-11-27T00:12:34.043Z"
+}
