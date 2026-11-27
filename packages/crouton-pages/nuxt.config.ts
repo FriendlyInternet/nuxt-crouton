@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import type { LocaleObject } from '@nuxtjs/i18n'
-import { getCroutonLocales } from '@fyit/crouton-i18n/config-utils'
+import { getCroutonLocales, getLayerLocales } from '@fyit/crouton-i18n/config-utils'
 import { applyPublicRouteOptions } from './app/utils/public-routes'
 import { appPageSegments } from './app-page-segments'
 
@@ -148,7 +148,7 @@ export default defineNuxtConfig({
 
   // i18n translations
   i18n: {
-    locales: croutonLocales.map(l => ({ code: l.code, name: l.name, file: l.file })) as LocaleObject[],
+    locales: getLayerLocales(join(currentDir, 'i18n/locales')) as LocaleObject[],
     langDir: './locales'
   }
 })
