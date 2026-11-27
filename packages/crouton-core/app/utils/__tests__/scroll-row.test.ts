@@ -21,8 +21,8 @@ describe('SCROLL_ROW_X', () => {
 })
 
 describe('tab lists use SCROLL_ROW_X', () => {
-  it('BookingCreateCard.vue passes it as the UTabs list class', () => {
-    const source = read('crouton-bookings/app/components/BookingCreateCard.vue')
+  it('LocationTabs.vue passes it as the UTabs list class', () => {
+    const source = read('crouton-bookings/app/components/LocationTabs.vue')
     expect(source).toMatch(/:ui="\{\s*list:\s*SCROLL_ROW_X\b/)
   })
 

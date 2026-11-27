@@ -73,6 +73,8 @@ not merge.** Every change is built by the pipeline, so traffic control sees all 
 - **One driver per ticket** — a chat claims the epics/tickets it drives; never start, unblock or
   rework a ticket another chat claimed — ask the owner. Don't start a ticket whose `Blocked-by:` is
   still open.
+- **Write tickets one at a time** — a chat writes the epic's step list and the first ticket, not every
+  ticket up front; each later ticket is written just before it is built.
 
 The check: after a week, the history shows only pipeline authors, no interactive-session commits.
 

@@ -19,6 +19,7 @@
 import { computed, watch, readonly } from 'vue'
 import { updateAppConfig, useAppConfig } from '#imports'
 import { THEME_PRESET_REGISTRY, type ThemePresetName, type ThemePresetEntry } from '@fyit/crouton-themes/presets'
+import { pickThemeOverride, shouldClearOverride } from '../utils/theme-override'
 
 /**
  * Primary color options (Tailwind CSS colors)
@@ -214,6 +215,56 @@ export function applyThemeSettings(settings: TeamThemeSettings, colorMode?: { pr
   }
 }
 
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err)
+}
+
+/** Fetch one team's theme; never throws (a failure comes back as `error`). */
+async function fetchTeamTheme(id: string): Promise<{ data: TeamThemeSettings } | { error: string }> {
+  try {
+    const data = await $fetch<TeamThemeSettings>(`/api/teams/${id}/settings/theme`)
+    return { data: data ?? {} }
+  }
+  catch (err) {
+    return { error: errorMessage(err) }
+  }
+}
+
+// Storage + state keys owned by @fyit/crouton-themes useThemeSwitcher (its
+// STORAGE_KEY + the 'crouton-theme' useState). Named here so the coupling is
+// explicit and greppable.
+const OVERRIDE_KEY = 'nuxt-crouton-theme'
+
+/** The preset useThemeSwitcher's 'crouton-theme' state shows as active
+ *  ('default' for a custom/absent preset) — keeps the pill in sync and makes its
+ *  onMounted restore a no-op (guard: storedTheme !== currentTheme). */
+function activePresetName(theme: TeamThemeSettings): string {
+  const preset = theme.preset
+  return preset && preset !== 'custom' ? preset : 'default'
+}
+
+/**
+ * Resolve the theme to actually apply (#1596): the team theme is the BASE; a
+ * user's saved pick (the theme pill → useThemeSwitcher localStorage) WINS on
+ * reload when the team allows it — without this the plugin re-applied the team
+ * theme every load and stomped the override. Client-only — SSR paints the team
+ * theme and the override settles just after hydration (one frame, like any
+ * localStorage theme restore). ⚠️ No override stored ⇒ returns `teamTheme`
+ * unchanged, byte-for-byte the previous behaviour.
+ */
+export function resolveEffectiveTheme(teamTheme: TeamThemeSettings, allowUserThemes: boolean): TeamThemeSettings {
+  if (import.meta.server) return teamTheme
+  const stored = localStorage.getItem(OVERRIDE_KEY)
+  // Only themes this app ships (their variant is built) may apply — localStorage
+  // is per origin, so a pick from another app on the same host leaks in (#2257).
+  const registered = (useAppConfig() as any)?.ui?.button?.variants?.variant
+  if (shouldClearOverride(stored, allowUserThemes, registered)) localStorage.setItem(OVERRIDE_KEY, 'default')
+  const override = pickThemeOverride(stored, allowUserThemes, registered)
+  const effective = override ? { ...teamTheme, preset: override } : teamTheme
+  useState<string>('crouton-theme').value = activePresetName(effective)
+  return effective
+}
+
 export function useTeamTheme() {
   const { teamId } = useTeamContext()
   const colorMode = useColorMode()
@@ -222,6 +273,12 @@ export function useTeamTheme() {
   const themeData = useState<TeamThemeSettings>('team-theme-data', () => ({}))
   // Tracks whether the initial fetch has completed (avoids re-fetch on hydration)
   const themeFetched = useState<boolean>('team-theme-fetched', () => false)
+  // Shared across callers so several useTeamTheme() users never each fetch (#4551)
+  const themeError = useState<string | null>('team-theme-error', () => null)
+  const themePending = useState<boolean>('team-theme-pending', () => false)
+  // Which team `team-theme-data` belongs to — loads are per team (#4563)
+  const loadedFor = useState<string | null>('team-theme-team-id', () => null)
+  const allowUserThemes = useState<boolean>('crouton:allowUserThemes', () => true)
 
   // Computed theme with defaults applied
   const theme = computed<Required<TeamThemeSettings>>(() => ({
@@ -234,26 +291,51 @@ export function useTeamTheme() {
 
   const isLoading = computed(() => !themeFetched.value)
 
-  // Watch for live theme changes (e.g. admin editing theme settings)
-  watch(theme, (newTheme) => {
-    applyThemeSettings(newTheme, colorMode)
-  })
+  // Load the current team's theme and apply it. `userPickWins` applies the
+  // user's saved pick on top (#1596) — true for late loads, false for refresh()
+  // after a save (the theme as saved is applied).
+  async function load(userPickWins: boolean) {
+    const id = teamId.value
+    if (!id) return
+    themePending.value = true
+    themeError.value = null
+    const result = await fetchTeamTheme(id)
+    themePending.value = false
+    // The team changed while this load ran: drop it, load the current team.
+    if (teamId.value !== id) return ensureLoaded()
+    themeFetched.value = true
+    loadedFor.value = id
+    themeError.value = 'error' in result ? result.error : storeAndApply(result.data, userPickWins)
+  }
 
-  // Refresh theme from API
-  async function refresh() {
-    if (!teamId.value) return
+  /** Store a loaded theme and apply it; returns the error message if applying failed. */
+  function storeAndApply(data: TeamThemeSettings, userPickWins: boolean): string | null {
+    themeData.value = data
+    allowUserThemes.value = theme.value.allowUserThemes
     try {
-      const data = await $fetch<TeamThemeSettings>(
-        `/api/teams/${teamId.value}/settings/theme`
-      )
-      themeData.value = data ?? {}
-      themeFetched.value = true
-      applyThemeSettings(theme.value, colorMode)
+      const toApply = userPickWins ? resolveEffectiveTheme(theme.value, allowUserThemes.value) : theme.value
+      applyThemeSettings(toApply, colorMode)
+      return null
     }
-    catch {
-      themeFetched.value = true
+    catch (err) {
+      return errorMessage(err)
     }
   }
+
+  // Refresh theme from API (applies the theme as saved)
+  function refresh() {
+    return load(false)
+  }
+
+  // Late loads live here (#4551, #4563): the plugin only loads at boot. Load
+  // whenever the current team's theme isn't loaded (a fresh sign-in, a team
+  // switch), unless a load is already running; a load that finishes for a team
+  // you've since left is dropped and the current team loads instead.
+  const needsLoad = computed(() => !!teamId.value && loadedFor.value !== teamId.value && !themePending.value)
+  function ensureLoaded() {
+    if (!import.meta.server && needsLoad.value) load(true)
+  }
+  watch(teamId, ensureLoaded, { immediate: true })
 
   // Update theme (for admin UI)
   async function updateTheme(settings: Partial<TeamThemeSettings>) {
@@ -286,6 +368,8 @@ export function useTeamTheme() {
   return {
     theme: readonly(theme),
     isLoading,
+    /** Message of the last failed load, or null */
+    error: readonly(themeError),
     teamId,
     updateTheme,
     resetTheme,

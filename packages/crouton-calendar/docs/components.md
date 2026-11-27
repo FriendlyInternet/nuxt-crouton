@@ -9,16 +9,20 @@ File: `app/components/Month.vue`
 
 | Prop | Type | Default | Required | Description |
 | --- | --- | --- | --- | --- |
+| `holdKey` | `string \| number` | - | no | Change it when the cells' height really changes (e.g. a filter hides indicator rows) so the held strip height is measured again (#4516) |
 | `date` | `Date` | - | yes |  |
 
 | Event | Payload |
 | --- | --- |
 | `update:date` | `[value: Date]` |
 | `select` | `[value: Date]` |
+| `today` | `[]` |
 
 | Slot | Props |
 | --- | --- |
 | `day` | `{ day: DateValue; jsDate: Date; neighbour: boolean; }` |
+| `header-start` | `any` |
+| `header-end` | `any` |
 
 ## CroutonCalendarWeek
 
@@ -35,14 +39,18 @@ File: `app/components/Week.vue`
 | `selectedDate` | `Date \| null` | `null` | no | The selected day |
 | `activeDate` | `Date \| null` | `null` | no | Date shown as the active one (e.g. being created/edited) |
 | `isDateDisabled` | `((date: Date) => boolean) \| null` | `null` | no | Function to check if a date is disabled by schedule rules |
+| `holdKey` | `string \| number` | `undefined` | no | Change it when the cells' height really changes (e.g. a filter hides indicator rows) so the held strip height is measured again (#4516) |
 | `date` | `Date` | - | yes |  |
 
 | Event | Payload |
 | --- | --- |
 | `update:date` | `[value: Date]` |
 | `select` | `[value: Date \| null]` |
+| `today` | `[]` |
 
 | Slot | Props |
 | --- | --- |
+| `header-start` | `{}` |
+| `header-end` | `{}` |
 | `day` | `{ day: any; jsDate: any; }` |
 | `day-action` | `{ day: any; jsDate: any; weekday: any; dayNumber: any; }` |

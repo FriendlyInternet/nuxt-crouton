@@ -8,7 +8,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } fro
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { appDirOf, checkMigrationResolution, isMigrationFile, migrationDirOf, buildPrompt } from './conflict-resolution.mjs'
+import { appDirOf, checkMigrationResolution, isMigrationFile, migrationDirOf, buildPrompt, verdict, BUILD_CMD } from './conflict-resolution.mjs'
 
 // A real conflict run sets PKG_DIST_REF for the tool, and it runs this suite as its check (#4374).
 // Every `verify` these tests start in a scratch repo would inherit it, try a package build there
@@ -147,6 +147,28 @@ test('the prompt adds the migration step only for a migration conflict, naming t
   assert.ok(p.includes('5. MIGRATION FILES ARE NEVER HAND-MERGED'))
   assert.ok(p.includes('`pnpm --filter ./apps/velo db:generate`'))
   assert.ok(!buildPrompt({ base: 'main', files: ['scripts/fixtures/a.sql'], choiceFile: '/tmp/c.md' }).includes('MIGRATION FILES'))
+})
+
+// covers: T5
+test('#4487 T5 markers left in packages/** during a migration conflict → refused: resolve the code conflicts first', () => {
+  const v = verdict({ choiceText: '', markerFiles: ['packages/p/a.ts'], migrations: true })
+  assert.equal(v.status, 'failed')
+  assert.match(v.reason, /resolve the code conflicts first/)
+  assert.match(v.reason, /packages\/p\/a\.ts/)
+  const plain = verdict({ choiceText: '', markerFiles: ['packages/p/a.ts'], migrations: false })
+  assert.equal(plain.status, 'failed')
+  assert.match(plain.reason, /^conflict markers remain in: packages\/p\/a\.ts$/)
+})
+
+// covers: T6
+test('#4487 T6 rule 5 builds the packages before db:generate and deletes what the journal does not list', () => {
+  const p = buildPrompt({ base: 'main', files: [`${D}/meta/0007_snapshot.json`], choiceFile: '/tmp/c.md' })
+  const rule5 = p.slice(p.indexOf('5. MIGRATION FILES'))
+  assert.ok(rule5.indexOf(BUILD_CMD) > 0, rule5)
+  assert.ok(rule5.indexOf(BUILD_CMD) < rule5.indexOf('db:generate'), 'build comes before db:generate')
+  assert.ok(rule5.includes('does not list'))
+  assert.ok(!p.includes("after the base's last journal entry"))
+  assert.match(p, /you already ran the install and the build in rule 5/)
 })
 
 // ── T5: the workflow runs a lone copy of the script, so it may import only node: built-ins plus

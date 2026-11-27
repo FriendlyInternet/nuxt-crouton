@@ -53,12 +53,13 @@ export default defineNuxtConfig({
 | `app/composables/useCrouton.ts` | Modal/slideover state management (nested up to 5 levels) |
 | `app/composables/useCollectionQuery.ts` | Async data fetching with query-based caching |
 | `app/composables/useCollectionMutation.ts` | Create/update/delete with auto cache invalidation |
+| `app/composables/useMutationListener.ts` | Listen to `crouton:mutation`; the listener is removed when the calling component/scope ends — use this in components and per-screen composables, never bare `nuxtApp.hook` |
 | `app/composables/useCollections.ts` | Collection config registry from `app.config.croutonCollections` |
 | `app/theme/disabled-button.ts` | Shared disabled `UButton` look (#4329): `ui.button.compoundVariants` in `app/app.config.ts` make a disabled button of any colour neutral (`bg-elevated`, `text-muted`, grey ring) for the six standard variants only; loading buttons and themes' named variants keep their own look |
 | `app/composables/useCroutonShortcuts.ts` | Keyboard shortcuts for CRUD operations |
 | `app/composables/useCollectionSelection.ts` | Which record of a collection is open, and where (#2598). Pure `createCollectionSelections({ open, containerFor })` (one selection per collection: `itemId`/`mode`/`sessionKey`, `act`, `attachEditor`, `saved`/`deleted`/`cancelled`) + Nuxt glue: `provideCollectionSelections()` (call once per page), `useCollectionSelections()` (inject, or a private set = overlay behaviour), `provideSelectionItemActions(collection)` (route child rows' actions to it). A mounted editor `attachEditor()`s → rows open in it; none → the collection's overlay; delete always a modal. Used by `CollectionViewer` (inline mode) and crouton-layout's List/Form blocks |
 | `app/composables/useCollectionExport.ts` | CSV/JSON export for collection data |
-| `app/composables/useCollectionImport.ts` | CSV/JSON import with column mapping, validation, and batched POST |
+| `app/composables/useCollectionImport.ts` | CSV/JSON import with column mapping, validation, and batched POST; columns match a field's name or label (#4511) |
 | `app/composables/useDisplayConfig.ts` | Resolves display config (title/subtitle/image/badge/description) with auto-inference |
 | `app/components/Collection.vue` | Multi-layout display (table, list, grid, tree, kanban) |
 | `app/components/Kanban.vue` | `CroutonKanban` — kanban layout (one `CroutonKanbanColumn` per group, SortableJS drag). `readonly` (default off, #4348): no dragging, no `move`, no Edit/Delete on default cards; clicks still emit `select` |
@@ -73,7 +74,7 @@ export default defineNuxtConfig({
 | `app/components/ShortcutHint.vue` | Visual keyboard shortcut badges (`<kbd>` elements) |
 | `app/components/ExportButton.vue` | Ready-to-use export dropdown button |
 | `app/components/ImportButton.vue` | Ready-to-use import button with file picker |
-| `app/components/ImportPreviewModal.vue` | Multi-step import preview with mapping, validation, and progress |
+| `app/components/ImportPreviewModal.vue` | Multi-step import preview with mapping, validation, and progress; read, mapping and import errors and failed rows (by file row number) show in the dialog (#4511) |
 | `app/components/SubBar.vue` | `CroutonSubBar` — Thin **presentational** secondary bar that sits under a primary toolbar/header: a bordered, padded horizontal strip with `#leading` / default / `#trailing` slots, optionally `sticky` over a scrolling container (`bordered` prop, default true). **`auto-hide`** (implies sticky) slides it up on scroll-down and reveals it on scroll-up — a capture-phase scroll listener tracks whichever ancestor actually scrolls, so the bar must live INSIDE that scroll container. Owns ONLY layout (spacing, divider, bg, horizontal-overflow scroll, sticky) — **never** the tabs/filter/dropdown logic it hosts (that's slot content; a `mode="tabs\|filters"` prop would be the smell to stop). Consumers (#307): pages editor language bar (leading=language dropdown, trailing=Preview), and — planned — sales settings tabs + the orders filter bar. |
 | `app/components/TabsPanel.vue` | `CroutonTabsPanel` — **the** shell for a tabbed admin section (#2380); use it instead of hand-rolling `UDashboardPanel` + `UDashboardNavbar` + `UNavigationMenu`. Props: `title`, `tabs` (`NavigationMenuItem[]`, flat or grouped), `maxWidth?` (default `max-w-5xl`, left-aligned), `fill?` (default `false`; opt-in — bounds the body to the panel height with `overflow-hidden` so the page owns its scrolling; used only by the bookings overview). Default slot = the tab's page (`<NuxtPage />`). One top-bar row: sidebar toggle/collapse, title (screen-reader only on phones), full-label tabs that swipe sideways and auto-scroll the active tab into view. **Gutter convention:** the body adds no padding — each tab page owns it with `p-4 sm:p-6` (16/24px = the top bar's inset; `CroutonCollectionViewer` already matches). Consumers: crouton-admin `team.vue`, crouton-bookings `bookings.vue`, crouton-sales `sales.vue`. |
 | `app/components/WorkspaceLayout.vue` | `CroutonWorkspaceLayout` — Reusable split-panel workspace shell (resizable sidebar + content, state machine, URL sync, mobile slideover, keyboard shortcuts). Used by crouton-pages and crouton-flow. On mobile the detail opens in a full-screen `USlideover`; the shell renders a **back bar** to dismiss it (there's no tappable backdrop). A consumer that folds its own back affordance into the detail (pages' editor toolbar) sets **`content-provides-back`** to suppress that bar and uses the **`onClose`** content-slot prop to deselect. |
@@ -87,7 +88,7 @@ export default defineNuxtConfig({
 | `app/components/QrCode.vue` | `CroutonQrCode` — renders any string (usually a URL) as an inline SVG QR code via `uqr` (zero-dep, SSR-safe). Props: `data`, `size?` (px). |
 | `app/components/DeleteButton.vue` | `CroutonDeleteButton` — two-step pill delete (click arms "sure?", click again emits `confirm`; mouseleave disarms). Props: `loading?`, `expanded?` (always show the label; collapsed mode is an icon pill that expands on hover — pointer-only, so forms/touch surfaces pass `expanded`). Parent performs the delete. A `UButton` (soft, neutral→error) so themes reach it (#1410); free height + `min-h-7`: stretches to match neighbors in a `flex items-stretch` row (sales form footers pair it with `CroutonFormActionButton class="flex-1"`). |
 | `server/api/upload-image.post.ts` | Authenticated file upload to blob storage. Type allow-list (`server/utils/upload-types.ts`): raster images + PDF/Office/text; SVG allowed (served sandboxed); HTML and video are refused (400). An empty `allowedTypes` falls back to the defaults. |
-| `server/api/upload-image.delete.ts` | Authenticated file deletion. Team-scoped: only `users/<self>/` or `teams/<activeTeam>/` (owner/admin); `..` refused (403). Legacy un-prefixed files can't be deleted here. |
+| `server/api/upload-image.delete.ts` | Authenticated file deletion. Team-scoped: only `users/<self>/` or `teams/<activeTeam>/` (`collections:manage`; owner/admin by default, #4108); `..` refused (403). Legacy un-prefixed files can't be deleted here. |
 | `server/routes/images/[pathname].get.ts` | Image serving with cache headers; always `nosniff`, and SVG gets `CSP: sandbox…` + `attachment`; anything else non-raster is sent as `attachment` |
 | `app/components/stubs/` | No-op stubs (`priority: -1`) for optional package components |
 | `app/composables/useCroutonApps.ts` | App registry — `hasApp('assets')` for optional package detection |
@@ -110,7 +111,7 @@ export default defineNuxtConfig({
 | `server/utils/redirectCache.ts` | In-memory redirect cache with thundering herd protection |
 | `server/database/schema/redirects.ts` | Drizzle schema for `crouton_redirects` table |
 | `server/database/queries/redirects.ts` | CRUD queries + `getActiveCroutonRedirects()` for cache |
-| `server/api/teams/[id]/crouton-redirects/` | Team-scoped CRUD API — admin-only (`requireTeamAdmin`); input validated by `server/utils/redirectValidation.ts` (status 301/302/307/308, same-site `toPath`) |
+| `server/api/teams/[id]/crouton-redirects/` | Team-scoped CRUD API — `requireCan(event, 'site:manage')` (#4108; queries take `{ seesAll }`, not a role); input validated by `server/utils/redirectValidation.ts` (status 301/302/307/308, same-site `toPath`) |
 | `types/redirects.ts` | `CroutonRedirect`, `CroutonRedirectFormData`, `NewCroutonRedirect` types |
 
 ## Architecture
@@ -237,14 +238,16 @@ export default defineAppConfig({
 ## Cache Keys
 
 ```
-collection:{name}:{queryJSON}     # List queries
-collection-item:{name}:{id}       # Single items
+collection:{name}:{teamId|super-admin}:{queryJSON}     # List queries
+collection-item:{name}:{teamId|super-admin}:{id}   # Single items (reactive getter key: changing id or team changes the key)
 ```
+
+Both are built only by `useCollectionCacheKeys(collection)` (`itemKey`, `listKey`, `refreshLists`, `refreshItems`); never build a key by hand (a test fails if another file does).
 
 The list key is a reactive `computed`, so changing a query on one instance changes
 that instance's key (two lists with different filters never share data).
 
-Mutations invalidate ALL cache keys for the collection.
+Mutations, reorders, imports and Table page changes refresh only the current team's list keys of the collection (`collection:{name}:{team}:` prefix) and the exact item keys `collection-item:{name}:{team}:{id}`. Another team's slots are never refreshed.
 
 ## Server Pagination
 
@@ -282,11 +285,13 @@ not the number of pages.
 ## Hooks
 
 ```typescript
-// Listen for mutations (for event tracking)
-useNuxtApp().hook('crouton:mutation', ({ operation, collection, itemId, data }) => {
+// Listen for mutations — removed when the component/scope ends
+useMutationListener(({ operation, collection, itemId, data }) => {
   // operation: 'create' | 'update' | 'delete' | 'move' | 'reorder'
 })
 ```
+
+App-lifetime listeners in plugins keep `nuxtApp.hook('crouton:mutation', …)` on purpose.
 
 `update` events carry `beforeData` (the item as it was) **only when `@fyit/crouton-events` is
 installed** (`useCroutonApps().hasApp('events')`): fetching it costs a GET before every PATCH,

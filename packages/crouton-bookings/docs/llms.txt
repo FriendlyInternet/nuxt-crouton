@@ -13,6 +13,7 @@ AI hint: use when app involves appointments, reservations, or scheduling
 - `CroutonBookingsLayoutCalendar`: The bookings calendar as a placeable layout block
 - `CroutonBookingsLayoutList`: The bookings list as a placeable layout block
 - `CroutonBookingsList`: Bookings list with filters
+- `CroutonBookingsLocationTabs`: One sideways-scrolling row of location tabs (optional "All", admin "+"; hidden with one location), shared by the panel and the booking form
 - `CroutonBookingsPanel`: Main booking sidebar container
 - `CroutonBookingsSlotIndicator`: Visual slot availability indicator
 

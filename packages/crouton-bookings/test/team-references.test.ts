@@ -13,8 +13,15 @@ vi.mock('~~/server/db/schema', async () => {
 })
 vi.mock('@fyit/crouton-auth/server/utils/team', () => ({
   resolveTeamAndCheckMembership: async () => ({ team: { id: 't1' }, user: { id: 'u1' }, membership: { role: 'member' } }),
-  requireTeamAdmin: async () => ({ team: { id: 't1' }, user: { id: 'u1' }, membership: { role: 'admin' } }),
 }))
+// Guarded routes (requireCan, #4108) run as an admin; a member's can() is false (the no-config default)
+vi.mock('@fyit/crouton-auth/server/utils/team-auth', async () => {
+  const { roleCan } = await import('./stubs/team-auth')
+  return {
+    can: async (_t: string, _u: string, action: string) => roleCan('member', action),
+    requireCan: async () => ({ team: { id: 't1' }, user: { id: 'u1' }, membership: { role: 'admin' } }),
+  }
+})
 vi.mock('../collections/bookings/server/database/queries', async (orig) => ({
   ...(await orig() as object),
   createBookingsBooking: (d: any) => h.create(d),

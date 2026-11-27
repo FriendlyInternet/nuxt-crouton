@@ -10,6 +10,10 @@
  * ends in a single labelled close. Month view leaves room for the booking list.
  * Desktop keeps the inline calendar.
  *
+ * #4516 — the location tab row is the top row; under it the calendar's month label row
+ * (toggle · label · close X), where the toggle folds month ↔ week; tapping the label selects today; the
+ * fixed block keeps one full-width line, at its bottom under the calendar.
+ *
  * Fixture-scoped: only the `with-bookings` fixture has the admin bookings page.
  */
 import { expect, type Locator, type Page } from '@playwright/test'
@@ -22,18 +26,74 @@ const PHONE = { width: 390, height: 667 }
 // The visible week's day cells (the hidden sizing grid is aria-hidden).
 const cells = (scope: Locator | Page) => scope.locator('.grid:not([aria-hidden="true"]) > div > [role="button"]')
 
-async function showCancelled(page: Page, scope: Locator | Page, toggle = false): Promise<string | null> {
-  await scope.getByRole('button', { name: 'Calendar settings' }).first().click()
-  const item = page.getByRole('menuitemcheckbox', { name: /show cancelled/i })
-  if (toggle) await item.click()
-  else {
-    const state = await item.getAttribute('aria-checked')
-    await page.keyboard.press('Escape')
-    return state
+// covers: T6 — Show cancelled is a text toggle on the list (first month label or the top of an empty list), #4492
+async function showCancelled(scope: Locator, toggle = false): Promise<string | null> {
+  const button = scope.getByRole('button', { name: /show cancelled/i })
+  if (toggle) await button.click()
+  return button.getAttribute('aria-pressed')
+}
+
+/** Team id + headers for the fixture team (the way ensureBookingLocations finds it). */
+async function team(page: Page, base: string) {
+  const slug = JSON.parse(readFileSync(TEAM_FILE, 'utf8')).slug
+  const headers = { Origin: base, Referer: `${base}/` }
+  const orgsRes = await page.request.get(`${base}/api/auth/organization/list`, { headers })
+  const orgs = orgsRes.ok() ? await orgsRes.json().catch(() => []) : []
+  const teamId = (Array.isArray(orgs) ? orgs : []).find((o: any) => o.slug === slug)?.id
+  expect(teamId, `team id for slug ${slug}`).toBeTruthy()
+  return { teamId: teamId as string, headers }
+}
+
+/** One cancelled booking at "e2e loc 3" today, slot s3-2 (re-runnable: creates it only when missing). */
+async function ensureCancelledBooking(page: Page, baseURL: string | undefined) {
+  const base = baseURL || 'http://localhost:3000'
+  await ensureBookingLocations(page, baseURL, 3)
+  const { teamId, headers } = await team(page, base)
+  const locRes = await page.request.get(`${base}/api/teams/${teamId}/bookings-locations`, { headers })
+  const locData = await locRes.json()
+  const locs: any[] = Array.isArray(locData) ? locData : (locData?.items ?? [])
+  const loc3 = locs.find(l => l.title === 'e2e loc 3')
+  expect(loc3, 'e2e loc 3 exists').toBeTruthy()
+  const today = new Date().toISOString().slice(0, 10)
+  const listRes = await page.request.get(`${base}/api/teams/${teamId}/bookings-bookings`, { headers })
+  expect(listRes.ok(), `list bookings failed: ${listRes.status()}`).toBeTruthy()
+  const listData = await listRes.json()
+  const existing: any[] = Array.isArray(listData) ? listData : (listData?.items ?? [])
+  const dayOf = (d: unknown) => new Date(d as string).toLocaleDateString('en-CA', { timeZone: 'Europe/Brussels' })
+  const slotsOf = (s: unknown): string[] => {
+    if (Array.isArray(s)) return s.map(String)
+    try { const p = JSON.parse(String(s)); return Array.isArray(p) ? p.map(String) : [String(s)] } catch { return [String(s)] }
   }
-  const state = await item.getAttribute('aria-checked').catch(() => null)
-  await page.keyboard.press('Escape')
-  return state
+  const booked = existing.some(b => b.location === loc3.id && dayOf(b.date) === today && slotsOf(b.slot).includes('s3-2'))
+  if (booked) return
+  const res = await page.request.post(`${base}/api/teams/${teamId}/bookings-bookings`, {
+    headers,
+    data: { location: loc3.id, date: today, slot: ['s3-2'], quantity: 1, status: 'cancelled' }
+  })
+  expect(res.ok(), `create booking failed: ${res.status()} ${await res.text()}`).toBeTruthy()
+}
+
+/** One booking at "e2e loc 1" on `day` (YYYY-MM-DD), slot s1-0 (re-runnable: creates it only when missing). */
+async function ensureBookingOn(page: Page, baseURL: string | undefined, day: string) {
+  const base = baseURL || 'http://localhost:3000'
+  await ensureBookingLocations(page, baseURL, 1)
+  const { teamId, headers } = await team(page, base)
+  const locRes = await page.request.get(`${base}/api/teams/${teamId}/bookings-locations`, { headers })
+  const locData = await locRes.json()
+  const locs: any[] = Array.isArray(locData) ? locData : (locData?.items ?? [])
+  const loc1 = locs.find(l => l.title === 'e2e loc 1')
+  expect(loc1, 'e2e loc 1 exists').toBeTruthy()
+  const listRes = await page.request.get(`${base}/api/teams/${teamId}/bookings-bookings`, { headers })
+  expect(listRes.ok(), `list bookings failed: ${listRes.status()}`).toBeTruthy()
+  const listData = await listRes.json()
+  const existing: any[] = Array.isArray(listData) ? listData : (listData?.items ?? [])
+  const dayOf = (d: unknown) => new Date(d as string).toLocaleDateString('en-CA', { timeZone: 'Europe/Brussels' })
+  if (existing.some(b => b.location === loc1.id && dayOf(b.date) === day && b.status !== 'cancelled')) return
+  const res = await page.request.post(`${base}/api/teams/${teamId}/bookings-bookings`, {
+    headers,
+    data: { location: loc1.id, date: day, slot: ['s1-0'], quantity: 1, status: 'confirmed' }
+  })
+  expect(res.ok(), `create booking failed: ${res.status()} ${await res.text()}`).toBeTruthy()
 }
 
 async function openPage(page: Page, baseURL: string | undefined) {
@@ -53,6 +113,10 @@ async function openFullScreen(page: Page): Promise<Locator> {
   }).toPass({ timeout: FIRST_HIT })
   return dialog
 }
+
+const handleOf = (dialog: Locator) => dialog.getByRole('button', { name: 'Switch between week and month' })
+
+const centreY = (b: { y: number, height: number }) => b.y + b.height / 2
 
 async function closeFullScreen(page: Page, dialog: Locator) {
   await dialog.getByRole('button', { name: 'Close full screen' }).click()
@@ -77,24 +141,54 @@ test.describe(FIXTURE === 'with-bookings' ? 'bookings full screen' : 'bookings f
     await openPage(page, baseURL)
     let dialog = await openFullScreen(page)
 
+    const thisWeek = await cells(dialog).first().textContent()
     await dialog.getByRole('button', { name: 'Next week' }).click()
-    await showCancelled(page, dialog, true)
-    await page.keyboard.press('Escape')
+    // Wait for the week to slide in: a day tapped mid-slide moves out of view (the old menu step hid this race)
+    await expect(cells(dialog).first()).not.toHaveText(thisWeek ?? '')
+    await page.waitForTimeout(500)
     await cells(dialog).nth(3).click()
+    await showCancelled(dialog, true)
+    await expect(dialog.getByRole('button', { name: /show cancelled/i })).toHaveAttribute('aria-pressed', 'true')
     const fullScreenCells = await cells(dialog).allTextContents()
     await closeFullScreen(page, dialog)
 
     dialog = await openFullScreen(page)
     expect(await cells(dialog).allTextContents()).toEqual(fullScreenCells)
-    expect(await showCancelled(page, dialog)).toBe('true')
+    expect(await showCancelled(dialog)).toBe('true')
     await expect(cells(dialog).nth(3)).toHaveClass(/bg-elevated/)
+  })
+
+  // covers: T5
+  test('phone: "Show cancelled" on the list shows and hides a cancelled booking', async ({ page, baseURL }) => {
+    await ensureCancelledBooking(page, baseURL)
+    await page.setViewportSize({ width: 390, height: 844 })
+    await openPage(page, baseURL)
+    const dialog = await openFullScreen(page)
+    const list = dialog.locator('.booking-panel > :nth-child(2)')
+    const toggle = list.getByRole('button', { name: /show cancelled/i })
+    await expect(toggle).toBeVisible({ timeout: FIRST_HIT })
+
+    // The full-screen store is shared; start from "off" whatever an earlier test left.
+    if (await toggle.getAttribute('aria-pressed') === 'true') await toggle.click()
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+    await expect(list).not.toContainText('e2e loc 3')
+
+    await toggle.click()
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+    await expect(list).toContainText('e2e loc 3', { timeout: 15000 })
+
+    await toggle.click()
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+    await expect(list).not.toContainText('e2e loc 3')
   })
 
   test('phone: the view carries over', async ({ page, baseURL }) => {
     await page.setViewportSize(PHONE)
     await openPage(page, baseURL)
     let dialog = await openFullScreen(page)
-    await dialog.getByRole('button', { name: 'Month' }).click()
+    await expect(dialog.getByRole('button', { name: 'Next week' })).toBeVisible()
+    await handleOf(dialog).click()
+    await expect(dialog.getByRole('button', { name: 'Next week' })).toHaveCount(0)
     await closeFullScreen(page, dialog)
     dialog = await openFullScreen(page)
     await expect(dialog.getByRole('button', { name: 'Next week' })).toHaveCount(0)
@@ -113,11 +207,12 @@ test.describe(FIXTURE === 'with-bookings' ? 'bookings full screen' : 'bookings f
     await expect(close).toHaveCount(1)
     await expect(dialog.getByRole('button', { name: 'Close', exact: true })).toHaveCount(0)
 
-    // Same row as the view toggle.
+    // Same row as the calendar's month label (#4516); no Week/Month toggle any more.
+    await expect(dialog.getByRole('button', { name: 'Month', exact: true })).toHaveCount(0)
     const closeBox = await close.boundingBox()
-    const monthBox = await dialog.getByRole('button', { name: 'Month' }).boundingBox()
-    expect(closeBox && monthBox).toBeTruthy()
-    expect(Math.abs(closeBox!.y - monthBox!.y)).toBeLessThanOrEqual(8)
+    const labelBox = await dialog.getByTitle('Go to today').boundingBox()
+    expect(closeBox && labelBox).toBeTruthy()
+    expect(Math.abs(centreY(closeBox!) - centreY(labelBox!))).toBeLessThanOrEqual(8)
 
     await close.click()
     await expect(dialog).toHaveCount(0)
@@ -128,7 +223,7 @@ test.describe(FIXTURE === 'with-bookings' ? 'bookings full screen' : 'bookings f
     await page.setViewportSize(PHONE)
     await openPage(page, baseURL)
     const dialog = await openFullScreen(page)
-    await dialog.getByRole('button', { name: 'Month' }).click()
+    await handleOf(dialog).click()
     await expect(dialog.getByRole('button', { name: 'Next week' })).toHaveCount(0)
 
     // The scroll area (map + list) under the fixed filters + calendar.
@@ -139,6 +234,204 @@ test.describe(FIXTURE === 'with-bookings' ? 'bookings full screen' : 'bookings f
     const cell = dialog.locator('[style*="min-height"]').first()
     const fits = await cell.evaluate(el => el.scrollHeight <= el.clientHeight)
     expect(fits).toBe(true)
+  })
+
+  // covers: T4 — #4516: one top row (toggle + label + X); the toggle at the left folds month ↔ week
+  test('phone: the month label and the close share the top row; tapping the chevron folds and unfolds', async ({ page, baseURL }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await openPage(page, baseURL)
+    const dialog = await openFullScreen(page)
+    const panel = dialog.locator('.booking-panel')
+    const close = dialog.getByRole('button', { name: 'Close full screen' })
+    const label = dialog.getByTitle('Go to today')
+    await expect(label).toBeVisible({ timeout: FIRST_HIT })
+
+    const closeBox = (await close.boundingBox())!
+    const labelBox = (await label.boundingBox())!
+    const toggleBox = (await handleOf(dialog).boundingBox())!
+    const panelBox = (await panel.boundingBox())!
+    expect(Math.abs(centreY(closeBox) - centreY(labelBox))).toBeLessThanOrEqual(4)
+    // the toggle is on the same row, at the left of the label (mirroring the X)
+    expect(Math.abs(centreY(toggleBox) - centreY(labelBox))).toBeLessThanOrEqual(4)
+    expect(toggleBox.x + toggleBox.width).toBeLessThanOrEqual(labelBox.x)
+    expect(Math.abs(toggleBox.height - closeBox.height)).toBeLessThanOrEqual(1)
+    // the location tab row (several locations) is the very top row, the label row under it (#4516)
+    const tabRow = dialog.locator('.booking-panel > :first-child').getByRole('tablist')
+    if (await tabRow.count() > 0) {
+      const tabBox = (await tabRow.first().boundingBox())!
+      expect(tabBox.y - panelBox.y).toBeLessThanOrEqual(16)
+      expect(labelBox.y).toBeGreaterThanOrEqual(tabBox.y + tabBox.height - 1)
+    }
+    else {
+      expect(labelBox.y - panelBox.y).toBeLessThanOrEqual(16)
+    }
+
+    const scroll = dialog.locator('.booking-panel > :nth-child(2)')
+    const positions = async () => ({
+      list: await scroll.evaluate(el => el.scrollTop),
+      win: await page.evaluate(() => window.scrollY),
+    })
+    const before = await positions()
+
+    // week → month: the toggle opens the month
+    await expect(handleOf(dialog)).toHaveAttribute('aria-expanded', 'false')
+    await handleOf(dialog).click()
+    await expect(handleOf(dialog)).toHaveAttribute('aria-expanded', 'true')
+    await expect(dialog.getByRole('button', { name: 'Next month' })).toBeVisible()
+    await expect(dialog.getByRole('button', { name: 'Next week' })).toHaveCount(0)
+    expect(await positions()).toEqual(before)
+
+    // month → week: the toggle folds to one week row
+    await handleOf(dialog).click()
+    await expect(handleOf(dialog)).toHaveAttribute('aria-expanded', 'false')
+    await expect(dialog.getByRole('button', { name: 'Next week' })).toBeVisible()
+    await expect(dialog.getByRole('button', { name: 'Next month' })).toHaveCount(0)
+    expect(await positions()).toEqual(before)
+  })
+
+  // covers: T5 — #4516: the label is the Today button; it shows and selects today
+  test('phone: tapping the month label jumps to today and selects it', async ({ page, baseURL }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await openPage(page, baseURL)
+    const dialog = await openFullScreen(page)
+    const todayCell = () => cells(dialog).filter({ has: page.locator('.text-primary') })
+
+    // Week view
+    const first = await cells(dialog).first().textContent()
+    await dialog.getByRole('button', { name: 'Next week' }).click()
+    await expect(cells(dialog).first()).not.toHaveText(first ?? '')
+    await page.waitForTimeout(500)
+    await dialog.getByRole('button', { name: 'Next week' }).click()
+    await page.waitForTimeout(500)
+    await dialog.getByTitle('Go to today').click()
+    await expect(todayCell()).toHaveCount(1)
+    await expect(todayCell()).toHaveClass(/bg-elevated/)
+
+    // Month view
+    await handleOf(dialog).click()
+    await expect(dialog.getByRole('button', { name: 'Next month' })).toBeVisible()
+    const monthLabel = dialog.getByRole('button', { name: 'Go to today' })
+    const thisMonth = await monthLabel.textContent()
+    await dialog.getByRole('button', { name: 'Next month' }).click()
+    await expect(monthLabel).not.toHaveText(thisMonth ?? '')
+    await page.waitForTimeout(500)
+    await monthLabel.click()
+    await expect(monthLabel).toHaveText(thisMonth ?? '')
+    // The selected day's cell is highlighted (bg-elevated, number in text-primary)
+    const day = String(new Date().getDate())
+    // (the current month's full cells are the `group` divs; neighbour months render cheaper ones)
+    const todayInMonth = dialog.locator('div.group[style*="min-height"]')
+      .filter({ has: page.locator('span.text-primary', { hasText: new RegExp(`^${day}$`) }) })
+    await expect(todayInMonth.first()).toBeVisible()
+    await expect(todayInMonth.first()).toHaveClass(/bg-elevated/)
+  })
+
+  // covers: T11 — #4516 option A: the tab row draws no line of its own; since the tab row moved to the
+  // top (owner, 25 Nov), the one divider sits under the calendar and the underline at the tab row's bottom
+  test('phone: the selected location keeps its green underline on the one line', async ({ page, baseURL }) => {
+    await ensureBookingLocations(page, baseURL, 3)
+    await page.setViewportSize({ width: 390, height: 844 })
+    await openPage(page, baseURL)
+    const dialog = await openFullScreen(page)
+    const tablist = dialog.locator('[role=tablist]').first()
+    await expect(tablist).toBeVisible({ timeout: FIRST_HIT })
+    await tablist.getByRole('tab').nth(1).click()
+    await page.waitForTimeout(300)
+
+    const probe = await tablist.evaluate((list) => {
+      list.scrollTop = 0
+      const ind = list.querySelector('[data-slot="indicator"]')!
+      const r = ind.getBoundingClientRect()
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
+      const lb = list.getBoundingClientRect()
+      return {
+        scrollHeight: list.scrollHeight,
+        clientHeight: list.clientHeight,
+        border: getComputedStyle(list).borderBottomWidth,
+        hitIsIndicator: hit === ind || ind.contains(hit),
+        indBottom: r.bottom,
+        rowBottom: lb.bottom,
+      }
+    })
+    expect(probe.scrollHeight).toBe(probe.clientHeight)
+    expect(probe.border).toBe('0px')
+    expect(probe.hitIsIndicator).toBe(true)
+    expect(Math.abs(probe.indBottom - probe.rowBottom)).toBeLessThanOrEqual(1)
+  })
+
+  // #4516 (owner, 25 Nov, iPhone): one tap on a month day always selects it. The hover-only "+"
+  // strip at the bottom of a day must not catch the tap on a touch screen and open the form.
+  test.describe('touch screen', () => {
+    test.use({ hasTouch: true, viewport: { width: 390, height: 844 } })
+
+    test('phone (touch): tapping the lower part of an empty month day selects it, no form opens', async ({ page, baseURL }) => {
+      // with a location, the strip's tap would really open the form (not the "no locations" warning)
+      await ensureBookingLocations(page, baseURL, 1)
+      await openPage(page, baseURL)
+      const dialog = await openFullScreen(page)
+      await handleOf(dialog).tap()
+      await expect(dialog.getByRole('button', { name: 'Next month' })).toBeVisible({ timeout: FIRST_HIT })
+      await page.waitForTimeout(500)
+      // An empty, open, unselected day of this month, numbered 7–25 so the number is unique
+      // (days 1–6 and 26–31 can also show as the neighbour months' days)
+      const cell = (n: string) => dialog.locator('div.group[style*="min-height"]')
+        .filter({ has: page.locator('span', { hasText: new RegExp(`^${n}$`) }) })
+      const empty = dialog.locator('div.group[style*="min-height"]:not(.cursor-pointer):not(.opacity-40):not(.bg-elevated)')
+      const numbers = (await empty.locator('> span').allTextContents()).map(s => s.trim())
+      const n = numbers.find(s => Number(s) >= 7 && Number(s) <= 25)
+      expect(n, 'an empty day between the 7th and the 25th').toBeTruthy()
+      const day = cell(n!)
+      await expect(day).toHaveCount(1)
+      const box = (await day.boundingBox())!
+      // the strip sits on the bottom edge of the day: tap 3px above the bottom
+      await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height - 3)
+
+      await expect(day).toHaveClass(/bg-elevated/)
+      await expect(dialog.getByText('New booking for')).toHaveCount(0)
+      // the strip is not drawn at all on touch (no invisible hit area)
+      await expect(day.locator('button')).toBeHidden()
+    })
+
+    // #4516 (owner, 25 Nov, iPhone): tap a day with bookings, then another day — only the
+    // second is highlighted. Reproduced in WebKit (iPhone 13): nothing hover/focus-only stayed on
+    // the booked day; it was its permanent "has bookings" tint, which also hid the selected look.
+    test('phone (touch): a tapped day with bookings is not left highlighted after tapping another day', async ({ page, baseURL }) => {
+      const now = new Date()
+      const ymd = (d: number) => `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+      await ensureBookingOn(page, baseURL, ymd(12))
+      await openPage(page, baseURL)
+      const dialog = await openFullScreen(page)
+      await handleOf(dialog).tap()
+      await expect(dialog.getByRole('button', { name: 'Next month' })).toBeVisible({ timeout: FIRST_HIT })
+      await page.waitForTimeout(500)
+      // days 7–25 have a unique number in the month grid
+      const cell = (n: number) => dialog.locator('div.group[style*="min-height"]')
+        .filter({ has: page.locator('> span', { hasText: new RegExp(`^${n}$`) }) })
+      const booked = cell(12)
+      const other = cell(13)
+      const plain = cell(14)
+      await expect(booked).toHaveCount(1)
+      await expect(booked).toHaveClass(/cursor-pointer/)
+      // start from neither selected (the shared store may hold a day from an earlier test)
+      await cell(20).tap()
+      await expect(cell(20)).toHaveClass(/bg-elevated/)
+      await page.waitForTimeout(300)
+      const bg = (l: Locator) => l.evaluate(el => getComputedStyle(el).backgroundColor)
+
+      await booked.tap()
+      await expect(booked).toHaveClass(/bg-elevated/)
+      await page.waitForTimeout(300)
+      const selectedBg = await bg(booked)
+      await other.tap()
+      await expect(other).toHaveClass(/bg-elevated/)
+      await page.waitForTimeout(300)
+
+      // the selected look is the same with or without bookings
+      expect(await bg(other)).toBe(selectedBg)
+      // the booked day now looks like any unselected day: no background left on it
+      await expect(booked).not.toHaveClass(/(^|\s)bg-elevated(\s|$)/)
+      expect(await bg(booked)).toBe(await bg(plain))
+    })
   })
 
   test('desktop: no full-screen button, inline week navigation still works', async ({ page, baseURL }) => {

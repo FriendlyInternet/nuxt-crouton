@@ -94,3 +94,18 @@ test('#4192 isOwnerVoice: the owner typed, or a chat relaying the owner\'s answe
   assert.equal(isOwnerVoice({ userType: 'Bot', userLogin: 'pmcp', body: 'A' }), false, 'bot')
   assert.equal(isOwnerVoice({ userType: 'User', userLogin: 'Boss', body: 'A' }, 'boss'), true, 'owner override, case-insensitive')
 })
+
+// covers: T9 (#4531)
+test('#4531 isOwnerVoice: a relay header whose context says it is NOT the owner\'s answer is not the owner speaking', () => {
+  const me = { userType: 'User', userLogin: 'pmcp' }
+  const head = (ctx) => `> 🤖 **Claude Code** · interactive agent · chat 01b3cd · posted from \`@pmcp\`'s account (not Maarten) · _${ctx}_\n\nA`
+  for (const ctx of [
+    'owner yes 25 Nov 02:10 to posting this mockup; this is not his answer to the plan review',
+    "not the owner's answer",
+    'answers to the two open points of the third plan review; the "block alone" wording was this chat\'s, not a decision of the owner\'s',
+  ]) assert.equal(isOwnerVoice({ ...me, body: head(ctx) }), false, ctx)
+  for (const ctx of ['owner answer in chat 2026-11-17', "Maarten's answer", 'owner answer']) {
+    assert.equal(isOwnerVoice({ ...me, body: head(ctx) }), true, ctx)
+  }
+  assert.equal(isOwnerVoice({ ...me, body: '> 🤖 **Claude Code** · owner decision\n\nA' }), true, 'owner decision header')
+})

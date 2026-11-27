@@ -21,6 +21,7 @@ e2e/                         # the harness (Playwright) — NOT a workspace pack
   assets.smoke.spec.ts       # with-assets only: upload a file via Media → it shows in the grid without a reload (#2315)
   bookings-fullscreen.smoke.spec.ts # with-bookings only: phone: no inline calendar; full screen keeps week/filter/day/view across close+reopen (#3079), one toolbar row + one labelled close, month leaves ≥200px for the list (#3046); desktop keeps the inline calendar
   tab-rows.smoke.spec.ts     # with-bookings + with-sales: at 390×844 the shared tab bar, the booking card's location tabs and kassa's category tabs (view + edit) scroll sideways only — computed overflow-y hidden, scrollTop 0 after a vertical wheel (#4330, #4386)
+  team-theme.smoke.spec.ts   # any fixture: after a fresh sign-in (boot on /auth/login), Uiterlijk loads (#4551) and the team's theme applies with no reload (#4563)
   printing.smoke.spec.ts     # with-sales only: four-tier order→print→done + transport-routing (#1324) + router self-pairing (#1366) smoke vs an in-test fake :9100 printer (optional)
   .auth/                     # generated storageState + team slug (gitignored)
 

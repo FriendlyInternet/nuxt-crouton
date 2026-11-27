@@ -186,4 +186,16 @@ declare module '#crouton/team-auth' {
    * @returns Boolean
    */
   export function canUserCreateTeam(event: H3Event, userId: string): Promise<boolean>
+
+  /**
+   * May `userId` do `action` (e.g. 'pages:edit') in team `teamId`? (#4104)
+   * Reads the member's role from the database; no session needed.
+   * Unknown action or non-member → false. Never throws.
+   */
+  export function can(teamId: string, userId: string, action: string): Promise<boolean>
+
+  /**
+   * Resolve the team from the request, then 403 unless the member `can` do `action`.
+   */
+  export function requireCan(event: H3Event, action: string): Promise<TeamContext>
 }

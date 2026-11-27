@@ -6,6 +6,10 @@ const hoisted = vi.hoisted(() => ({
 }))
 
 vi.mock('@fyit/crouton-auth/server/utils/team', () => ({ resolveTeamAndCheckMembership: async () => hoisted.member }))
+// can() (#4108): the caller is an admin, which has collections:manage with no site config
+vi.mock('@fyit/crouton-auth/server/utils/team-auth', () => ({
+  can: async (_t: string, _u: string, action: string) => action === 'collections:manage'
+}))
 vi.mock('../collections/assets/server/database/queries', () => ({ createCroutonAsset: hoisted.create, updateCroutonAsset: vi.fn() }))
 
 let body: unknown

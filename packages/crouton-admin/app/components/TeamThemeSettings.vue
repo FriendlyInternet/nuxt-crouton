@@ -25,9 +25,11 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useT()
-const { isAdmin, currentTeam } = useTeam()
+// Editing the team theme is the `site:manage` action (#4105)
+const isAdmin = useCan('site:manage')
+const { currentTeam } = useTeam()
 const notify = useNotify()
-const { theme, isLoading, updateTheme, applyTheme } = useTeamTheme()
+const { theme, isLoading, error, refresh, updateTheme, applyTheme } = useTeamTheme()
 
 // Local form state for live preview
 const localTheme = reactive<TeamThemeSettings>({
@@ -65,6 +67,13 @@ const isCustom = computed(() =>
 
 // Saving state
 const isSaving = ref(false)
+
+// Buttons of the unsaved-changes bar (UAlert actions). `size: 'md'` because
+// UAlert defaults action buttons to `xs`.
+const saveBarActions = computed(() => [
+  { label: t('themeSettings.undo'), color: 'neutral' as const, variant: 'ghost' as const, size: 'md' as const, disabled: isSaving.value, onClick: revertChanges },
+  { label: t('common.saveChanges'), color: 'primary' as const, size: 'md' as const, loading: isSaving.value, disabled: !isAdmin.value, onClick: handleSave }
+])
 
 // Apply live preview whenever local theme changes
 watch(localTheme, (newTheme) => {
@@ -192,9 +201,22 @@ function presetDescription(key: ThemePreset, preset: (typeof THEME_PRESETS)['cus
       />
     </div>
 
+    <!-- Load failed: hide the controls so the default theme can't be saved over the real one (#4551) -->
+    <UAlert
+      v-else-if="error"
+      color="error"
+      icon="i-lucide-circle-alert"
+      :title="t('themeSettings.loadFailed')"
+      :description="error"
+      :actions="[{ label: t('common.retry'), color: 'error', variant: 'outline', onClick: () => { refresh() } }]"
+    />
+
     <template v-else>
       <!-- Controls + preview: side by side when the pane is wide, stacked (preview on top) when narrow -->
-      <div class="flex flex-col @2xl:flex-row gap-6 @2xl:gap-8 @2xl:items-start">
+      <div
+        data-testid="team-theme-controls"
+        class="flex flex-col @2xl:flex-row gap-6 @2xl:gap-8 @2xl:items-start"
+      >
         <!-- Preview: first in the DOM (top on a narrow pane), right on a wide pane -->
         <div class="space-y-2 @2xl:order-last @2xl:w-64 @2xl:shrink-0 @2xl:sticky @2xl:top-4">
           <div class="border border-muted rounded-(--ui-radius) overflow-hidden">
@@ -343,32 +365,20 @@ function presetDescription(key: ThemePreset, preset: (typeof THEME_PRESETS)['cus
       </div>
 
       <!-- Unsaved-changes bar: only while something differs from the saved theme -->
-      <div
+      <UAlert
         v-if="hasChanges"
-        class="flex items-center justify-between gap-3 p-3 rounded-lg border border-primary/40 bg-primary/5 sticky bottom-4"
-      >
-        <p class="text-sm font-medium text-default">
-          {{ t('themeSettings.unsavedChanges') }}
-        </p>
-        <div class="flex gap-2">
-          <UButton
-            variant="ghost"
-            color="neutral"
-            :disabled="isSaving"
-            @click="revertChanges"
-          >
-            {{ t('themeSettings.undo') }}
-          </UButton>
-          <UButton
-            color="primary"
-            :loading="isSaving"
-            :disabled="!isAdmin"
-            @click="handleSave"
-          >
-            {{ $t('common.saveChanges') }}
-          </UButton>
-        </div>
-      </div>
+        color="primary"
+        variant="outline"
+        orientation="horizontal"
+        :title="t('themeSettings.unsavedChanges')"
+        :actions="saveBarActions"
+        class="sticky bottom-4 bg-default p-3"
+        :ui="{
+          root: 'flex-col items-stretch sm:flex-row sm:items-center',
+          title: 'text-default font-sans',
+          actions: 'justify-end gap-2'
+        }"
+      />
 
       <!-- Admin Warning -->
       <UAlert

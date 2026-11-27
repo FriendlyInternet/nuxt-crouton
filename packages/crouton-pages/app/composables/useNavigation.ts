@@ -103,8 +103,7 @@ export function useNavigation(teamSlug?: MaybeRef<string | null>) {
   const binderItemsMap = ref<Record<string, NavigationItem[]>>({})
 
   // Refresh navigation when pages collection is mutated (reorder, move, create, update, delete)
-  const nuxtApp = useNuxtApp()
-  nuxtApp.hook('crouton:mutation' as any, (event: any) => {
+  useMutationListener((event) => {
     if (event?.collection === 'pagesPages') {
       refresh()
       binderItemsMap.value = {} // clear cached binder items on mutation

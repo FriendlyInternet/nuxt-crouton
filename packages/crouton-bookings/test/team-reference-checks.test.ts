@@ -13,6 +13,8 @@ const h = vi.hoisted(() => ({ patch: null as any }))
 vi.mock('@fyit/crouton-auth/server/utils/team', () => ({
   resolveTeamAndCheckMembership: async () => ({ team: { id: 't1' }, user: { id: 'u1' }, membership: { role: 'member' } }),
 }))
+// can() (#4108): a member has no action with no site config
+vi.mock('@fyit/crouton-auth/server/utils/team-auth', async () => (await import('./stubs/team-auth')).teamAuthStub(() => ({ team: { id: 't1' }, user: { id: 'u1' }, membership: { role: 'member' } })).module)
 vi.mock('../server/utils/booking-capacity', async orig => ({ ...(await orig() as object), patchBookingGuarded: (...a: any[]) => h.patch(...a) }))
 
 // Only the columns the checks read (id, teamId); drizzle selects nothing else.

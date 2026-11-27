@@ -3,6 +3,7 @@
 import { updateSalesProduct, assertSalesProductReferences } from '../../../../database/queries'
 import { captureConfigWrite } from '../../../../../../../server/utils/config-capture'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { can } from '@fyit/crouton-auth/server/utils/team-auth'
 import { z } from 'zod'
 
 const bodySchema = z.object({
@@ -29,7 +30,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const authTimer = timing.start('auth')
-  const { team, user, membership } = await resolveTeamAndCheckMembership(event)
+  const { team, user } = await resolveTeamAndCheckMembership(event)
   authTimer.end()
 
   const body = await readValidatedBody(event, bodySchema.parse)
@@ -45,7 +46,7 @@ export default defineEventHandler(async (event) => {
   await assertSalesProductReferences(team.id, updates)
 
   const dbTimer = timing.start('db')
-  const result = await updateSalesProduct(productId, team.id, user.id, updates, { role: membership.role })
+  const result = await updateSalesProduct(productId, team.id, user.id, updates, { seesAll: await can(team.id, user.id, 'collections:manage', event) })
   dbTimer.end()
   await captureConfigWrite(useDB(), { entityType: 'product', operation: 'update', entityId: productId, teamId: team.id, data: updates, eventId: result?.eventId })
   return result

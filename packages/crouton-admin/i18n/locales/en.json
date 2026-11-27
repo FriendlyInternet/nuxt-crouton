@@ -1,4 +1,7 @@
 {
+  "permissions": {
+    "adminAccess": "Open the admin area"
+  },
   "teams": {
     "generalSettings": "General",
     "themeSettings": "Theme",
@@ -72,6 +75,42 @@
       "addFailed": "Failed to add domain",
       "setPrimaryFailed": "Failed to set primary domain",
       "deleteFailed": "Failed to delete domain"
+    },
+    "rolesScreen": {
+      "tab": "Roles",
+      "title": "Roles",
+      "description": "Who may do what in this team.",
+      "new": "New role",
+      "name": "Name",
+      "fixed": "Fixed",
+      "teamRoles": "Roles of this team",
+      "empty": "No team roles yet.",
+      "noActions": "No actions",
+      "allActions": "All actions",
+      "edit": "Edit",
+      "delete": "Delete",
+      "deleted": "Role deleted",
+      "deleteConfirm": "Delete this role? This cannot be undone.",
+      "deleteAssigned": "This role is still given to a member — take it off them first",
+      "nameTaken": "That name already exists",
+      "nameInvalid": "Give a name of 1 to 40 characters, without a comma",
+      "adminAccessHint": "A role with any action also opens the admin area.",
+      "notYoursHint": "You can only give actions you have yourself",
+      "readOnlyRole": "This role has actions you do not have — only someone who has them can change it",
+      "adminOwnerOnly": "Only the owner can change this role",
+      "adminCannotDelete": "The admin role cannot be deleted",
+      "adminCannotRename": "The admin role cannot be renamed",
+      "groups": {
+        "team": "Team",
+        "site": "Site",
+        "collections": "Collections",
+        "translations": "Translations",
+        "pages": "Pages",
+        "media": "Media",
+        "activity": "Activity",
+        "bookings": "Bookings",
+        "sales": "Sales"
+      }
     }
   },
   "navigation": {
@@ -251,6 +290,7 @@
   },
   "themeSettings": {
     "title": "Theme Settings",
+    "loadFailed": "Couldn't load the theme settings",
     "description": "Customize your team's visual appearance. Changes preview in real-time.",
     "allowUserThemes": "Let users change their own theme",
     "allowUserThemesDescription": "When off, only admins can switch themes.",

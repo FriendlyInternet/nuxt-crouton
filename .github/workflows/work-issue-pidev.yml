@@ -365,7 +365,10 @@ jobs:
           node-version: 22
           cache: pnpm
       - name: Install
-        run: pnpm install --frozen-lockfile
+        # --ignore-scripts: skip every workspace postinstall (nuxt prepare); the touched app's typecheck regenerates .nuxt itself (#3199)
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Rebuild native deps skipped by --ignore-scripts
+        run: pnpm rebuild better-sqlite3
 
       # GitHub-hosted runners (#2275) have no `claude` login. pi's `claude-bridge` provider
       # drives the Claude SUBSCRIPTION through Claude Code (Agent SDK). setup-pi installs pinned pi + CLI and
@@ -537,7 +540,7 @@ jobs:
         if: ${{ inputs.mode != 'plan' }}
         env:
           JOB_START: ${{ steps.job-start.outputs.ts }}
-        run: node scripts/lib/pi-time-budget.mjs minutes --start "$JOB_START" >> "$GITHUB_OUTPUT"
+        run: node "$RUNNER_TEMP/scripts/lib/pi-time-budget.mjs" minutes --start "$JOB_START" >> "$GITHUB_OUTPUT"
 
       - id: pi
         timeout-minutes: ${{ inputs.mode == 'plan' && 45 || fromJSON(steps.budget.outputs.pi_minutes || '40') }}
@@ -748,7 +751,7 @@ jobs:
             echo "ok=0" >> "$GITHUB_OUTPUT"; echo "explained=1" >> "$GITHUB_OUTPUT"; exit 1
           fi
           echo "ok=1" >> "$GITHUB_OUTPUT"
-          # #3210 — tick "Plan + mockup posted" (cosmetic; never fails the run).
+          # #3210 — tick "Plan posted" (the Mockup line is derived from the thread, #4524; cosmetic; never fails the run).
           PLAN_URL="$(gh api --paginate "repos/${{ github.repository }}/issues/${ISSUE}/comments?since=${SINCE}&per_page=100" \
             --jq '[.[] | select(.body | contains("<!-- pipeline-plan:v1 -->"))] | last | .html_url // empty' | tail -n 1)"
           GITHUB_REPOSITORY="${{ github.repository }}" node scripts/flow-checklist.mjs "$ISSUE" plan --link "$PLAN_URL" || true
@@ -1135,7 +1138,7 @@ jobs:
               # (A scriptless fresh poc still can't be verified — no script to run prepare — but #1866
               # makes every scaffold emit the script, so that case is legacy-only.)
               if [ "$HAS_TC" = "1" ] && [ -n "$PKG" ]; then
-                # PREPARE THE ENV (#1872) — the job's `pnpm install --frozen-lockfile` (top of the job)
+                # PREPARE THE ENV (#1872) — the job's `pnpm install --frozen-lockfile --ignore-scripts` (top of the job)
                 # ran BEFORE pi scaffolded this poc, so the new workspace member was never linked: no
                 # `pocs/<name>/node_modules`, no `.nuxt`. `nuxt typecheck` then can't resolve Nuxt
                 # auto-imports and reports ~37 bogus `TS2304: Cannot find name` on fine code — which the

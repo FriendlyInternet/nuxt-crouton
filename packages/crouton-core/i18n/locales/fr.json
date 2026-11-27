@@ -1,4 +1,8 @@
 {
+  "permissions": {
+    "siteManage": "Gérer le site : infos, apparence, redirections",
+    "collectionsManage": "Gérer tous les éléments des collections et les fichiers de l'équipe"
+  },
   "form": {
     "collapse": "Réduire dans la barre latérale",
     "expand": "Agrandir en plein écran",
@@ -54,6 +58,7 @@
     "creationFailed": "Échec de la création",
     "updateFailed": "Échec de la mise à jour",
     "deleteFailed": "Échec de la suppression",
+    "deletePartial": "{done} sur {total} supprimés. {failed} n'a pas pu être supprimé : {error}",
     "moveFailed": "Échec du déplacement",
     "reorderFailed": "Échec de la réorganisation"
   },
@@ -82,7 +87,11 @@
     "percentComplete": "{percent}% terminé",
     "itemsCreated": "{count} éléments créés",
     "itemsFailed": "{count} éléments échoués",
-    "rowsSkipped": "{count} lignes ignorées (erreurs de validation)"
+    "rowsSkipped": "{count} lignes ignorées (erreurs de validation)",
+    "readFailed": "Impossible de lire le fichier",
+    "noFields": "Cette collection n'a aucun champ à importer",
+    "rowFailed": "Ligne {row} : {error}",
+    "moreFailed": "…et {count} de plus"
   },
   "errors": {
     "checkConnection": "Vérifiez l'état de votre connexion.",

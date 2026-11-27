@@ -3,7 +3,7 @@
  * Includes email stats and details for each booking
  */
 import { eq, and, asc, gte, lte } from 'drizzle-orm'
-import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
+import { requireCan } from '@fyit/crouton-auth/server/utils/team-auth'
 import { user as userTable } from '@fyit/crouton-auth/server/database/schema/auth'
 import { bookingsBookings } from '../../../../../collections/bookings/server/database/schema'
 import { bookingsLocations } from '../../../../../collections/locations/server/database/schema'
@@ -11,7 +11,7 @@ import { isBookingEmailEnabled } from '../../../../utils/booking-emails'
 import { getBatchBookingEmailStats, getBatchBookingEmailDetails } from '../../../../utils/email-service'
 
 export default defineEventHandler(async (event) => {
-  const { team, user } = await requireTeamAdmin(event)
+  const { team, user } = await requireCan(event, 'bookings:manage')
   const db = useDB()
 
   // Check if email is enabled

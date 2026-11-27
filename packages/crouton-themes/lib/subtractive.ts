@@ -16,7 +16,7 @@
 // Pure + deterministic — SSR and client must compute the identical class string
 // (hydration-mismatch rule from #364). No Date/random/env reads here, ever.
 
-type ThemeKey = 'minimal' | 'ko' | 'kr11' | 'bw' | 'brutalist' | 'mtv' | 'terminal' | 'braun' | 'gameboy' | 'riso' | 'eink' | 'blueprint'
+type ThemeKey = 'minimal' | 'ko' | 'kr11' | 'bw' | 'brutalist' | 'mtv' | 'terminal' | 'braun' | 'gameboy' | 'riso' | 'eink' | 'blueprint' | 'editorial'
 
 // First matching prefix wins; a resolved string only ever carries one theme's
 // markers because `variant` is single-valued and the bw markers live on the
@@ -33,7 +33,8 @@ const MARKERS: Array<[prefix: string, theme: ThemeKey]> = [
   ['gb-', 'gameboy'],
   ['riso-', 'riso'],
   ['eink-', 'eink'],
-  ['bp-', 'blueprint']
+  ['bp-', 'blueprint'],
+  ['editorial-', 'editorial']
 ]
 
 // text-* utilities that are NOT color (sizes, alignment, wrapping) — kept when a
@@ -104,6 +105,11 @@ const STRIP: Record<ThemeKey, (u: string) => boolean> = {
     || /^(no-)?underline(-|$)/.test(u) || /^underline-offset(-|$)/.test(u),
   // Blueprint: technical mono — owns typography wholesale plus the rest.
   blueprint: u => isColor(u) || /^text-/.test(u) || isDecor(u) || isMotion(u) || isType(u)
+    || /^(no-)?underline(-|$)/.test(u) || /^underline-offset(-|$)/.test(u),
+  // Editorial (#4520): owns colour, shape, font family/weight and underlines;
+  // keeps Nuxt UI's spacing, text sizes and transitions.
+  editorial: u => isColor(u) || isDecor(u)
+    || /^(font|tracking)(-|$)/.test(u)
     || /^(no-)?underline(-|$)/.test(u) || /^underline-offset(-|$)/.test(u)
 }
 

@@ -27,8 +27,13 @@ vi.mock('@fyit/crouton-auth/server/utils/team', () => ({
   resolveTeamAndCheckMembership: async () => {
     if (!state.role) throw Object.assign(new Error('Not a team member'), { status: 403 })
     return { team: { id: state.session.session.activeOrganizationId }, membership: { role: state.role } }
-  },
-  requireTeamAdmin: async () => {
+  }
+}))
+// requireCan (#4108) as the real one answers with no site config: owner/admin may every action
+const asked = vi.hoisted(() => [] as string[])
+vi.mock('@fyit/crouton-auth/server/utils/team-auth', () => ({
+  requireCan: async (_e: unknown, action: string) => {
+    asked.push(action)
     if (state.role !== 'admin' && state.role !== 'owner') throw Object.assign(new Error('Requires admin'), { status: 403 })
   }
 }))
@@ -121,10 +126,12 @@ describe('DELETE upload-image', () => {
     expect(blob.delete).not.toHaveBeenCalled()
   })
   it('403 for plain member on own team, ok for admin', async () => {
+    asked.length = 0
     await reject(del('teams/A/x.png'), 403)
     state.role = 'admin'
     await del('teams/A/x.png')
     expect(blob.delete).toHaveBeenCalledWith('teams/A/x.png')
+    expect(asked).toEqual(['collections:manage', 'collections:manage'])
   })
   it('own user path ok, other user 403', async () => {
     await del('users/u1/x.png')

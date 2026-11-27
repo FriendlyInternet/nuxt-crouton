@@ -442,7 +442,8 @@ async function deleteEvent() {
 // clients (their open-tab totals reset naturally). Deliberately stronger than
 // the Delete-event pill: bulk-destructive, so the admin must type the event
 // name before the destructive button enables.
-const { isAdmin } = useTeam()
+// The admin-only settings are the `sales:manage` action (#4105)
+const isAdmin = useCan('sales:manage')
 const nuxtApp = useNuxtApp()
 const deleteOrdersOpen = ref(false)
 const deleteOrdersConfirm = ref('')

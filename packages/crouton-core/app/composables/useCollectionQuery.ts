@@ -79,10 +79,10 @@ export async function useCollectionQuery(
   collection: string,
   options: CollectionQueryOptions = {}
 ): Promise<CollectionQueryReturn<any>> {
-  const route = useRoute()
   const collections = useCollections()
   const config = collections.getConfig(collection)
-  const { getTeamId } = useTeamContext()
+  // Cache key and team come from the one builder, resolved once at setup (#4506)
+  const { teamPart, isSuperAdmin, listKey } = useCollectionCacheKeys(collection)
 
   if (!config) {
     console.error(`[useCollectionQuery] Collection "${collection}" not found in registry`)
@@ -111,28 +111,22 @@ export async function useCollectionQuery(
   }))
   const queryForFetch = paginationEnabled ? effectiveQuery : options.query
 
-  // Generate cache key based on collection + query params
-  const cacheKey = computed(() => {
-    const queryStr = queryForFetch?.value
-      ? JSON.stringify(queryForFetch.value)
-      : '{}'
-    return `collection:${collection}:${queryStr}`
-  })
+  // Cache key: collection + team + query params
+  const cacheKey = computed(() => listKey(queryForFetch?.value))
 
   // Determine the full API path based on route context
   const fullApiPath = computed(() => {
-    if (route.path.includes('/super-admin/')) {
+    if (isSuperAdmin.value) {
       return `/api/super-admin/${apiPath}`
     }
 
-    const teamId = getTeamId()
-    if (!teamId) {
+    if (!teamPart.value) {
       // Team context not yet available (SSR or before auth loads)
       // Return null to skip the fetch - client will retry when context is available
       return null
     }
 
-    return `/api/teams/${teamId}/${apiPath}`
+    return `/api/teams/${teamPart.value}/${apiPath}`
   })
 
   // Skip fetching while there is no team context yet

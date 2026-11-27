@@ -19,6 +19,7 @@ describe('viewToggles', () => {
   })
 
   it('Panel keeps the default (never sets view-toggles)', () => {
+    expect(panel.indexOf('<CroutonBookingsPanelFilters')).toBeGreaterThan(-1)
     const usage = panel.slice(panel.indexOf('<CroutonBookingsPanelFilters'))
     const tag = usage.slice(0, usage.indexOf('/>'))
     expect(tag).not.toMatch(/view-toggles/)
@@ -28,12 +29,73 @@ describe('viewToggles', () => {
     expect(filters).toMatch(/viewToggles:\s*true/)
   })
 
-  it('Week/Month, Today, fold button, Map, Location cards and cards row are all guarded', () => {
-    expect(filters).toMatch(/v-if="viewToggles && showCalendar"/g)
-    expect(filters.match(/v-if="viewToggles && showCalendar"/g)?.length).toBe(2)
-    expect(filters).toMatch(/v-if="viewToggles"/)
-    expect(filters).toMatch(/props\.viewToggles && props\.hasLocationsWithCoordinates/)
-    expect(filters).toMatch(/props\.viewToggles && locationItems\.length > 0/)
-    expect(filters).toMatch(/v-if="viewToggles && showLocations/)
+  // covers: T1 — #4516: the Panel has no Week/Month, Today or fold; the toggle row is composed-page only
+  it('no Week/Month, Today or fold control; the toolbar row only renders when !viewToggles', () => {
+    expect(filters).not.toMatch(/showCalendar|show-calendar/)
+    expect(filters).not.toMatch(/calendarView|calendar-view/)
+    expect(filters).not.toMatch(/go-to-today/)
+    expect(filters).not.toMatch(/toolbar-end/)
+    expect(filters).not.toMatch(/UFieldGroup/)
+    expect(filters).not.toMatch(/bookings\.filters\.(week|month|today|foldCalendar|unfoldCalendar)/)
+    expect(panel).not.toMatch(/showCalendar/)
+    // the toolbar row is behind !viewToggles and the Show cancelled text toggle is inside it (#4562)
+    const row = filters.indexOf('<div v-if="!viewToggles"')
+    expect(row).toBeGreaterThan(-1)
+    const toggle = filters.indexOf('<CroutonBookingsListToggles')
+    const prompt = filters.indexOf('locations.length === 0 && canManageLocations')
+    expect(toggle).toBeGreaterThan(row)
+    expect(toggle).toBeLessThan(prompt)
+    // the removed i18n keys are gone from every locale
+    for (const lang of ['en', 'nl', 'fr']) {
+      const json = JSON.parse(readFileSync(resolve(__dirname, `../i18n/locales/${lang}.json`), 'utf8'))
+      for (const key of ['week', 'month', 'today', 'foldCalendar', 'unfoldCalendar', 'settings', 'view'])
+        expect(json.bookings.filters[key]).toBeUndefined()
+    }
+  })
+
+  // covers: T1 — the admin "no locations yet" prompt keeps working from the Panel
+  it('Panel still renders the no-locations prompt for admins, outside the toolbar row', () => {
+    const at = panel.indexOf('<CroutonBookingsPanelFilters')
+    expect(at).toBeGreaterThan(-1)
+    const tag = panel.slice(at, panel.indexOf('/>', at))
+    expect(tag).toMatch(/:can-manage-locations="effectiveIsAdmin"/)
+    expect(tag).toMatch(/@add-location="onAddLocation"/)
+    // its wrapper only renders when there is something to show
+    const wrapper = panel.slice(panel.lastIndexOf('<div', at), at)
+    expect(wrapper).toMatch(/v-if="[^"]*resolvedLocations\.length === 0[^"]*"/)
+    expect(wrapper).toMatch(/v-if="[^"]*effectiveIsAdmin[^"]*"/)
+    // PanelFilters keeps the prompt, after (outside) the !viewToggles row
+    const prompt = filters.indexOf('v-if="locations.length === 0 && canManageLocations"')
+    expect(prompt).toBeGreaterThan(-1)
+    expect(filters).toMatch(/emit\('add-location'\)/)
+    const rowStart = filters.indexOf('<div v-if="!viewToggles"')
+    const rowEnd = filters.indexOf('<CroutonBookingsListToggles', rowStart)
+    expect(rowEnd).toBeGreaterThan(rowStart)
+    expect(prompt).toBeGreaterThan(rowEnd)
+  })
+
+  // covers: T1 — #4492/#4562: Map lives on the list; composed pages get the Show cancelled text toggle, no cog
+  it('no Map item and no cog; the Show cancelled text toggle only renders when !viewToggles', () => {
+    expect(filters).not.toMatch(/bookings\.filters\.map/)
+    expect(filters).not.toMatch(/hasLocationsWithCoordinates/)
+    expect(filters).not.toMatch(/update:showMap/)
+    expect(filters).toMatch(/<div v-if="!viewToggles"[\s\S]*?<CroutonBookingsListToggles/)
+    expect(filters.match(/<CroutonBookingsListToggles/g)?.length).toBe(1)
+    expect(filters).toMatch(/<CroutonBookingsListToggles[\s\S]*?:can-show-map="false"/)
+    expect(filters).not.toMatch(/UDropdownMenu|UChip|i-lucide-settings|settingsItems|hasActiveFilter/)
+    expect(filters).toMatch(/showCancelled\?:\s*boolean/)
+    expect(filters).toMatch(/showCancelled:\s*false/)
+    expect(panel.indexOf('<CroutonBookingsPanelFilters')).toBeGreaterThan(-1)
+    const usage = panel.slice(panel.indexOf('<CroutonBookingsPanelFilters'))
+    const tag = usage.slice(0, usage.indexOf('>'))
+    expect(tag).not.toMatch(/show-cancelled|show-map|has-locations-with-coordinates/)
+  })
+
+  // #4471 — location cards and their cog toggle are gone; composed pages get the tab row
+  it('no location cards toggle; composed pages keep a location picker', () => {
+    expect(filters).not.toMatch(/showLocations/)
+    expect(filters).not.toMatch(/locationCards/)
+    expect(filters).toMatch(/v-if="!viewToggles && locations\.length > 0"/)
+    expect(panel).not.toMatch(/show-locations/)
   })
 })

@@ -1,4 +1,8 @@
 {
+  "permissions": {
+    "bookingsCreate": "Create bookings",
+    "bookingsManage": "Manage all bookings"
+  },
   "bookings": {
     "title": "Bookings",
     "booking": "Booking",
@@ -92,7 +96,8 @@
     "panel": {
       "noLocations": "No locations yet",
       "membersOnly": "Sign in to view and manage your bookings. This section is available to members only.",
-      "signIn": "Sign in"
+      "signIn": "Sign in",
+      "calendarHandle": "Switch between week and month"
     },
     "calendar": {
       "noBookings": "No bookings",
@@ -172,17 +177,9 @@
       "cancellation": "cancellation"
     },
     "filters": {
-      "settings": "Calendar settings",
-      "view": "View",
-      "foldCalendar": "Hide calendar",
-      "unfoldCalendar": "Show calendar",
-      "locationCards": "Location cards",
-      "locations": "Locations",
+      "all": "All",
       "map": "Map",
       "cancelled": "Show cancelled",
-      "today": "Today",
-      "week": "Week",
-      "month": "Month",
       "addLocation": "Add Location"
     },
     "locationForm": {

@@ -241,7 +241,7 @@ The package includes a block-based page editor using TipTap and Nuxt UI page com
 | `ctaBlock` | UPageCTA | Call-to-action banner |
 | `cardGridBlock` | UPageGrid + UPageCard | Grid of cards |
 | `separatorBlock` | USeparator | Visual divider |
-| `richTextBlock` | prose div | Standard text content |
+| `richTextBlock` | prose div | Standard text content. Editor node `editor/extensions/rich-text-block.ts` (#4436) keeps it intact through an editor save (read-only view; not offered in the insert menu). |
 | `qrCodeBlock` | CroutonQrCode | Scannable QR code linking to a CMS page (via the `page` field picker) or a custom URL. Resolves `pageId` → absolute public URL with `usePageLink().resolve()` + `useRequestURL().origin`. |
 | `paneBlock` | CroutonLayoutRenderer (render) / CroutonLayout (editor) | **Bridge block (#716, completed #706)** — hosts a *pane layout* inside the document flow. `attrs.layout` is a `LayoutTree` (the "layout is data" shape) + `attrs.height`. Public render delegates to crouton-core's `CroutonLayoutRenderer`; the **in-editor composer** (`Blocks/Views/PaneBlockView.vue`) hosts the editable `CroutonLayout` so authors arrange panes inline. The TipTap node (`editor/extensions/pane-block.ts`) round-trips `attrs.layout` through an editor save (serializes to `data-layout` JSON; JSON content storage preserves the object). The pane tree serializes into the page's existing `content` JSON — no new page type or table. `attrs.layout` is untrusted → `sanitizeLayoutTree` on render; the renderer allowlists each leaf `blockId`. |
 
@@ -511,17 +511,17 @@ when the page type changes.
 
 ### The floating nav pill (`Nav.vue`) — theme quick-select + action slot
 
-The right pill (bottom-left on full-screen pages) hosts `<CroutonUserPill placement="inline" use-modal>` (account/status/sign-in, scoped-visitor sign-out, and a "Manage site" admin submenu passed via `extra-items`, admins only — the pill itself honours `hideAuthControls`) plus:
+The right pill (bottom-left on full-screen pages) hosts `<CroutonUserPill placement="inline" use-modal>` (account/status/sign-in, scoped-visitor sign-out, and a "Manage site" admin submenu passed via `extra-items`, only for people who may `pages:edit` (`useCan('pages:edit', { server: false })`, #4105) — the pill itself honours `hideAuthControls`) plus:
 
 - **Theme quick-select** — a palette `UDropdownMenu` reading the shared
   `crouton:themePreferenceItems` state (filled by the crouton-themes base layer's
   `themeProvider.client` plugin). Rendered only when that state is populated **and**
-  `allowUserThemes || isAdmin`, inside `<ClientOnly>` (no hard dep on crouton-themes;
+  `allowUserThemes` or the reader may `site:manage`, inside `<ClientOnly>` (no hard dep on crouton-themes;
   hidden entirely when the themes layer isn't extended). Dark-mode toggle stays adjacent.
 - **Package action slot** — `useCroutonNavPill().visibleActions` render as ghost icon
   buttons. Any layer contributes via `register()` (see the composable in Key Files). The
   **edit-page pencil** is pages' own contribution: `[...slug].vue` registers it on mount
-  (`show: isAdmin && !isEditing && page.id`, `onSelect: startEditing`) — it **replaced the
+  (`show: canEdit && !isEditing && page.id`, where `canEdit = useCan('pages:edit', { server: false })`; `onSelect: startEditing`) — it **replaced the
   old fixed bottom-right FAB**. Client-only registration, so the button appears just after
   hydration.
 

@@ -152,6 +152,10 @@ test('7: run titles match the run-name in each workflow file', () => {
   assert.equal(handoffRunTitle('work-issue-pidev.yml', { issue: 5, mode: 'plan' }), '#5 · plan')
   assert.equal(handoffRunTitle('automerge-epic-subpr.yml', { pr: '7' }), 'automerge #7')
   assert.equal(handoffRunTitle('ticket-revise.yml', { epic: 7 }), 'ticket-revise #7')
+  // covers: T6 — a review of one ticket names it (#4456); the whole set does not
+  assert.equal(handoffRunTitle('ticket-review.yml', { epic: '20', subject: '21' }), 'ticket-review #20 · 21')
+  assert.equal(handoffRunTitle('ticket-review.yml', { epic: '20', subject: '' }), 'ticket-review #20')
+  assert.equal(handoffRunTitle('ticket-review.yml', { epic: '20' }), 'ticket-review #20')
   assert.equal(handoffRunTitle('postmortem.yml', { epic: '12' }), 'postmortem #12')
 })
 test('8: marker write falls back to the second token; both failing rethrows', async () => {

@@ -16,8 +16,8 @@ import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  activeClaim, claimMarker, confirmLabelChange, decideClaimGuard, describeClaim,
-  detectGuardedAction, releaseMarker, shortChatId, ticketFromPr,
+  activeClaim, claimMarker, confirmLabelChange, decideAdoptGuard, decideClaimGuard, describeClaim,
+  detectAdopts, detectGuardedAction, issueNodeId, releaseMarker, shortChatId, ticketFromPr,
 } from './lib/chat-claim.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -262,4 +262,181 @@ test('T7 provenance hook leaves pipeline headers alone', () => {
   // no session id (e.g. an older harness) → the old rule only
   const interactive = '> 🤖 **Claude Code** · interactive agent · _x_'
   assert.equal(runHook(PROVENANCE, { tool_input: { body: interactive } }).status, 0)
+})
+
+// ── #4517: putting a ticket that is already being built under an epic (adopt) ──
+// The 23 Nov incident: #4375, #4376 and #4377 were put under new epics after they had started.
+// The fixtures replay their shapes on that day (live labels have moved on since).
+const B_CHAT = '9b8e7d'
+const REPO_ID = 1063412456
+const ID_4375 = 6592202606 // any id: the fixture maps its node id to #4375
+function adoptFixture(issues = {}, prs = {}) {
+  const dir = mkdtempSync(join(tmpdir(), 'adopt-'))
+  const file = join(dir, 'facts.json')
+  writeFileSync(file, JSON.stringify({
+    now: new Date(NOW).toISOString(),
+    repoId: REPO_ID,
+    nodes: { [issueNodeId(REPO_ID, ID_4375)]: 4375 },
+    issues: {
+      4455: { state: 'OPEN', body: '', labels: ['epic'], comments: [], parent: null },
+      4375: { state: 'OPEN', body: '', labels: ['work-this', 'plan:approved', 'status:blocked'], comments: [], parent: null },
+      4376: { state: 'OPEN', body: '', labels: ['work-this', 'status:blocked'], comments: [], parent: null },
+      4377: { state: 'OPEN', body: '', labels: ['plan:approved'], comments: [], parent: null },
+      4380: { state: 'OPEN', body: '', labels: ['type:feat'], comments: [], parent: null },
+      ...issues,
+    },
+    prs: { 4381: { body: 'Closes #4377', headRefName: 'work-4377' }, 4300: { body: '', headRefName: 'work-4380', state: 'MERGED' }, ...prs },
+  }))
+  return file
+}
+const bash = (command) => ({ session_id: B_SESSION, tool_name: 'Bash', tool_input: { command } })
+const adoptHook = (input, file) => runHook(HOOK, input, { CLAIM_FACTS_FILE: file })
+
+// covers: T8
+test('T8 a #4375-shaped child (work-this, plan:approved, status:blocked) put under an epic is refused', () => {
+  const r = adoptHook(bash('gh issue edit 4375 --parent 4455'), adoptFixture())
+  assert.equal(r.status, 2, r.stderr)
+  assert.match(r.stderr, /#4375 is already being built \(work-this, plan:approved, status:blocked\)/)
+  assert.match(r.stderr, /leave it where it is, or ask the owner/)
+})
+
+// covers: T9
+test('T9 a #4376-shaped child (work-this, status:blocked) is refused', () => {
+  const r = adoptHook(bash('gh issue edit 4376 --parent 4455'), adoptFixture())
+  assert.equal(r.status, 2, r.stderr)
+  assert.match(r.stderr, /#4376 is already being built \(work-this, status:blocked\)/)
+})
+
+// covers: T10
+test('T10 a #4377-shaped child (plan:approved, open PR on work-4377) is refused and names the PR', () => {
+  const r = adoptHook(bash('gh issue edit 4377 --parent 4455'), adoptFixture())
+  assert.equal(r.status, 2, r.stderr)
+  assert.match(r.stderr, /#4381/)
+})
+
+// covers: T11
+test('T11 decideAdoptGuard passes a fresh open ticket and a closed one', () => {
+  const claims = [{ issue: 4380, claim: null }]
+  assert.equal(decideAdoptGuard({ child: 4380, issue: { state: 'OPEN', labels: ['type:feat'] }, claims, openPrs: [] }).allow, true)
+  assert.equal(decideAdoptGuard({ child: 4380, issue: { state: 'CLOSED', labels: ['work-this'] }, claims, openPrs: [] }).allow, true)
+  // an open PR on another ticket's branch does not count; pi/work-<n> does
+  assert.equal(decideAdoptGuard({ child: 4380, issue: { state: 'OPEN', labels: [] }, claims, openPrs: [{ number: 1, headRefName: 'work-43800' }] }).allow, true)
+  assert.equal(decideAdoptGuard({ child: 4380, issue: { state: 'OPEN', labels: [] }, claims, openPrs: [{ number: 1, headRefName: 'pi/work-4380' }] }).allow, false)
+})
+
+// covers: T12
+test('T12 the owner\'s yes the existing way: the chat holding the claim may adopt, another chat may not', () => {
+  const claimed = { 4375: { state: 'OPEN', body: '', labels: ['work-this', 'plan:approved', 'status:blocked'], comments: [{ body: claimMarker({ chat: A, since: 's' }), createdAt: hoursAgo(1) }], parent: null } }
+  const file = adoptFixture(claimed)
+  const mine = adoptHook({ ...bash('gh issue edit 4375 --parent 4455'), session_id: A_SESSION }, file)
+  assert.equal(mine.status, 0, mine.stderr)
+  const other = adoptHook(bash('gh issue edit 4375 --parent 4455'), file)
+  assert.equal(other.status, 2, other.stderr)
+  assert.match(other.stderr, /#4375 is claimed by c7f3a1/)
+  // same rule directly
+  assert.equal(decideAdoptGuard({ child: 4375, issue: claimed[4375], myChat: B_CHAT, claims: [{ issue: 4375, claim: { chat: A, name: '' } }] }).allow, false)
+})
+
+// covers: T13
+test('T13 detectAdopts reads child and epic for every covered shape, and ignores the rest', () => {
+  const b = (command) => detectAdopts('Bash', { command })
+  const one = [{ kind: 'adopt', epic: 4455, children: [{ number: 4375 }] }]
+  assert.deepEqual(b('gh issue edit 4375 --parent 4455'), one)
+  assert.deepEqual(b('gh issue edit 4375 --parent=https://github.com/o/r/issues/4455'), one)
+  assert.deepEqual(b('gh api repos/o/r/issues/4455/sub_issues -F sub_issue_id=6592202606'),
+    [{ kind: 'adopt', epic: 4455, children: [{ childId: 6592202606 }] }])
+  assert.deepEqual(b(`gh api graphql -f query='mutation{addSubIssue(input:{issueId:"I_x",subIssueUrl:"https://github.com/o/r/issues/4375"}){clientMutationId}}'`),
+    [{ kind: 'adopt', epic: null, children: [{ number: 4375 }] }])
+  assert.deepEqual(b(`gh api graphql -f query='mutation{addSubIssue(input:{issueId:"I_x",subIssueId:"I_kwDOP2Ji6M8AAAABiO0Hbg"}){clientMutationId}}'`),
+    [{ kind: 'adopt', epic: null, children: [{ childNode: 'I_kwDOP2Ji6M8AAAABiO0Hbg' }] }])
+  assert.deepEqual(detectAdopts('mcp__github__sub_issue_write', { method: 'add', issue_number: 4455, sub_issue_id: 6592202606 }),
+    [{ kind: 'adopt', epic: 4455, children: [{ childId: 6592202606 }] }])
+  const sub = b('gh api repos/o/r/issues/4455/sub_issues -F sub_issue_id=$(gh api repos/o/r/issues/4375 --jq .id)')
+  assert.equal(sub.length, 1)
+  assert.ok(sub[0].unresolved, JSON.stringify(sub))
+  assert.ok(b(`gh api graphql -f query='mutation($c:ID!){addSubIssue(input:{issueId:"I_x",subIssueId:$c}){clientMutationId}}' -f c=I_y`)[0].unresolved)
+  for (const cmd of [
+    'gh issue edit 4375 --remove-parent',
+    'gh issue edit 4455 --remove-sub-issue 4375',
+    'gh api repos/o/r/issues/4455/sub_issues',
+    'gh api -X DELETE repos/o/r/issues/4455/sub_issue -F sub_issue_id=1',
+    'gh issue view 4375',
+    'gh issue create --parent 4455 --title x',
+  ]) assert.deepEqual(b(cmd), [], cmd)
+  assert.deepEqual(detectAdopts('mcp__github__sub_issue_write', { method: 'remove', issue_number: 4455, sub_issue_id: 1 }), [])
+  assert.deepEqual(detectAdopts('mcp__github__issue_write', { method: 'update', issue_number: 1 }), [])
+})
+
+// covers: T14
+test('T14 issueNodeId builds the real node id, and an MCP adopt by id is resolved and refused', () => {
+  assert.equal(issueNodeId(1063412456, 6592202606), 'I_kwDOP2Ji6M8AAAABiO0Hbg')
+  const r = adoptHook({ session_id: B_SESSION, tool_name: 'mcp__github__sub_issue_write', tool_input: { method: 'add', issue_number: 4455, sub_issue_id: ID_4375 } }, adoptFixture())
+  assert.equal(r.status, 2, r.stderr)
+  assert.match(r.stderr, /#4375 is already being built/)
+  const rest = adoptHook(bash(`gh api repos/o/r/issues/4455/sub_issues -F sub_issue_id=${ID_4375}`), adoptFixture())
+  assert.equal(rest.status, 2, rest.stderr)
+})
+
+// covers: T15
+test('T15 a failed lookup fails open with a note; an unrelated call makes no lookup', () => {
+  const r = adoptHook(bash('gh issue edit 4375 --parent 4455'), '/nonexistent/facts.json')
+  assert.equal(r.status, 0)
+  assert.match(r.stderr, /lookup failed, allowing/)
+  const quiet = adoptHook(bash('gh issue view 1'), '/nonexistent/facts.json')
+  assert.equal(quiet.status, 0)
+  assert.equal(quiet.stderr, '')
+})
+
+// covers: T16
+test('T16 --parent: flag order and several children are read right', () => {
+  const b = (command) => detectAdopts('Bash', { command })
+  assert.deepEqual(b('gh issue edit --parent 4455 4375'), [{ kind: 'adopt', epic: 4455, children: [{ number: 4375 }] }])
+  const two = [{ kind: 'adopt', epic: 4455, children: [{ number: 4375 }, { number: 4376 }] }]
+  assert.deepEqual(b('gh issue edit 4375 4376 --parent 4455'), two)
+  assert.deepEqual(b('gh issue edit -R o/r 4375 --title x 4376 --parent 4455'), two)
+  assert.equal(b('gh issue edit $n --parent 4455')[0].unresolved, '$n')
+  const file = adoptFixture()
+  const mixed = adoptHook(bash('gh issue edit 4380 4376 --parent 4455'), file)
+  assert.equal(mixed.status, 2, mixed.stderr)
+  assert.match(mixed.stderr, /#4376/)
+  const flagFirst = adoptHook(bash('gh issue edit --parent 4455 4375'), file)
+  assert.equal(flagFirst.status, 2, flagFirst.stderr)
+  assert.match(flagFirst.stderr, /#4375 is already being built/)
+  const sweep = adoptHook(bash('for n in 4375; do gh issue edit $n --parent 4455; done'), '/nonexistent/facts.json')
+  assert.equal(sweep.status, 2, sweep.stderr)
+  assert.match(sweep.stderr, /can't tell which ticket/)
+})
+
+// covers: T17
+test('T17 --add-sub-issue (epic side): every listed child is checked', () => {
+  const b = (command) => detectAdopts('Bash', { command })
+  assert.deepEqual(b('gh issue edit 4455 --add-sub-issue 4375,4376,4377'),
+    [{ kind: 'adopt', epic: 4455, children: [{ number: 4375 }, { number: 4376 }, { number: 4377 }] }])
+  assert.deepEqual(b('gh issue edit --add-sub-issue https://github.com/o/r/issues/4375 4455 --add-sub-issue 4376'),
+    [{ kind: 'adopt', epic: 4455, children: [{ number: 4375 }, { number: 4376 }] }])
+  assert.equal(b('gh issue edit 4455 --add-sub-issue $x')[0].unresolved, '$x')
+  const file = adoptFixture()
+  const refused = adoptHook(bash('gh issue edit 4455 --add-sub-issue 4380,4377'), file)
+  assert.equal(refused.status, 2, refused.stderr)
+  assert.match(refused.stderr, /#4381/)
+  const fresh = adoptHook(bash('gh issue edit 4455 --add-sub-issue 4380'), file)
+  assert.equal(fresh.status, 0, fresh.stderr) // #4380's merged PR does not count
+})
+
+// covers: T18
+test('T18 an adopt in the same command as a label change is still judged by the adopt rule', () => {
+  const file = adoptFixture()
+  for (const cmd of [
+    'gh issue edit 4375 --parent 4455 --add-label work-this',
+    'gh issue edit --remove-label status:blocked --parent 4455 4375',
+    'gh issue edit 4380 --add-label work-this && gh issue edit 4375 --parent 4455',
+  ]) {
+    const r = adoptHook(bash(cmd), file)
+    assert.equal(r.status, 2, `${cmd}: ${r.stderr}`)
+    assert.match(r.stderr, /#4375 is already being built/, cmd)
+  }
+  assert.deepEqual(detectGuardedAction('Bash', { command: 'gh issue edit 4375 --parent 4455 --add-label work-this' }),
+    { kind: 'add-work-this', number: 4375 })
+  const labelOnly = adoptHook(bash('gh issue edit 4380 --add-label work-this'), file)
+  assert.equal(labelOnly.status, 0, labelOnly.stderr)
 })

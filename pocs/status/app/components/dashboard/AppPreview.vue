@@ -15,6 +15,6 @@ defineProps<{ app: string, preview: AppRow['previews'][number] }>()
     </div>
     <p class="text-xs text-muted">Updated {{ day(preview.updatedAt) }}</p>
     <UButton block variant="outline" icon="i-lucide-log-in" label="Open and sign in" :href="`/api/status/login/${app}?key=pr${preview.pr}`" target="_blank" />
-    <ReplyButtons kind="pr" :number="preview.pr" />
+    <ReplyButtons v-if="preview.asksOwner" kind="pr" :number="preview.pr" />
   </div>
 </template>

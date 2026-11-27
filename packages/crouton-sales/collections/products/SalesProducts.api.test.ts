@@ -33,6 +33,12 @@ vi.hoisted(() => {
 vi.mock('@fyit/crouton-auth/server/utils/team', () => ({
   resolveTeamAndCheckMembership: vi.fn(),
 }))
+// Action checks (#4108): the test caller has no action, so update/delete and
+// list: 'own' stay scoped to the caller's own rows.
+vi.mock('@fyit/crouton-auth/server/utils/team-auth', () => ({
+  can: vi.fn().mockResolvedValue(false),
+  requireCan: vi.fn(),
+}))
 vi.mock('./server/database/queries', () => ({
   getAllSalesProducts: vi.fn(),
   getSalesProductsByIds: vi.fn(),

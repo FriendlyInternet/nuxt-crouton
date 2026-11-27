@@ -18,6 +18,11 @@ vi.mock('@fyit/crouton-auth/server/utils/team', () => ({
   resolveTeamAndCheckMembership: async () => member,
   requireTeamAdmin: async () => member,
 }))
+// Routes check actions via requireCan / can (#4108); a member has none, so owner-only paths apply
+vi.mock('@fyit/crouton-auth/server/utils/team-auth', async () => {
+  const { teamAuthStub } = await import('./stubs/team-auth')
+  return teamAuthStub(() => member).module
+})
 vi.mock('nitropack/runtime', () => ({ useNitroApp: () => ({ hooks: { callHook: () => Promise.resolve() } }) }))
 
 let db: any
