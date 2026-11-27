@@ -19,6 +19,7 @@ import readPage from './tools/read-page'
 import editPage from './tools/edit-page'
 import addLayout from './tools/add-layout'
 import listLayoutBlocks from './tools/list-layout-blocks'
+import createPage from './tools/create-page'
 
 /**
  * The request as the sign-in check reads it (URL + `Authorization`). Built by hand
@@ -30,15 +31,16 @@ function signInRequest(event: H3Event): Request {
 }
 
 export default defineMcpHandler({
-  description: 'Edit your teams\' pages live: changes appear in the open page editor; the owner saves.',
+  description: 'Edit your teams\' pages live: changes appear in the open page editor; the owner saves. Create new pages as drafts.',
   instructions: [
     'Start with list_teams: it lists your teams and whether you may edit each one\'s pages. Pass that team\'s slug or id as `team` to every page tool.',
     'These tools change the LIVE document of a page — what the open editor shows. They never save: the owner reviews and clicks Save (Enregistrer).',
     'Then list_pages, then read_page to see the blocks and their indexes. Use edit_page to insert / replace / delete TipTap blocks at an index.',
     'To place a layout: list_layout_blocks first, arrange the blocks into a panes tree ({ renderer: "panes", root: { type: "split", direction: "horizontal", children: [{ type: "leaf", blockId }] } }),',
-    'keep it viable at 1280px (every block gets its minWidth — add_layout refuses otherwise), then add phone behaviour (breakpoints / collapse) for any 768 / 375 warnings add_layout returns.'
+    'keep it viable at 1280px (every block gets its minWidth — add_layout refuses otherwise), then add phone behaviour (breakpoints / collapse) for any 768 / 375 warnings add_layout returns.',
+    'To start a new page use create_page (default locale, title, slug, optional parentId / blocks / settings): it is saved as a DRAFT and never published — the owner publishes it in the Pages admin.'
   ].join(' '),
-  tools: [listTeams, listPages, readPage, editPage, addLayout, listLayoutBlocks],
+  tools: [listTeams, listPages, readPage, editPage, addLayout, listLayoutBlocks, createPage],
   // Explicitly empty: a missing field makes the toolkit fall back to the shared
   // pool (`defaultHandlerStrategy: 'orphans'`), which would hand every signed-in
   // user the generic collection resources and the data-entry prompt.
