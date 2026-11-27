@@ -23,12 +23,15 @@ async function seeded(providers: Parameters<typeof collectSeedSql>[0]['providers
 
 describe('package seed writes products (#4044)', () => {
   // covers: T1
-  it('S1 catalog + bookings seed: 4 locations, 5 bookings, 4 products; every location lists products, every booking has a seeded product', async () => {
+  it('S1 catalog + bookings seed: 4 locations, 6 bookings, 4 products; every location lists products, every booking has a seeded product', async () => {
     // bookings listed first on purpose: dependsOn must still run catalog before it
     const client = await seeded([bookingsProvider, catalogProvider])
 
     const count = (t: string) => (client.prepare(`select count(*) as n from ${t}`).get() as { n: number }).n
     expect(count('bookings_locations')).toBe(4)
+    expect(count('bookings_bookings')).toBe(6)
+    // one cancelled booking so "Show cancelled" has something to show (#4562)
+    expect((client.prepare(`select count(*) as n from bookings_bookings where status = 'cancelled'`).get() as { n: number }).n).toBe(1)
     // 5 live bookings, plus the cancelled one S1c checks
     expect((client.prepare(`select count(*) as n from bookings_bookings where status <> 'cancelled'`).get() as { n: number }).n).toBe(5)
     expect(count('catalog_products')).toBe(4)

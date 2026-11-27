@@ -49,6 +49,15 @@
         ]
       },
       {
+        "matcher": "mcp__github__sub_issue_write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/require-unclaimed.mjs"
+          }
+        ]
+      },
+      {
         "matcher": "Bash",
         "hooks": [
           {

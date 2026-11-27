@@ -29,6 +29,7 @@ import { ContactBlock } from './contact-block'
 import { MailingBlock } from './mailing-block'
 import { QrCodeBlock } from './qr-code-block'
 import { PaneBlock } from './pane-block'
+import { RichTextBlock } from './rich-text-block'
 import { BlockCommands } from './block-commands'
 import { createAddonBlockExtension } from './addon-block-factory'
 
@@ -57,6 +58,8 @@ export interface PageBlocksOptions {
     mailing?: boolean
     qrCode?: boolean
     pane?: boolean
+    /** Opens/keeps existing rich-text blocks; never offered in the insert menu (#4436) */
+    richText?: boolean
   }
   /**
    * Addon block definitions from external packages (registered via croutonBlocks in app.config.ts)
@@ -97,7 +100,8 @@ export const PageBlocks = Extension.create<PageBlocksOptions>({
         contact: true,
         mailing: true,
         qrCode: true,
-        pane: true
+        pane: true,
+        richText: true
       },
       addonBlocks: [],
       enableSlashCommands: true,
@@ -194,6 +198,9 @@ export const PageBlocks = Extension.create<PageBlocksOptions>({
     }
     if (blocks?.pane !== false) {
       extensions.push(PaneBlock)
+    }
+    if (blocks?.richText !== false) {
+      extensions.push(RichTextBlock)
     }
 
     // Add addon block extensions (from croutonBlocks in app.config.ts)

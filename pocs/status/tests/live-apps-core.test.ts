@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { loadLiveApps, loadPreviews, decidePreview, decidePrLogin, previewNoneHtml, noStagingHtml, notOnMainHtml, loginPlan, liveAppFromConfig, previewGoneHtml, parseDeployComment, resolvePreviewUrl, type Preview } from '../server/utils/live-apps-core'
+import { loadLiveApps, loadPreviews, decidePreview, decidePrLogin, previewNoneHtml, noStagingHtml, notOnMainHtml, loginPlan, liveAppFromConfig, previewGoneHtml, parseDeployComment, resolvePreviewUrl, previewAsksOwner, type Preview } from '../server/utils/live-apps-core'
 
 const body = '<!-- deploy-staging:velo -->\n🚀 **velo** preview for this PR: https://velo-pr12.example.workers.dev\n\n🔑 Review login'
 
@@ -11,6 +11,32 @@ describe('parseDeployComment', () => {
     expect(parseDeployComment('hello')).toBeNull()
     expect(parseDeployComment('<!-- deploy-staging:velo -->\nno link')).toBeNull()
     expect(parseDeployComment(null)).toBeNull()
+  })
+})
+
+// covers: T1 (#3045)
+describe('previewAsksOwner', () => {
+  const card = (over: Record<string, unknown>) => ({ kind: 'review', state: 'waiting', sourceType: 'pr', sourceNumber: 77, payload: {}, ...over }) as any
+  it('true for a waiting review card on that PR', () => {
+    expect(previewAsksOwner(77, [card({})])).toBe(true)
+  })
+  it('false with no cards', () => {
+    expect(previewAsksOwner(77, [])).toBe(false)
+  })
+  it('false when the review cards for the PR are answered or stale', () => {
+    expect(previewAsksOwner(77, [card({ state: 'answered' }), card({ state: 'stale' })])).toBe(false)
+  })
+  it('false for a waiting review card on another PR', () => {
+    expect(previewAsksOwner(77, [card({ sourceNumber: 78 })])).toBe(false)
+  })
+  it('false for a waiting review card on an issue with the same number', () => {
+    expect(previewAsksOwner(77, [card({ sourceType: 'issue' })])).toBe(false)
+  })
+  it('false for a waiting stuck-draft card on the PR', () => {
+    expect(previewAsksOwner(77, [card({ kind: 'issue', payload: { stuck: 'draft' } })])).toBe(false)
+  })
+  it('false for a waiting link card on the PR', () => {
+    expect(previewAsksOwner(77, [card({ kind: 'issue', payload: {} })])).toBe(false)
   })
 })
 

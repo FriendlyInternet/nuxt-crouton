@@ -47,6 +47,8 @@ const emit = defineEmits<{
   'update:filters': [value: FilterState]
   'update:view': [value: 'week' | 'month']
   'hoverBooking': [bookingId: string | null]
+  /** The month/week label was tapped (#4516) */
+  'today': []
 }>()
 
 // The period being shown (owned by the parent; standalone use keeps its own)
@@ -104,19 +106,6 @@ function toggleStatus(statusValue: string) {
     current.splice(index, 1)
   }
   emit('update:filters', { ...props.filters, statuses: current })
-}
-
-// Toggle location filter
-function toggleLocation(locationId: string) {
-  const current = [...props.filters.locations]
-  const index = current.indexOf(locationId)
-  if (index === -1) {
-    current.push(locationId)
-  }
-  else {
-    current.splice(index, 1)
-  }
-  emit('update:filters', { ...props.filters, locations: current })
 }
 
 // Get status color
@@ -343,9 +332,10 @@ function getLocationAddress(locationId: string): string | null {
 // Month cell height matches the real stack (#3046), for n indicator rows:
 //   4 (pt-1) + 16 (day number) + 2 (mt-0.5)
 //   + 4n (2xs bars/dots) + 2(n-1) (gap-0.5) + 4 (pb-1)
-//   = 24 + 6n, with a 40px floor.
+//   = 24 + 6n, with a 32px floor (#4516: a tighter month; with several
+//   locations the cells still grow to fit).
 const monthCellHeight = computed(() => {
-  return Math.max(40, 24 + 6 * maxIndicatorCount.value)
+  return Math.max(32, 24 + 6 * maxIndicatorCount.value)
 })
 
 // ONE shared location card (#3895) instead of one UPopover per indicator per day.
@@ -373,8 +363,17 @@ onBeforeUnmount(card.close)
       :selected-date="selectedDate"
       :active-date="creatingAtDate"
       :is-date-disabled="isDateUnavailable ? isDayUnavailable : undefined"
+      :hold-key="maxIndicatorCount"
       @select="onWeekSelect"
+      @today="emit('today')"
     >
+      <template v-if="$slots['header-start']" #header-start>
+        <slot name="header-start" />
+      </template>
+      <template v-if="$slots['header-end']" #header-end>
+        <slot name="header-end" />
+      </template>
+
       <!-- Add booking tab (slides down from under the date block on hover) -->
       <!-- Deliberately a raw button (#1410): a calendar hover cell whose
            geometry (absolute slide-down tab under the date block) and
@@ -426,7 +425,14 @@ onBeforeUnmount(card.close)
     </CroutonCalendarWeek>
 
     <!-- Month View -->
-    <CroutonCalendarMonth v-else v-model:date="date" @select="onMonthSelect">
+    <!-- hold-key: picking a location tab shrinks the cells, so the strip's held height is measured again (#4516) -->
+    <CroutonCalendarMonth v-else v-model:date="date" :hold-key="maxIndicatorCount" @select="onMonthSelect" @today="emit('today')">
+      <template v-if="$slots['header-start']" #header-start>
+        <slot name="header-start" />
+      </template>
+      <template v-if="$slots['header-end']" #header-end>
+        <slot name="header-end" />
+      </template>
       <template #day="{ day, jsDate, neighbour }">
           <!-- Neighbour months: day number + dots only, so 3x stays cheap -->
           <div
@@ -453,10 +459,14 @@ onBeforeUnmount(card.close)
             </div>
           </div>
           <!-- Presentation only — day activation (mouse + keyboard) arrives via
-               CroutonCalendarMonth's cellTrigger button → onMonthSelect. -->
+               CroutonCalendarMonth's cellTrigger button → onMonthSelect.
+               `transition`, not `transition-all`: a min-height change must not animate,
+               or the month's held height is re-measured mid-shrink and keeps the old height (#4516).
+               A day with bookings gets no background of its own (#4516): a permanent tint read as
+               "still highlighted" after another day was tapped, and it hid the selected background. -->
           <div
             v-else
-            class="group relative w-full flex flex-col items-center justify-start pt-1 pb-1 rounded-md transition-all duration-200"
+            class="group relative w-full flex flex-col items-center justify-start pt-1 pb-1 rounded-md transition duration-200"
             :style="{ minHeight: `${monthCellHeight}px` }"
             :class="[
               isDayUnavailable(jsDate)
@@ -467,7 +477,7 @@ onBeforeUnmount(card.close)
                     ? 'bg-elevated shadow-sm'
                     : 'hover:bg-elevated/80',
               hasBookings(jsDate) && !isDayUnavailable(jsDate)
-                ? 'bg-muted/30 cursor-pointer'
+                ? 'cursor-pointer'
                 : '',
             ]"
             :title="getDayBlockedReason(jsDate) || undefined"
@@ -514,12 +524,14 @@ onBeforeUnmount(card.close)
             <!-- Deliberately a raw button (#1410): a calendar hover cell whose
                  geometry (absolute slide-down tab under the date block) and
                  booked-state colors are the widget itself — no Nuxt UI equivalent.
-                 Colors use semantic tokens where possible. -->
+                 Colors use semantic tokens where possible.
+                 Only on devices that can hover (#4516): on a touch screen the strip is
+                 display:none, so a tap anywhere on the day selects it (no hidden hit area). -->
             <button
               v-if="!isCreatingDate(jsDate)"
               type="button"
               :disabled="isDayFullyBooked(jsDate)"
-              class="absolute bottom-0 left-0 right-0 translate-y-0 flex items-center justify-center h-4 rounded-b-md opacity-0 transition-all duration-200 ease-out group-hover:translate-y-1 group-hover:opacity-100 z-10"
+              class="absolute bottom-0 left-0 right-0 translate-y-0 hidden [@media(hover:hover)]:flex items-center justify-center h-4 rounded-b-md opacity-0 transition-all duration-200 ease-out group-hover:translate-y-1 group-hover:opacity-100 z-10"
               :class="isDayFullyBooked(jsDate)
                 ? 'bg-neutral-700 cursor-default'
                 : 'bg-primary cursor-pointer hover:bg-primary/80 active:scale-[0.98]'"

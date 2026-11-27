@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Booking, LocationData, SettingsData } from '../types/booking'
 import type { BookingsStore } from '../composables/useBookingsStore'
+import { locationsFor, tabValueFor } from '../utils/location-tabs'
 
 interface FilterState {
   statuses: string[]
@@ -111,9 +112,6 @@ async function refresh() {
 // Scroll container for map + list (also the list's observer root)
 const scrollAreaRef = ref<HTMLElement | null>(null)
 
-// Ref for PanelMap control (to fly to specific locations)
-const panelMapRef = ref<{ flyToLocation: (locationId: string) => void } | null>(null)
-
 // Crouton form and team auth for location creation
 const { open: openCroutonForm } = useCrouton()
 // Managing bookings is the `bookings:manage` action (#4105)
@@ -154,36 +152,6 @@ function onAddLocation() {
   openCroutonForm('create', 'bookingsLocations', [], 'slideover')
 }
 
-// Handle edit location - open crouton update slideover
-function onEditLocation(location: LocationData) {
-  openCroutonForm('update', 'bookingsLocations', [location.id], 'slideover')
-}
-
-// Pending flyTo location ID — used when map needs to initialize first
-const pendingFlyToLocationId = ref<string | null>(null)
-
-// Handle focus-on-map — show map if not visible, then fly to the location
-async function onFocusOnMap(location: LocationData) {
-  const coords = parseLocationCoordinates(location)
-  if (!coords) return
-
-  if (!showMap.value) {
-    showMap.value = true
-    pendingFlyToLocationId.value = location.id
-    return
-  }
-
-  panelMapRef.value?.flyToLocation(location.id)
-}
-
-// Handle map ready — fly to pending location if any
-function onMapReady() {
-  if (pendingFlyToLocationId.value) {
-    panelMapRef.value?.flyToLocation(pendingFlyToLocationId.value)
-    pendingFlyToLocationId.value = null
-  }
-}
-
 // Listen for location mutations to refresh the list
 const nuxtApp = useNuxtApp()
 nuxtApp.hook('crouton:mutation', async (event: { operation: string; collection: string }) => {
@@ -199,14 +167,12 @@ const hoveredBookingId = store.hoveredBookingId
 const filterState = store.filters
 
 // Visibility states for panel sections
-const showCalendar = ref(true)
-const showLocations = ref(false)
 const showMap = ref(false)
 
 // Calendar view mode (lifted from Calendar component)
 const calendarView = store.calendarView
 
-// Handle go-to-today from pill controls
+// Tapping the calendar's month/week label goes to today and selects it (#4516)
 const onGoToToday = store.goToToday
 
 // Parse GeoJSON coordinates from location data
@@ -321,40 +287,33 @@ defineExpose({
 
 <template>
   <div class="booking-panel flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-default bg-default">
-      <!-- Fixed on top: filters + calendar. Only the list below scrolls. -->
+      <!-- Fixed on top: location tabs, then the calendar; its border-b is the one line under it. Only the list below scrolls. -->
       <div class="shrink-0 flex flex-col gap-2 border-b border-default">
-        <!-- Filter controls -->
-        <div class="px-2 pt-2 pb-1.5 md:px-4 md:pt-3 md:pb-2">
+        <!-- Location tabs: the very top row, above the calendar's label row (#4516); stays when the calendar folds (#4471); with one location it renders nothing -->
+        <div v-if="resolvedLocations.length > 0" class="px-2">
+          <CroutonBookingsLocationTabs
+            :locations="resolvedLocations"
+            :model-value="tabValueFor(filterState.locations)"
+            show-all
+            :can-add="effectiveIsAdmin"
+            @update:model-value="filterState.locations = locationsFor($event)"
+            @add="onAddLocation"
+          />
+        </div>
+
+        <!-- Admin "no locations yet" prompt; renders nothing otherwise, so no empty band (#4516) -->
+        <div v-if="resolvedLocations.length === 0 && effectiveIsAdmin" class="px-2 pt-2 pb-1.5 md:px-4 md:pt-3 md:pb-2">
           <CroutonBookingsPanelFilters
             :locations="resolvedLocations"
             :selected-locations="filterState.locations"
-            :has-selected-date="!!selectedDate"
-            :show-locations="showLocations"
-            :show-map="showMap"
-            :show-calendar="showCalendar"
-            :show-cancelled="filterState.showCancelled"
-            :has-locations-with-coordinates="hasLocationsWithCoordinates"
             :can-manage-locations="effectiveIsAdmin"
-            :calendar-view="calendarView"
             @update:selected-locations="filterState.locations = $event"
-            @update:show-locations="showLocations = $event"
-            @update:show-map="showMap = $event"
-            @update:show-calendar="showCalendar = $event"
-            @update:show-cancelled="filterState.showCancelled = $event"
-            @update:calendar-view="calendarView = $event"
-            @go-to-today="onGoToToday"
             @add-location="onAddLocation"
-            @edit-location="onEditLocation"
-            @focus-on-map="onFocusOnMap"
-          >
-            <template #toolbar-end>
-              <slot name="toolbar-end" />
-            </template>
-          </CroutonBookingsPanelFilters>
+          />
         </div>
 
-        <!-- Calendar -->
-        <div v-if="showCalendar" class="px-2 pb-2">
+        <!-- Calendar: its label row sits under the location tabs; the month ↔ week toggle at its left end, #toolbar-end (the close X) at its right end (#4516) -->
+        <div class="px-2 pb-2">
           <CroutonBookingsCalendar
             v-model:filters="filterState"
             v-model:date="shownDate"
@@ -369,7 +328,15 @@ defineExpose({
             @select="onCalendarSelect"
             @day-click="onCalendarDayClick"
             @hover-booking="(id) => hoveredBookingId = id"
-          />
+            @today="onGoToToday"
+          >
+            <template #header-start>
+              <CroutonBookingsCalendarFoldHandle v-model="calendarView" />
+            </template>
+            <template v-if="$slots['toolbar-end']" #header-end>
+              <slot name="toolbar-end" />
+            </template>
+          </CroutonBookingsCalendar>
         </div>
       </div>
 
@@ -386,11 +353,9 @@ defineExpose({
         >
           <div v-if="showMap && hasLocationsWithCoordinates" class="px-2 pt-3 md:px-4 md:pt-4">
             <CroutonBookingsPanelMap
-              ref="panelMapRef"
               :locations="resolvedLocations"
               :selected-locations="filterState.locations"
               @toggle-location="toggleLocation"
-              @ready="onMapReady"
             />
           </div>
         </Transition>
@@ -409,6 +374,12 @@ defineExpose({
             :scroll-target="scrollTarget"
             :active-location-filter="filterState.locations"
             :empty-message="resolvedEmptyMessage"
+            list-toggles
+            :show-cancelled="filterState.showCancelled"
+            :show-map="showMap"
+            :can-show-map="hasLocationsWithCoordinates"
+            @update:show-cancelled="filterState.showCancelled = $event"
+            @update:show-map="showMap = $event"
             @created="onBookingCreated"
             :is-day-fully-booked="isDayFullyBookedAllLocations"
             @cancel-create="onCancelCreate"

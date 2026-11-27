@@ -6,7 +6,8 @@
  * The fix is `SCROLL_ROW_X` (crouton-core `app/utils/scroll-row.ts`); this spec
  * checks the behaviour on screen for every row that uses it:
  *   - with-bookings: the shared tab bar (`CroutonTabsPanel`) and the booking
- *     card's location tabs;
+ *     card's location tabs (scoped to the list, so it never matches the panel
+ *     row above it);
  *   - with-sales: kassa's category tabs, in view mode (UTabs) and edit mode
  *     (the sortable `<ul role="tablist">`).
  *
@@ -86,7 +87,10 @@ test.describe('tab rows scroll sideways only', () => {
       const dialog = await openDialog(page, page.getByRole('button', { name: 'Open bookings tool' }))
       await dialog.getByRole('button', { name: /^Add booking:/ }).nth(3).click({ force: true })
       // Every e2e location is `e2e loc N` (bookings-fullscreen adds 1–3, this adds the rest).
-      await expectSidewaysOnly(page, dialog.getByRole('tab', { name: /e2e loc \d+/ }).first())
+      // Scoped to the scroll area: the panel's own row (#4471) sits above it and has "All".
+      const list = dialog.locator('.booking-panel > :nth-child(2)')
+      await expect(list.getByRole('tab', { name: 'All', exact: true })).toHaveCount(0)
+      await expectSidewaysOnly(page, list.getByRole('tab', { name: /e2e loc \d+/ }).first())
     })
   })
 

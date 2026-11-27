@@ -55,6 +55,7 @@ export default defineNuxtConfig({
     '@fyit/crouton-themes/riso',
     '@fyit/crouton-themes/eink',
     '@fyit/crouton-themes/blueprint',
+    '@fyit/crouton-themes/editorial',
   ],
   appConfig: {
     croutonApps: {

@@ -145,7 +145,7 @@ const BOOKINGS: SeedBooking[] = [
   { locationKey: 'kayak-rental', slotIds: [], inDays: 3, quantity: 2, status: 'confirmed', group: null },
   // appended last: booking ids include the list index
   { locationKey: 'bike-shed', slotIds: ['slot-morning'], inDays: 1, quantity: 2, status: 'confirmed', group: 'adults', product: 'cargo-bike' },
-  // A cancelled booking tomorrow, so the "show cancelled" filter has something to show (#3651).
+  // One cancelled booking tomorrow, so "Show cancelled" has something to show (#3651, #4562).
   { locationKey: 'kayak-rental', slotIds: [], inDays: 1, quantity: 1, status: 'cancelled', group: null }
 ]
 

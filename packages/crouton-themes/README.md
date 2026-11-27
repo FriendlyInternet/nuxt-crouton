@@ -394,6 +394,7 @@ Each theme exports a Nuxt layer via subpath:
 | Themes | `@fyit/crouton-themes/themes` | Theme switching utilities |
 | KO | `@fyit/crouton-themes/ko` | Teenage Engineering inspired |
 | Minimal | `@fyit/crouton-themes/minimal` | Clean, Bauhaus-inspired |
+| Editorial | `@fyit/crouton-themes/editorial` | Book-style serif on white, sans controls, pill buttons |
 | KR-11 | `@fyit/crouton-themes/kr11` | Korg rhythm box inspired |
 
 ### KO Theme Components

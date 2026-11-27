@@ -30,6 +30,16 @@ useBlockEditRequest(innerRef: Ref<HTMLElement | null>)
 
 _Source: `packages/crouton-core/app/composables/useBlockEditRequest.ts`_
 
+## useCollectionCacheKeys
+
+The ONE place that names collection cache slots (#4506).
+
+```ts
+useCollectionCacheKeys(collection: string): CollectionCacheKeys
+```
+
+_Source: `packages/crouton-core/app/composables/useCollectionCacheKeys.ts`_
+
 ## useCollectionExport
 
 Collection export composable
@@ -331,6 +341,20 @@ detectGroupableFields(items: T[], exclude: string[] = ['id', 'teamId', 'owner', 
 ```
 
 _Source: `packages/crouton-core/app/composables/useKanban.ts`_
+
+## useMutationListener
+
+Listen to the `crouton:mutation` hook (a record was created/updated/deleted/
+moved/reordered). Call it before any `await` in a composable (a top-level
+`await` before it is fine in `<script setup>`) so the Nuxt context + effect
+scope are still active; the listener is removed when that scope is disposed.
+App-lifetime listeners in plugins keep `nuxtApp.hook` on purpose.
+
+```ts
+useMutationListener(handler: (event: CroutonMutationEvent) => void | Promise<void>)
+```
+
+_Source: `packages/crouton-core/app/composables/useMutationListener.ts`_
 
 ## hasStatusPill
 

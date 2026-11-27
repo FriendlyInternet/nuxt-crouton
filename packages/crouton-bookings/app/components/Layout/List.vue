@@ -40,6 +40,9 @@ const emit = defineEmits<{
   newBooking: [date: Date]
   created: []
   cancel: []
+  // a booking was edited or cancelled: the list can't refresh data it was
+  // handed, so the store refreshes the shared fetch (#4562)
+  updated: []
 }>()
 
 const scrollEl = ref<HTMLElement | null>(null)
@@ -63,6 +66,7 @@ const scrollEl = ref<HTMLElement | null>(null)
       @new-booking="emit('newBooking', $event)"
       @created="emit('created')"
       @cancel-create="emit('cancel')"
+      @updated="emit('updated')"
     />
   </div>
 </template>

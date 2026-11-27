@@ -48,6 +48,12 @@ File: `app/components/Calendar.vue`
 | `update:filters` | `[value: FilterState]` |
 | `update:view` | `[value: "week" \| "month"]` |
 | `hoverBooking` | `[bookingId: string \| null]` |
+| `today` | `[]` |
+
+| Slot | Props |
+| --- | --- |
+| `header-start` | `{}` |
+| `header-end` | `{}` |
 
 ## CroutonBookingsDateBadge
 
@@ -99,6 +105,7 @@ File: `app/components/Layout/List.vue`
 | `newBooking` | `[date: Date]` |
 | `created` | `[]` |
 | `cancel` | `[]` |
+| `updated` | `[]` |
 
 ## CroutonBookingsList
 
@@ -120,16 +127,41 @@ File: `app/components/List.vue`
 | `activeLocationFilter` | `string[]` | `undefined` | no | Active location filter - when set, only these locations are selectable in create form |
 | `isDayFullyBooked` | `((date: Date) => boolean)` | `undefined` | no | Whether every location is fully booked on a date (disables the New booking row) |
 | `scrollRoot` | `HTMLElement \| null` | `null` | no | Scroll container the list lives in (IntersectionObserver root) |
+| `listToggles` | `boolean` | `false` | no | Show the Show cancelled / Map toggles on the first month label (Panel only) |
+| `showCancelled` | `boolean` | `false` | no | Whether cancelled bookings are shown (for the Show cancelled toggle) |
+| `showMap` | `boolean` | `false` | no | Whether the map is shown (for the Map toggle) |
+| `canShowMap` | `boolean` | `false` | no | Whether a location has coordinates (shows the Map toggle) |
 
 | Event | Payload |
 | --- | --- |
 | `dateClick` | `[date: Date]` |
 | `newBooking` | `[date: Date]` |
 | `created` | `[]` |
+| `updated` | `[]` |
 | `cancelCreate` | `[]` |
 | `topVisibleDateChange` | `[date: Date]` |
-| `updated` | `[]` |
 | `emailSent` | `[]` |
+| `update:showCancelled` | `[value: boolean]` |
+| `update:showMap` | `[value: boolean]` |
+
+## CroutonBookingsLocationTabs
+
+One sideways-scrolling row of location tabs (optional "All", admin "+"; hidden with one location), shared by the panel and the booking form
+
+File: `app/components/LocationTabs.vue`
+
+| Prop | Type | Default | Required | Description |
+| --- | --- | --- | --- | --- |
+| `locations` | `LocationData[]` | - | yes |  |
+| `modelValue` | `string \| null` | - | yes | Selected location id; `null` = All |
+| `showAll` | `boolean` | `false` | no | Put an "All" tab first (value `null`) |
+| `canAdd` | `boolean` | `false` | no | Show a "+" after the row that emits `add` |
+| `isDisabled` | `((id: string) => boolean)` | `undefined` | no | Locations that can't be picked (dimmed, disabled) |
+
+| Event | Payload |
+| --- | --- |
+| `update:modelValue` | `[value: string \| null]` |
+| `add` | `[]` |
 
 ## CroutonBookingsPanel
 

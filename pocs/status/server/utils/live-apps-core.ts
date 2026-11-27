@@ -11,6 +11,14 @@ export function parseDeployComment(body: string | null | undefined): PreviewComm
   return u ? { app: m[1]!, url: u[1]! } : null
 }
 
+/** The inbox card fields `previewAsksOwner` reads. */
+export interface WaitingCard { kind: string, state: string, sourceType: string, sourceNumber: number }
+
+/** True when the inbox has a waiting review card (ok / not ok) for this PR (#3045). */
+export function previewAsksOwner(pr: number, cards: WaitingCard[]): boolean {
+  return cards.some(c => c.state === 'waiting' && c.sourceType === 'pr' && c.kind === 'review' && c.sourceNumber === pr)
+}
+
 /** Resolves a `pr<N>` key to that PR's preview URL for the app, or null. */
 export function resolvePreviewUrl(previews: Preview[], app: string, key: string): string | null {
   const m = /^pr(\d+)$/.exec(key)
