@@ -28,10 +28,12 @@ const deps = vi.hoisted(() => {
     calls,
     pagesToolDeps: () => ({
       teams: { findTeam: spy('findTeam'), canEditPages: spy('canEditPages'), listUserTeams: spy('listUserTeams') },
-      pages: { listTeamPagesForMcp: spy('listTeamPagesForMcp'), getStoredPageContentForMcp: spy('getStoredPageContentForMcp') },
+      pages: { listTeamPagesForMcp: spy('listTeamPagesForMcp'), getStoredPageContentForMcp: spy('getStoredPageContentForMcp'), createPageForMcp: spy('createPageForMcp') },
       room: { readCollabRoomDoc: spy('readCollabRoomDoc'), updateCollabRoomDoc: spy('updateCollabRoomDoc') },
       registry: {},
-      checkLayout: () => ({ ok: false, errors: ['unused'], warnings: [] })
+      checkLayout: () => ({ ok: false, errors: ['unused'], warnings: [] }),
+      defaultLocale: 'en',
+      pageTypes: ['pages:regular']
     }),
     pagesAccess: () => undefined
   }
@@ -62,16 +64,17 @@ import readPage from '../server/mcp-pages/tools/read-page'
 import editPage from '../server/mcp-pages/tools/edit-page'
 import addLayout from '../server/mcp-pages/tools/add-layout'
 import listLayoutBlocks from '../server/mcp-pages/tools/list-layout-blocks'
+import createPage from '../server/mcp-pages/tools/create-page'
 
 type Tool = { name: string, inputSchema: Record<string, unknown>, handler: (args: any) => Promise<{ isError?: boolean, content: { text: string }[] }> }
-const ALL = [listTeams, listPages, readPage, editPage, addLayout, listLayoutBlocks] as unknown as Tool[]
+const ALL = [listTeams, listPages, readPage, editPage, addLayout, listLayoutBlocks, createPage] as unknown as Tool[]
 
 describe('/mcp page-tools handler definitions', () => {
   // covers: T6
-  it('is the unnamed default handler with exactly the six page tools', () => {
+  it('is the unnamed default handler with exactly the seven page tools', () => {
     const def = pagesHandler as unknown as { name?: string, tools: Tool[] }
     expect(def.name).toBeUndefined()
-    expect(def.tools.map(t => t.name).sort()).toEqual(['add_layout', 'edit_page', 'list_layout_blocks', 'list_pages', 'list_teams', 'read_page'])
+    expect(def.tools.map(t => t.name).sort()).toEqual(['add_layout', 'create_page', 'edit_page', 'list_layout_blocks', 'list_pages', 'list_teams', 'read_page'])
     expect(def.tools).toEqual(ALL)
   })
 
@@ -114,7 +117,7 @@ describe('/mcp page-tools handler definitions', () => {
 
   // covers: T6
   it('every tool without access is refused and touches no team, page or room', async () => {
-    const args = { team: 'team-a', pageId: 'pA', locale: 'fr', action: 'insert', index: 0, blocks: [], layout: {} }
+    const args = { team: 'team-a', pageId: 'pA', locale: 'fr', action: 'insert', index: 0, blocks: [], layout: {}, title: 'T', slug: 't' }
     for (const tool of ALL) {
       const res = await tool.handler(args)
       expect(res.isError, tool.name).toBe(true)

@@ -7,23 +7,28 @@
  * (which the module refuses unless crouton-pages + crouton-collab are extended).
  */
 import { readCollabRoomDoc, updateCollabRoomDoc } from '@fyit/crouton-collab/server/utils/collabServerDoc'
-import { getStoredPageContentForMcp, listTeamPagesForMcp } from '@fyit/crouton-pages/server/utils/page-live-source'
+import { createPageForMcp, getStoredPageContentForMcp, listTeamPagesForMcp } from '@fyit/crouton-pages/server/utils/page-live-source'
 import { checkLayoutForPlacement } from '@fyit/crouton-layout/app/utils/layout-placement-check'
 import type { PagesToolDeps } from './tools'
 import type { PagesAccess } from './auth'
 import { pagesTeamDeps } from './team-lookup'
+import { registeredPageTypes, type PageTypeAppConfig } from './page-types'
 
 export function pagesToolDeps(): PagesToolDeps {
-  const registry = ((useAppConfig() as { croutonLayoutBlocks?: PagesToolDeps['registry'] }).croutonLayoutBlocks) ?? {}
+  const appConfig = useAppConfig() as PageTypeAppConfig & { croutonLayoutBlocks?: PagesToolDeps['registry'] }
+  const registry = appConfig.croutonLayoutBlocks ?? {}
+  const runtime = useRuntimeConfig() as { croutonI18n?: { defaultLocale?: string } }
   return {
     teams: pagesTeamDeps(),
-    pages: { listTeamPagesForMcp, getStoredPageContentForMcp },
+    pages: { listTeamPagesForMcp, getStoredPageContentForMcp, createPageForMcp },
     room: {
       readCollabRoomDoc: ref => readCollabRoomDoc(ref),
       updateCollabRoomDoc: (ref, mutate, options) => updateCollabRoomDoc(ref, mutate, { presence: options?.presence })
     },
     registry,
-    checkLayout: checkLayoutForPlacement
+    checkLayout: checkLayoutForPlacement,
+    defaultLocale: runtime.croutonI18n?.defaultLocale || 'en',
+    pageTypes: registeredPageTypes(appConfig)
   }
 }
 

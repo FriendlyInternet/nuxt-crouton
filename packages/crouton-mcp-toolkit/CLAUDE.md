@@ -25,9 +25,9 @@ MCP Toolkit integration that automatically exposes all Crouton collections as MC
 | `server/mcp/prompts/data-entry.ts` | Guided data creation prompt |
 | `lib/pages-handler.ts` | `resolvePagesHandler` (the `pages` opt-in decision), `resolveToolkitSetup` (with `croutonAuth.mcpOAuth` → `pagesAtRoot`), `layerPackageNames`, `PAGES_MCP_DIR` |
 | `server/handlers/mcp-generic-gate.ts` | `isBlockedGenericMcpPath` + the 404 middleware registered when `genericTools: false` |
-| `server/mcp-pages/index.ts` | The `/mcp` default handler: the sign-in check (middleware) and the six page tools |
-| `server/mcp-pages/tools/` | The six page tools, incl. `list_teams` (thin glue over `lib/tools.ts`) |
-| `server/mcp-pages/lib/{auth,tools,deps,team-lookup}.ts` | Sign-in token check (JWT + consent), the tool logic (injected deps, tested), the real deps, the real team lookups |
+| `server/mcp-pages/index.ts` | The `/mcp` default handler: the sign-in check (middleware) and the seven page tools |
+| `server/mcp-pages/tools/` | The seven page tools, incl. `list_teams` and `create_page` (thin glue over `lib/tools.ts`) |
+| `server/mcp-pages/lib/{auth,tools,deps,team-lookup,page-types}.ts` | Sign-in token check (JWT + consent), the tool logic (injected deps, tested), the real deps, the real team lookups, the page types `create_page` accepts |
 
 ## Architecture
 
@@ -72,12 +72,12 @@ export default defineNuxtConfig({
 
 ## Page tools at `/mcp`
 
-Lets Claude edit a page **live** (#3982): changes go into the page's live collab document, so they appear in the open editor without a reload. **The tools never save** — the owner reviews and clicks Save.
+Lets Claude edit a page **live** (#3982): changes go into the page's live collab document, so they appear in the open editor without a reload. **The edit tools never save** — the owner reviews and clicks Save. `create_page` adds a new page as a **draft** (never published, never deletes, #4193); the owner publishes it in the Pages admin.
 
 - **Opt-in:** `croutonMcpToolkit: { enabled: true, genericTools: false, pages: true }` plus `croutonAuth: { mcpOAuth: true }`. Needs `@fyit/crouton-pages` and `@fyit/crouton-collab` extended (optional peers, plus `@fyit/crouton-layout` for `add_layout`).
 - **Auth:** OAuth sign-in only (crouton-auth's MCP OAuth, #4096); paste `<origin>/mcp` into the Claude app. Every request needs `Authorization: Bearer` with a JWT for `<origin>/mcp` carrying the `pages` scope; no token → 401 with a `WWW-Authenticate` challenge. The team is a tool argument, checked with `canEditPages(teamId, userId)` (today: admin or owner); a revoked connection gets 401 on its next request (its consent row is gone).
 - **Separation:** sign-in tokens only open the page tools; `requireMcpAuth` (generic tools) accepts only `mcp-toolkit` member tokens, and the two cannot be on together.
-- **Tools:** `list_teams` · `list_pages { team }` · `read_page { team, pageId, locale }` (live doc if any, else stored) · `edit_page { team, pageId, locale, action: insert|replace|delete, index, count?, blocks? }` · `list_layout_blocks` · `add_layout { team, pageId, locale, index, layout, height? }` (checked by crouton-layout's `checkLayoutForPlacement`: known blocks + viable at 1280, warnings at 768/375).
+- **Tools:** `list_teams` · `list_pages { team }` · `read_page { team, pageId, locale }` (live doc if any, else stored) · `edit_page { team, pageId, locale, action: insert|replace|delete, index, count?, blocks? }` · `list_layout_blocks` · `add_layout { team, pageId, locale, index, layout, height? }` (checked by crouton-layout's `checkLayoutForPlacement`: known blocks + viable at 1280, warnings at 768/375) · `create_page { team, locale, title, slug, parentId?, blocks?, pageType?, visibility?, showInNavigation?, layout?, seoTitle?, seoDescription?, ogImage?, robots?, config? }` (draft only; default locale only; refuses `status` / `publishedAt`, an unknown parent or pageType, and a slug already used in the team; writes through crouton-pages' `createPageForMcp`).
 - A first edit on a page whose live document is empty seeds it from the stored content with the editor's deterministic seed, so the two merge.
 - Live edits need collab (`"collab": true`): in production the server pushes through the collab worker's `POST /update`; velo's `wrangler.jsonc` sets `global_fetch_strictly_public` so the app Worker can reach it.
 

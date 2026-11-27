@@ -1,7 +1,7 @@
 /**
  * #3982 / #4097 — the import boundary, checked on the real files.
  *
- * - The pages handler (index + six tools) lives in server/mcp-pages/; the old
+ * - The pages handler (index + seven tools) lives in server/mcp-pages/; the old
  *   named `handlers/pages/` folder is gone.
  * - No page-key text is left (`/mcp/pages?token`, `scope: 'pages'`, `mcp-pages'`).
  * - Nothing the toolkit loads in EVERY app (server/mcp, utils, api, handlers)
@@ -41,9 +41,9 @@ const THREE = ['@fyit/crouton-pages', '@fyit/crouton-collab', '@fyit/crouton-lay
 
 describe('pages handler boundary (#3982)', () => {
   // covers: T6
-  it('the handler index and the six tools exist under server/mcp-pages/, handlers/ is gone', () => {
+  it('the handler index and the seven tools exist under server/mcp-pages/, handlers/ is gone', () => {
     const dir = join(pkgDir, 'server/mcp-pages')
-    for (const f of ['index.ts', 'tools/list-teams.ts', 'tools/list-pages.ts', 'tools/read-page.ts', 'tools/edit-page.ts', 'tools/list-layout-blocks.ts', 'tools/add-layout.ts']) {
+    for (const f of ['index.ts', 'tools/list-teams.ts', 'tools/list-pages.ts', 'tools/read-page.ts', 'tools/edit-page.ts', 'tools/list-layout-blocks.ts', 'tools/add-layout.ts', 'tools/create-page.ts']) {
       expect(existsSync(join(dir, f)), f).toBe(true)
     }
     expect(existsSync(join(dir, 'handlers'))).toBe(false)
