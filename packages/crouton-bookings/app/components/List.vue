@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { useIntersectionObserver } from '@vueuse/core'
+import { defaultWindow, useEventListener, useIntersectionObserver } from '@vueuse/core'
 import { toDateKey, isSameDay } from '@fyit/crouton-core/shared/utils/date'
 import type { Booking } from '../types/booking'
 
@@ -29,6 +29,14 @@ interface Props {
   isDayFullyBooked?: (date: Date) => boolean
   /** Scroll container the list lives in (IntersectionObserver root) */
   scrollRoot?: HTMLElement | null
+  /** Show the Show cancelled / Map toggles on the first month label (Panel only) */
+  listToggles?: boolean
+  /** Whether cancelled bookings are shown (for the Show cancelled toggle) */
+  showCancelled?: boolean
+  /** Whether the map is shown (for the Map toggle) */
+  showMap?: boolean
+  /** Whether a location has coordinates (shows the Map toggle) */
+  canShowMap?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -44,6 +52,10 @@ const props = withDefaults(defineProps<Props>(), {
   activeLocationFilter: undefined,
   isDayFullyBooked: undefined,
   scrollRoot: null,
+  listToggles: false,
+  showCancelled: false,
+  showMap: false,
+  canShowMap: false,
 })
 
 const emit = defineEmits<{
@@ -59,6 +71,10 @@ const emit = defineEmits<{
   emailSent: []
   /** Emitted when the ghost "New booking" row of a day is tapped */
   newBooking: [date: Date]
+  /** Emitted when the Show cancelled toggle is tapped */
+  'update:showCancelled': [value: boolean]
+  /** Emitted when the Map toggle is tapped */
+  'update:showMap': [value: boolean]
 }>()
 
 // Recently created booking IDs for highlight effect
@@ -212,6 +228,14 @@ const groupedBookings = computed((): MonthGroup[] => {
   return [...months.values()]
 })
 
+// Whether the list shows a month label (mirrors the template's loading/error/empty/list chain)
+const showsMonthSeparator = computed(() =>
+  !resolvedLoading.value
+  && !resolvedError.value
+  && !(resolvedBookings.value.length === 0 && !props.selectedDate)
+  && groupedBookings.value.length > 0,
+)
+
 // Get ISO week key to detect week changes
 function getWeekKey(date: Date): string {
   const d = new Date(date)
@@ -222,11 +246,17 @@ function getWeekKey(date: Date): string {
   return `${d.getFullYear()}-W${weekNum}`
 }
 
-// Report the top visible day to the calendar when its week changes
+// Report the top visible day to the calendar when its week changes — only after the list really
+// scrolled. The observer also fires when the list mounts (e.g. full screen reopens) or its days
+// change; following those would replace the week the user picked with the list's first day (#4516).
 let lastEmittedWeek: string | null = null
+let scrolled = false
+useEventListener(() => props.scrollRoot ?? defaultWindow, 'scroll', () => { scrolled = true }, { passive: true })
 useIntersectionObserver(
   () => [...dateElementRefs.value.values()],
   (entries) => {
+    if (!scrolled) return
+    scrolled = false
     // Find topmost visible date group
     let topEntry: IntersectionObserverEntry | null = null
     let topY = Infinity
@@ -302,6 +332,17 @@ const creatingAtDateKey = computed(() => {
 
 <template>
   <div class="space-y-4">
+    <!-- Toggle row when no month label is shown (loading, error, empty) -->
+    <div v-if="listToggles && !showsMonthSeparator" class="flex justify-end">
+      <CroutonBookingsListToggles
+        :show-cancelled="showCancelled"
+        :show-map="showMap"
+        :can-show-map="canShowMap"
+        @update:show-cancelled="emit('update:showCancelled', $event)"
+        @update:show-map="emit('update:showMap', $event)"
+      />
+    </div>
+
     <!-- Loading state -->
     <div v-if="resolvedLoading" class="flex flex-col gap-3">
       <div v-for="i in 5" :key="i" class="bg-elevated/50 rounded-lg p-3 animate-pulse">
@@ -362,7 +403,7 @@ const creatingAtDateKey = computed(() => {
 
     <!-- Bookings list with month/year separators -->
     <div v-else class="flex flex-col gap-4">
-      <div v-for="monthGroup in groupedBookings" :key="monthGroup.key" class="flex flex-col gap-2">
+      <div v-for="(monthGroup, monthIndex) in groupedBookings" :key="monthGroup.key" class="flex flex-col gap-2">
         <!-- Month/Year separator -->
         <div class="flex items-center gap-3 py-2">
           <div class="h-px w-4 bg-muted/30" />
@@ -370,6 +411,14 @@ const creatingAtDateKey = computed(() => {
             {{ monthGroup.label }}
           </span>
           <div class="flex-1 h-px bg-muted/30" />
+          <CroutonBookingsListToggles
+            v-if="listToggles && monthIndex === 0"
+            :show-cancelled="showCancelled"
+            :show-map="showMap"
+            :can-show-map="canShowMap"
+            @update:show-cancelled="emit('update:showCancelled', $event)"
+            @update:show-map="emit('update:showMap', $event)"
+          />
         </div>
 
         <!-- Date groups within month -->

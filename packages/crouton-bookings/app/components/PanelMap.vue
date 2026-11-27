@@ -82,28 +82,9 @@ function onMarkerClick(locationId: string) {
   emit('toggle-location', locationId)
 }
 
-// Map instance ref for programmatic control
-const mapRef = ref<any>(null)
-
-function onMapLoad(map: any) {
-  mapRef.value = map
+function onMapLoad() {
   emit('ready')
 }
-
-// Fly to a specific location by ID
-function flyToLocation(locationId: string) {
-  const location = locationsWithCoordinates.value.find(l => l.id === locationId)
-  if (!location || !mapRef.value) return
-
-  mapRef.value.flyTo({
-    center: location.coordinates,
-    zoom: 15,
-    duration: 800,
-    essential: true,
-  })
-}
-
-defineExpose({ flyToLocation })
 </script>
 
 <template>
