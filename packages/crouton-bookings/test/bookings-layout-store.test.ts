@@ -139,6 +139,14 @@ describe('bookings layout store (#3651)', () => {
     expect(s.creatingAt.value).toBeNull()
   })
 
+  // #4562: an edit or cancel in the list must refresh the shared fetch
+  it('list updated event reloads the store\'s useBookingsList', async () => {
+    const s = copy('bookings')
+    fire('bookings-list', 'updated', s)
+    await Promise.resolve()
+    expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
   // covers: T4
   it('newBooking with no locations warns instead of opening the form', () => {
     locationsData.value = []

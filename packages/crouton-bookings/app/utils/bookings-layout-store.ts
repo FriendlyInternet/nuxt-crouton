@@ -106,6 +106,8 @@ export const bookingsLayoutStore: CroutonLayoutStoreDefinition<BookingsLayoutSto
         newBooking: (s, d: Date) => s.newBooking(d),
         created: s => { s.finishCreate(s.reload) },
         cancel: s => s.cancelCreate(),
+        // a booking was edited or cancelled in the list (#4562)
+        updated: s => { s.reload() },
       },
     },
     'bookings-filters': {
