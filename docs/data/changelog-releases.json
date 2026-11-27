@@ -1,6 +1,25 @@
 {
-  "lastSyncedAt": "2026-11-26T06:01:26.350Z",
+  "lastSyncedAt": "2026-11-27T06:01:32.021Z",
   "releases": [
+    {
+      "id": "nuxt-hub/core:459319110",
+      "packageName": "@nuxthub/core",
+      "packageRepo": "nuxt-hub/core",
+      "packagePriority": "medium",
+      "tagName": "v0.10.13",
+      "name": "v0.10.13",
+      "body": "> v0.10.13 is the next patch release.\n\n## 👉 Changelog\n\n[compare changes](https://github.com/nuxt-hub/core/compare/v0.10.12...v0.10.13)\n\n### 🩹 Fixes\n\n- **db:** register Nitro v3 variants of the db server plugins (#959)\n- **db:** stop `@nuxthub/core/db` from pulling in `tsdown` (#957)\n- **db:** resolve Nuxt aliases in schema declarations (#954)\n- add top-level types field to package.json (#952)\n\n### ❤️ Contributors\n\n- Max (@onmax)\n- Sébastien Chopin (@atinux)",
+      "htmlUrl": "https://github.com/nuxt-hub/core/releases/tag/v0.10.13",
+      "publishedAt": "2026-11-26T11:26:45Z",
+      "isPrerelease": false,
+      "summary": "AI summary unavailable. See full release notes.",
+      "breakingChanges": [],
+      "newFeatures": [],
+      "importance": "minor",
+      "relevanceScore": 50,
+      "processedAt": "2026-11-27T06:01:18.624Z",
+      "model": "claude-3-5-haiku-20241022"
+    },
     {
       "id": "vercel/ai:458960334",
       "packageName": "ai",
@@ -1880,25 +1899,6 @@
       "importance": "minor",
       "relevanceScore": 50,
       "processedAt": "2026-11-07T12:09:44.085Z",
-      "model": "claude-3-5-haiku-20241022"
-    },
-    {
-      "id": "vercel/ai:436920457",
-      "packageName": "ai",
-      "packageRepo": "vercel/ai",
-      "packagePriority": "high",
-      "tagName": "ai@7.0.164",
-      "name": "ai@7.0.164",
-      "body": "### Patch Changes\n\n- Updated dependencies [bace553]\n- Updated dependencies [6737c77]\n- Updated dependencies [bb4e2d0]\n  - @ai-sdk/gateway@4.0.137",
-      "htmlUrl": "https://github.com/vercel/ai/releases/tag/ai%407.0.164",
-      "publishedAt": "2026-11-06T19:43:30Z",
-      "isPrerelease": false,
-      "summary": "AI summary unavailable. See full release notes.",
-      "breakingChanges": [],
-      "newFeatures": [],
-      "importance": "minor",
-      "relevanceScore": 50,
-      "processedAt": "2026-11-07T12:09:42.883Z",
       "model": "claude-3-5-haiku-20241022"
     }
   ]
