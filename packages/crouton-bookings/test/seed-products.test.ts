@@ -32,6 +32,8 @@ describe('package seed writes products (#4044)', () => {
     expect(count('bookings_bookings')).toBe(6)
     // one cancelled booking so "Show cancelled" has something to show (#4562)
     expect((client.prepare(`select count(*) as n from bookings_bookings where status = 'cancelled'`).get() as { n: number }).n).toBe(1)
+    // 5 live bookings, plus the cancelled one S1c checks
+    expect((client.prepare(`select count(*) as n from bookings_bookings where status <> 'cancelled'`).get() as { n: number }).n).toBe(5)
     expect(count('catalog_products')).toBe(4)
 
     const productIds = new Set((client.prepare('select id from catalog_products').all() as { id: string }[]).map(r => r.id))
@@ -82,6 +84,17 @@ describe('package seed writes products (#4044)', () => {
       expect(JSON.parse(row!.products)).toEqual([{ product: pid(product), stock }])
       expect(row!.offerFullDay, key).toBe(0)
     }
+    client.close()
+  })
+
+  // #3651 owner test: "show cancelled" had nothing to show on the preview
+  it('S1c bookings seed has one cancelled booking, within the next 2 days', async () => {
+    const client = await seeded([bookingsProvider, catalogProvider])
+    const rows = client.prepare(`select date, unixepoch() as now from bookings_bookings where status = 'cancelled'`)
+      .all() as { date: number, now: number }[]
+    expect(rows).toHaveLength(1)
+    expect(rows[0]!.date).toBeGreaterThan(rows[0]!.now)
+    expect(rows[0]!.date - rows[0]!.now).toBeLessThanOrEqual(2 * 86400)
     client.close()
   })
 

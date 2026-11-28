@@ -1,42 +1,53 @@
 <script setup lang="ts">
 /**
  * CroutonBookingsLayoutFilters — the filter controls as an atomic layout block
- * (#924). Reads/writes the shared filter store (`useBookingsLayoutFilters`), so
- * it drives the sibling list / calendar / locations blocks across panes.
+ * (#924), fed by the `bookings` layout store (#3651).
+ *
+ * Props in, events out: it reads `filters` and emits `update:filters` with the
+ * new state; adding/editing a location is handled by the store.
  *
  * Panel-only view controls (calendar view, Today, fold, map, location cards) are
  * hidden with `view-toggles=false`. On a composed page the layout decides what shows.
  */
+import type { LocationData } from '../../types/booking'
+import type { BookingsFilterState } from '../../composables/useBookingsStore'
+
 const props = withDefaults(defineProps<{
-  scope?: 'personal' | 'team'
-}>(), { scope: 'team' })
+  filters?: BookingsFilterState
+  locations?: LocationData[]
+  canManageLocations?: boolean
+}>(), {
+  filters: () => ({ statuses: [], locations: [], showCancelled: false }),
+  locations: () => [],
+  canManageLocations: false,
+})
 
-const { locations } = useBookingsList({ scope: props.scope })
-const { filters } = useBookingsLayoutFilters()
-const { open: openCroutonForm } = useCrouton()
-// Managing locations is the `bookings:manage` action (#4105)
-const isAdmin = useCan('bookings:manage')
+const emit = defineEmits<{
+  'update:filters': [filters: BookingsFilterState]
+  'add-location': []
+  'edit-location': [location: LocationData]
+}>()
 
-function onAddLocation() {
-  openCroutonForm('create', 'bookingsLocations', [], 'slideover')
+function onLocations(locations: string[]) {
+  emit('update:filters', { ...props.filters, locations })
 }
-function onEditLocation(loc: { id: string }) {
-  openCroutonForm('update', 'bookingsLocations', [loc.id], 'slideover')
+function onShowCancelled(showCancelled: boolean) {
+  emit('update:filters', { ...props.filters, showCancelled })
 }
 </script>
 
 <template>
   <div class="@container h-full overflow-auto p-2 @md:p-3">
     <CroutonBookingsPanelFilters
-      :locations="locations ?? []"
+      :locations="locations"
       :selected-locations="filters.locations"
       :show-cancelled="filters.showCancelled"
-      :can-manage-locations="isAdmin"
+      :can-manage-locations="canManageLocations"
       :view-toggles="false"
-      @update:selected-locations="filters.locations = $event"
-      @update:show-cancelled="filters.showCancelled = $event"
-      @add-location="onAddLocation"
-      @edit-location="onEditLocation"
+      @update:selected-locations="onLocations"
+      @update:show-cancelled="onShowCancelled"
+      @add-location="emit('add-location')"
+      @edit-location="emit('edit-location', $event)"
     />
   </div>
 </template>

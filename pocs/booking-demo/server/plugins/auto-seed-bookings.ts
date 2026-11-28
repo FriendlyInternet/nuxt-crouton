@@ -58,6 +58,9 @@ const BOOKINGS = [
   // serializer), which would violate the constraint. `[]` = "no named slots".
   { loc: 'kayak-rental', slot: [] as string[], inDays: 3, quantity: 2, status: 'confirmed', group: null as string | null },
   { loc: 'kayak-rental', slot: [], inDays: 8, quantity: 1, status: 'cancelled', group: null },
+  // A cancelled booking tomorrow, so the "show cancelled" filter is easy to see (#3651).
+  // (The review team `test1` is filled by `@fyit/crouton-bookings/seed`, which has one too.)
+  { loc: 'park-court', slot: ['slot-1500'], inDays: 1, quantity: 1, status: 'cancelled', group: 'adults' },
 ]
 
 const DAY_MS = 86_400_000

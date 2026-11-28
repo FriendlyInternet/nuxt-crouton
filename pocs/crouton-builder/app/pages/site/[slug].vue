@@ -15,6 +15,7 @@ import { resolveLayoutAtWidth, partitionCollapsed } from '@fyit/crouton-layout/a
 import { collectLayoutStores } from '@fyit/crouton-core/app/utils/layout-stores'
 import { useWindowSize } from '@vueuse/core'
 import { BOARD_HIDDEN_KEY, collectHidden, collapsePlacement, type HiddenItem } from '~/utils/board-hidden'
+import { withBlockSources } from '~/utils/block-sources'
 
 // Addressed by slug (#2490): the page is read through /api/site/:slug, which
 // returns only its title and live layout — no team id in the URL. The visitor
@@ -38,7 +39,16 @@ const tree = computed<LayoutTree | null>(() => {
   const variants = Array.isArray(board.variants) ? board.variants as { id: string, layout: string }[] : null
   const live = variants?.find(v => v.id === board.live) ?? variants?.[0]
   const stored = live?.layout ?? (typeof board.layout === 'string' ? board.layout : null)
-  return stored ? parseLayoutTree(stored) : null
+  const parsed = stored ? parseLayoutTree(stored) : null
+  if (!parsed) return null
+  // Pages saved before #3651 have no `source` on their bookings blocks: fill it in.
+  return {
+    ...parsed,
+    root: withBlockSources(parsed.root),
+    ...(parsed.breakpoints
+      ? { breakpoints: parsed.breakpoints.map(bp => (bp.root ? { ...bp, root: withBlockSources(bp.root) } : bp)) }
+      : {}),
+  }
 })
 
 // Every store copy the FULL tree needs (#3650) — one scope around the renderer AND the

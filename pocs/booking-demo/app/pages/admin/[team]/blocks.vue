@@ -19,23 +19,22 @@
  *      ├─ bookings-locations         ~30%
  *      └─ bookings-list              ~40%
  *
- * Cross-pane coordination (filters/locations → list + calendar) rides the shared
- * `useBookingsLayoutFilters` store, NOT the tree — gap #1 in the #924 report. The
- * renderer's intrinsic `@container` reflow + min-width auto-stacking handle the
+ * Cross-pane coordination (filters/locations → list) runs through the `bookings`
+ * layout store (#3651): the filters, locations and list leaves name
+ * `source: 'bookings'`, and one copy — created by the `CroutonLayoutStoreScope`
+ * below — loads the data once and feeds all three. The calendar-only pane still
+ * self-fetches and no longer follows the filters until it moves onto the store
+ * (#3652, accepted on the epic branch). The renderer's intrinsic `@container` reflow + min-width auto-stacking handle the
  * responsive collapse to a single column on a phone-width pane (no authored
  * breakpoint needed) — that's what Phase 3 screenshots verify.
  */
 import type { LayoutTree } from '@fyit/crouton-core/app/types/layout'
+import { collectLayoutStores } from '@fyit/crouton-core/app/utils/layout-stores'
 
 definePageMeta({ layout: 'admin', middleware: ['auth'] })
 
 const SCOPE = { scope: 'team' } as const
 
-// Page-level owner of the shared bookings fetches, so the leaves remounting when the split
-// stacks on a phone never leaves a shared fetch ownerless (Nuxt aborts a request once its
-// last owner unmounts) (#3789). Same keys as the blocks (every block here is team scope).
-// The general version is the layout-owned store in #2561.
-useBookingsList(SCOPE)
 useBookingCart()
 
 // Static compose — the whole point of the test is that the arrangement is plain
@@ -58,14 +57,20 @@ const tree: LayoutTree = {
         direction: 'vertical',
         defaultSize: 38,
         children: [
-          { type: 'leaf', blockId: 'bookings-filters', config: SCOPE, defaultSize: 30 },
-          { type: 'leaf', blockId: 'bookings-locations', config: SCOPE, defaultSize: 30 },
-          { type: 'leaf', blockId: 'bookings-list', config: SCOPE, defaultSize: 40 },
+          { type: 'leaf', blockId: 'bookings-filters', source: 'bookings', defaultSize: 30 },
+          { type: 'leaf', blockId: 'bookings-locations', source: 'bookings', defaultSize: 30 },
+          { type: 'leaf', blockId: 'bookings-list', source: 'bookings', defaultSize: 40 },
         ],
       },
     ],
   },
+  sources: { bookings: { options: { scope: 'team' } } },
 }
+// The store copy belongs to the scope wrapper, which never remounts when the split
+// stacks on a phone — so its fetches are never left ownerless and aborted (#3789).
+// The calendar-only leaf's own fetch uses the same per-team useFetch key
+// (`dedupe: 'defer'`), so it joins the store's request instead of starting another.
+const stores = collectLayoutStores(tree)
 // `?render=page` draws the same tree the way a served page does (content height,
 // one scroll) instead of the admin fill — to check both modes side by side (#2560).
 const route = useRoute()
@@ -87,7 +92,9 @@ const pageRender = computed(() => route.query.render === 'page')
 
     <template #body>
       <div :class="pageRender ? 'w-full' : 'h-full w-full'" data-handoff="blocks-layout">
-        <CroutonLayoutRenderer :node="tree.root" :interactive="!pageRender" />
+        <CroutonLayoutStoreScope :stores="stores">
+          <CroutonLayoutRenderer :node="tree.root" :interactive="!pageRender" />
+        </CroutonLayoutStoreScope>
       </div>
     </template>
   </UDashboardPanel>

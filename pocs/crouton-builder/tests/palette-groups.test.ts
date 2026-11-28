@@ -66,12 +66,13 @@ describe('groupPaletteBlocks — Builder block row (#3748)', () => {
 
   it('every block offered is linked to a collection or is a layout piece', () => {
     // Exception: the bookings package's blocks (#2559, the Bookings group) fetch their own data and have
-    // no `collection` field at all — self-contained, like Artists · Stats.
+    // no `collection` field at all — self-contained, like Artists · Stats. Since #3651 most have no
+    // options at all (fed by the `bookings` layout store), hence `?? false`.
     const byId = new Map(blocksList.map(b => [b.id, b]))
     for (const g of groupPaletteBlocks(blocksList)) {
       if (g.label === 'Layout') continue
       if (g.label === 'Bookings') {
-        for (const i of g.items) expect(byId.get(i.blockId)!.configSchema?.some(f => f.name === 'collection'), i.blockId).toBe(false)
+        for (const i of g.items) expect(byId.get(i.blockId)!.configSchema?.some(f => f.name === 'collection') ?? false, i.blockId).toBe(false)
         continue
       }
       expect(g.collection, g.label).toBeTruthy()
