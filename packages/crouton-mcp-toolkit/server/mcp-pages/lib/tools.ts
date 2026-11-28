@@ -1,6 +1,6 @@
 /**
- * The six live-page tools (#3982, #4097), as plain functions with injected deps so
- * the two rules are testable without Nitro:
+ * The seven page tools (#3982, #4097, #4193), as plain functions with injected deps so
+ * the rules are testable without Nitro:
  *
  * - **Rule A — team isolation.** The team comes from the tool's `team` argument
  *   and is checked with crouton-auth's `canEditPages(teamId, userId)` before any
@@ -9,7 +9,10 @@
  *   `page not found`, before any room is read or written.
  * - **Rule B — never save for the owner.** The tools only touch the page's live
  *   collab room (what the open editor shows). They never write the page record —
- *   the owner reviews and clicks Save.
+ *   the owner reviews and clicks Save. Exception: `create_page` (Rule C).
+ * - **Rule C — create only drafts (#4193).** `create_page` inserts a NEW page,
+ *   always `status: 'draft'` with no `publishedAt`; it refuses any status /
+ *   publishedAt input. No tool publishes or deletes a page.
  *
  * The tool files in `server/mcp-pages/tools/` are thin glue that build `deps` from
  * crouton-pages / crouton-collab / crouton-layout / crouton-auth and call these.
@@ -30,9 +33,35 @@ import type { PagesAccess } from './auth'
 
 // ─── deps ───────────────────────────────────────────────────────────────────
 
+/** The page settings `create_page` may give a new page (everything but publishing). */
+export interface PagesToolCreateSettings {
+  pageType?: string
+  visibility?: string
+  showInNavigation?: boolean
+  layout?: string
+  seoTitle?: string
+  seoDescription?: string
+  ogImage?: string
+  robots?: string
+  config?: Record<string, unknown>
+}
+
+export interface PagesToolCreateInput extends PagesToolCreateSettings {
+  locale: string
+  title: string
+  slug: string
+  parentId?: string
+  blocks?: unknown[]
+}
+
 export interface PagesToolPageSource {
   listTeamPagesForMcp: (teamId: string) => Promise<unknown[]>
   getStoredPageContentForMcp: (teamId: string, pageId: string, locale: string) => Promise<{ id: string, locale: string, content: unknown } | null>
+  /** crouton-pages' one write: a NEW draft page (#4193). */
+  createPageForMcp: (teamId: string, userId: string, input: PagesToolCreateInput) => Promise<{
+    data: { pageId: string } | null
+    error: 'parent_not_found' | 'slug_taken' | null
+  }>
 }
 
 export interface PagesToolRoomRef {
@@ -98,6 +127,10 @@ export interface PagesToolDeps {
   room: PagesToolRoom
   registry: Record<string, PagesToolBlockDefinition>
   checkLayout: (input: unknown, registry: any) => PagesToolLayoutCheck
+  /** The app's default locale — a new page starts in it (the create endpoint's rule). */
+  defaultLocale: string
+  /** The registered page type ids (`appId:typeId`, `layer:collection-detail`). */
+  pageTypes: string[]
 }
 
 // ─── results ────────────────────────────────────────────────────────────────
@@ -323,6 +356,51 @@ export function listLayoutBlocksTool(ctx: PagesAccess | undefined, deps: PagesTo
     sizing: b.sizing ?? null,
     config: (b.configSchema ?? []).map(f => f.name)
   })))
+}
+
+const NEVER_PUBLISH_ERROR = 'create_page never publishes: leave status/publishedAt out, publish in the Pages admin'
+
+/**
+ * Rule C: a new page in the team, always a draft. Refusals write nothing:
+ * status/publishedAt given, no access (Rule A), not the default locale, an
+ * unknown pageType, invalid blocks, an unknown parent, a slug already used.
+ */
+export async function createPageTool(
+  ctx: PagesAccess | undefined,
+  args: PagesToolCreateInput & { team: string },
+  deps: PagesToolDeps
+): Promise<PagesToolResult> {
+  const raw = args as { status?: unknown, publishedAt?: unknown }
+  if (raw.status !== undefined || raw.publishedAt !== undefined) return fail(NEVER_PUBLISH_ERROR)
+  return withTeam(ctx, args.team, deps, async (access, teamId) => {
+    const refused = createInputRefusal(args, deps)
+    if (refused) return fail(refused)
+    const { team: _team, ...input } = args
+    const out = await deps.pages.createPageForMcp(teamId, access.userId, input)
+    if (!out.data) return fail(createErrorMessage(out.error, args.slug))
+    return ok({
+      pageId: out.data.pageId,
+      status: 'draft',
+      note: 'Created as a draft. Nothing is public until someone publishes it in the Pages admin.'
+    })
+  })
+}
+
+/** The input checks that need the app (locale, page type) plus the blocks check; null = fine. */
+function createInputRefusal(args: PagesToolCreateInput, deps: PagesToolDeps): string | null {
+  if (args.locale !== deps.defaultLocale) {
+    return `create the page in the default locale "${deps.defaultLocale}" first; add other locales with edit_page`
+  }
+  if (args.pageType !== undefined && !deps.pageTypes.includes(args.pageType)) {
+    return `unknown pageType "${args.pageType}"; known: ${deps.pageTypes.join(', ')}`
+  }
+  return invalidBlocks(args.blocks)
+}
+
+function createErrorMessage(error: 'parent_not_found' | 'slug_taken' | null, slug: string): string {
+  if (error === 'parent_not_found') return 'parent page not found'
+  if (error === 'slug_taken') return `slug "${slug}" is already used in this team`
+  return 'page not created'
 }
 
 export async function addLayoutTool(

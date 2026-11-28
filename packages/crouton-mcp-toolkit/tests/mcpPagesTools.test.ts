@@ -78,14 +78,18 @@ function makeDeps() {
       getStoredPageContentForMcp: vi.fn(async (teamId: string, pageId: string, locale: string) => {
         const p = pages.find(x => x.id === pageId && x.teamId === teamId)
         return p ? { id: p.id, locale, content: JSON.parse(p.content) } : null
-      })
+      }),
+      // create_page has its own suite (mcpPagesCreate.test.ts); unused here
+      createPageForMcp: vi.fn(async () => ({ data: null, error: null }))
     },
     room,
     registry: {
       'calendar': { id: 'calendar', name: 'Calendar', minWidth: 500 },
       'bookings-list': { id: 'bookings-list', name: 'Bookings', minWidth: 320, configSchema: [{ name: 'limit' }] }
     },
-    checkLayout: checkLayoutForPlacement
+    checkLayout: checkLayoutForPlacement,
+    defaultLocale: 'fr',
+    pageTypes: ['pages:regular']
   }
   return { deps, room, rooms }
 }
