@@ -5,7 +5,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { applyWait, WAIT_MARKER, decideTraffic, releaseWaiting, scopeLabels } from './traffic-control.mjs'
+import { applyWait, WAIT_MARKER, decideTraffic, releaseWaiting, scopeLabels, releasesOnUnlabel } from './traffic-control.mjs'
 
 test('no other work → proceed', () => {
   const v = decideTraffic({ issue: 2, labels: ['pkg:crouton-bookings'], others: [] })
@@ -338,3 +338,13 @@ test('held=1 is set in its own step right after finish, and release-traffic read
   assert.match(wf, /held: \$\{\{ steps\.held\.outputs\.held \}\}/)
   assert.match(wf, /if: \$\{\{ always\(\) && needs\.work-pi\.outputs\.held == '1' \}\}/)
 })
+
+// #3086: only a label whose removal can free a waiter starts a release walk.
+// covers: T1
+for (const name of ['status:blocked', 'traffic:waiting', 'status:in-progress', 'work-this', 'pkg:crouton-core']) {
+  test(`releasesOnUnlabel: removing ${name} walks (#3086)`, () => assert.equal(releasesOnUnlabel(name), true))
+}
+// covers: T1
+for (const name of ['type:fix', 'status:ready-to-close', 'status:verified']) {
+  test(`releasesOnUnlabel: removing ${name} does not walk (#3086)`, () => assert.equal(releasesOnUnlabel(name), false))
+}

@@ -245,12 +245,12 @@ jobs:
               `mutation($id:ID!){ markPullRequestReadyForReview(input:{pullRequestId:$id}){ pullRequest { id } } }`,
               { id: pr.node_id })
 
-            // #2054: release the issue-side status:blocked the draft-open step (work-issue-pidev.yml)
-            // may have set. Resolve the issue from "Closes #NN" in the PR body — same pattern
-            // resume-on-comment.yml uses. Best-effort: a PR with no Closes line just has nothing to clear.
+            // #2054: release the issue-side status:blocked the draft-open step (work-issue-pidev.yml) may have
+            // set; the issue is "Closes #NN" in the PR body. Best-effort: no Closes line, nothing to clear.
             const closesMatch = (pr.body || '').match(/\bCloses\s+#(\d+)/i)
             if (closesMatch) {
               try {
+                // status:blocked remover (#3086): review hold (owner `ok` un-drafts the PR)
                 await github.rest.issues.removeLabel({ owner, repo, issue_number: Number(closesMatch[1]), name: 'status:blocked' })
               } catch (e) { /* label may not have been set (non-UI PR) — fine */ }
             }
@@ -719,6 +719,7 @@ jobs:
             } catch (e) { core.warning(`sub-issue check: ${e.message}`) }
             if (!isDesignHold({ labels, comments: comments.map(c => ({ body: c.body || '' })), noChildren })) { core.setOutput('redispatch', 'false'); core.info('Not a pi design-hold — the claude resume path handles it.'); return }
             // Re-dispatch: clear the block, then remove-then-add delegate-pi for a fresh labeled event.
+            // status:blocked remover (#3086): worker question / design hold (owner reply re-runs pi)
             try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: 'status:blocked' }) } catch (e) {}
             try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: 'delegate-pi' }) } catch (e) {}
             const { handoffGuard } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/handoff-exec.mjs`)
