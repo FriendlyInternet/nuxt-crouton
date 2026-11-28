@@ -1,6 +1,9 @@
+import { ALLOWED_META_KEYS } from '@fyit/crouton-cli/lib/utils/load-fields.ts'
+
 /**
  * Field Types Reference Resource
  * Synced with: packages/nuxt-crouton-cli/lib/utils/helpers.mjs
+ * Allowed meta keys: packages/crouton-cli/lib/utils/load-fields.ts (ALLOWED_META_KEYS, #3165)
  */
 export default defineMcpResource({
   uri: 'crouton://field-types',
@@ -41,8 +44,7 @@ export default defineMcpResource({
       "required": true,
       "maxLength": 255,
       "label": "Field Label",
-      "placeholder": "Enter value...",
-      "hint": "Help text for the field"
+      "help": "Help text for the field"
     }
   }
 }
@@ -57,6 +59,19 @@ export default defineMcpResource({
     "meta": {
       "required": true,
       "label": "Category"
+    }
+  }
+}
+\`\`\`
+
+### Dropdown Field (Inline Options)
+\`\`\`json
+{
+  "status": {
+    "type": "string",
+    "meta": {
+      "displayAs": "optionsSelect",
+      "options": ["draft", "published", "archived"]
     }
   }
 }
@@ -81,9 +96,11 @@ export default defineMcpResource({
 {
   "items": {
     "type": "repeater",
-    "children": {
-      "name": { "type": "string", "meta": { "required": true } },
-      "quantity": { "type": "number", "meta": { "default": 1 } }
+    "meta": {
+      "properties": {
+        "name": { "type": "string", "required": true },
+        "quantity": { "type": "number", "default": 1 }
+      }
     }
   }
 }
@@ -91,27 +108,27 @@ export default defineMcpResource({
 
 ## Meta Options
 
+A field takes only \`type\`, \`meta\`, \`refTarget\` and \`refScope\`; every option goes under \`meta\`. The generator refuses any other key.
+
 | Option | Type | Description |
 |--------|------|-------------|
 | \`required\` | boolean | Field is required |
-| \`maxLength\` | number | Max string length |
-| \`minLength\` | number | Min string length |
-| \`min\` | number | Min numeric value |
-| \`max\` | number | Max numeric value |
-| \`precision\` | number | Decimal precision |
-| \`scale\` | number | Decimal scale |
-| \`label\` | string | Display label |
-| \`placeholder\` | string | Input placeholder |
-| \`hint\` | string | Help text |
-| \`default\` | any | Default value |
-| \`primaryKey\` | boolean | Mark as primary key |
+| \`nullable\` | boolean | Column may be null |
 | \`unique\` | boolean | Enforce uniqueness |
-| \`index\` | boolean | Create index |
-| \`hidden\` | boolean | Hide from forms |
-| \`readonly\` | boolean | Read-only field |
-| \`showInTable\` | boolean | Show in list table |
-| \`sortable\` | boolean | Enable sorting |
-| \`filterable\` | boolean | Enable filtering |
+| \`default\` | any | Default value |
+| \`maxLength\` | number | Max string length |
+| \`min\` / \`max\` | number | Numeric bounds |
+| \`precision\` / \`scale\` | number | Decimal precision and scale |
+| \`label\` | string | Display label |
+| \`description\` / \`help\` | string | Help text |
+| \`area\` / \`group\` | string | Form placement |
+| \`sortable\` | boolean | Enable sorting in the list |
+| \`readOnly\` | boolean | Read-only — **reference fields only** (needs \`refTarget\`) |
+| \`options\` | string[] | Dropdown choices — needs \`displayAs: "optionsSelect"\`, otherwise a plain text input |
+| \`displayAs\` | string | \`"optionsSelect"\` renders \`options\` / \`optionsCollection\` as a dropdown |
+| \`properties\` | object | Repeater item fields |
+
+**Every allowed meta key** (read from the generator): ${[...ALLOWED_META_KEYS].map(k => `\`${k}\``).join(', ')}
 
 ## Auto-Generated Fields
 
@@ -144,15 +161,13 @@ With \`--hierarchy\` flag:
       "required": true,
       "maxLength": 255,
       "label": "Product Name",
-      "showInTable": true,
       "sortable": true
     }
   },
   "description": {
     "type": "text",
     "meta": {
-      "label": "Description",
-      "placeholder": "Enter product description..."
+      "label": "Description"
     }
   },
   "price": {
@@ -162,7 +177,6 @@ With \`--hierarchy\` flag:
       "precision": 10,
       "scale": 2,
       "min": 0,
-      "showInTable": true,
       "sortable": true
     }
   },
@@ -170,8 +184,7 @@ With \`--hierarchy\` flag:
     "type": "boolean",
     "meta": {
       "default": true,
-      "label": "In Stock",
-      "showInTable": true
+      "label": "In Stock"
     }
   },
   "categoryId": {
@@ -179,9 +192,7 @@ With \`--hierarchy\` flag:
     "refTarget": "categories",
     "meta": {
       "required": true,
-      "label": "Category",
-      "showInTable": true,
-      "filterable": true
+      "label": "Category"
     }
   },
   "tags": {

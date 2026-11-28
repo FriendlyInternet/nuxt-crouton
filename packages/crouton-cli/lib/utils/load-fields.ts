@@ -46,6 +46,9 @@ export const ALLOWED_META_KEYS: ReadonlySet<string> = new Set([
   'properties', 'addLabel', 'repeaterComponent'
 ])
 
+/** Every field-level key the generator reads (keyed format). Field options go under `meta` (#3165). */
+export const ALLOWED_FIELD_KEYS: ReadonlySet<string> = new Set(['type', 'meta', 'refTarget', 'refScope'])
+
 /**
  * Throw one line naming the field when a name / type / meta key can't be generated safely (#2732).
  * Strict by design: an invalid name emits syntax errors in schema.ts / types.ts / _Form.vue.
@@ -61,7 +64,12 @@ export function validateField(name: unknown, def: Record<string, any> | undefine
   if (validTypes.size > 0 && (typeof def?.type !== 'string' || !validTypes.has(def.type))) {
     throw new Error(`Field "${name}" has unknown type ${JSON.stringify(def?.type)}: allowed ${[...validTypes].sort().join(', ')}`)
   }
-  for (const key of Object.keys(def.meta || {})) {
+  for (const key of Object.keys(def || {})) {
+    if (!ALLOWED_FIELD_KEYS.has(key)) {
+      throw new Error(`Field "${name}" has unknown key "${key}": allowed ${[...ALLOWED_FIELD_KEYS].join(', ')} (field options go under meta)`)
+    }
+  }
+  for (const key of Object.keys(def?.meta || {})) {
     if (!ALLOWED_META_KEYS.has(key)) {
       throw new Error(`Field "${name}" has unknown meta key "${key}": allowed ${[...ALLOWED_META_KEYS].join(', ')}`)
     }

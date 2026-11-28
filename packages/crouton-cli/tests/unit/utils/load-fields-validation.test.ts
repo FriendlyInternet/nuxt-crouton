@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { validateField } from '../../../lib/utils/load-fields.ts'
+import { validateField, ALLOWED_FIELD_KEYS } from '../../../lib/utils/load-fields.ts'
 import { jsString, htmlAttr, jsLiteral } from '../../../lib/utils/helpers.ts'
 
 const types = new Set(['string', 'number', 'text'])
@@ -24,6 +24,18 @@ describe('validateField (#2732)', () => {
 
   it('rejects unknown meta keys, naming the field and key', () => {
     expect(() => check('title', { type: 'string', meta: { requird: true } })).toThrow(/Field "title" has unknown meta key "requird"/)
+  })
+
+  it('rejects an unknown field-level key (#3165)', () => {
+    expect(() => check('extras', { type: 'string', children: {} })).toThrow(/Field "extras" has unknown key "children"/)
+  })
+
+  it('accepts every field-level key the generator reads (#3165)', () => {
+    expect(() => check('bikeId', { type: 'string', meta: {}, refTarget: 'bikes', refScope: 'adapter' })).not.toThrow()
+  })
+
+  it('ALLOWED_FIELD_KEYS is exactly type/meta/refTarget/refScope (#3165)', () => {
+    expect([...ALLOWED_FIELD_KEYS].sort()).toEqual(['meta', 'refScope', 'refTarget', 'type'])
   })
 })
 
