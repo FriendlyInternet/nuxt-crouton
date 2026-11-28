@@ -177,9 +177,11 @@ Navigate to `/dashboard/[team]/settings/email-templates` to manage email templat
 | Trigger | When Sent |
 |---------|-----------|
 | `booking_created` | When a new booking is made |
-| `reminder_before` | Before the booking date (use `daysOffset`) |
+| `reminder_before` | `daysOffset` days before the booking date (local day in `croutonBookings.timezone`), sent once by the daily `bookings:scheduled-emails` job (07:00 UTC) in apps that schedule it |
 | `booking_cancelled` | When a booking is cancelled |
-| `follow_up_after` | After the booking date (use `daysOffset`) |
+| `follow_up_after` | `daysOffset` days after the booking date, sent once by the same daily job |
+
+**Scheduled emails (#3930):** the package ships the task (`server/tasks/bookings/scheduled-emails.ts` → `runScheduledBookingEmails` in `server/utils/scheduled-emails.ts`) but never schedules it. An app opts in from its own `nuxt.config.ts` under `$production` plus a Cloudflare preset check (never in `nuxt dev`) — `nitro.experimental.tasks`, an explicit `nitro.tasks` handler path and `nitro.scheduledTasks` — with a matching top-level `triggers.crons` in `wrangler.jsonc` and `"triggers": { "crons": [] }` in `env.staging` (Wrangler otherwise inherits it). See `apps/velo`. Per-PR previews strip `triggers`. The job skips cancelled bookings, sends only the due template (`templateIds` option on `sendBookingEmails`), and never re-sends a booking + template already logged to that customer. Admins can run it now for one team: `POST /api/crouton-bookings/teams/[id]/scheduled-emails/run` → `{ sent, skipped, failed }`.
 
 **Using the Editor:**
 

@@ -73,6 +73,8 @@ export interface SendBookingEmailOptions {
   adminEmail?: string
   /** Locale for translations and date formatting (default: 'en') */
   locale?: string
+  /** Send only these templates (the daily scheduled job knows which one is due, #3930) */
+  templateIds?: string[]
   /** H3 event — required on Cloudflare Workers for runtimeConfig access */
   event?: any
 }
@@ -439,11 +441,14 @@ export async function sendBookingEmails(
   const nitroApp = useNitroApp()
 
   // Get templates for this trigger
-  const templates = await getActiveTemplatesForTrigger(
+  const activeTemplates = await getActiveTemplatesForTrigger(
     teamId,
     triggerType,
     booking.location
   )
+  const templates = options.templateIds
+    ? activeTemplates.filter(t => options.templateIds!.includes(t.id))
+    : activeTemplates
 
   if (templates.length === 0) {
     console.warn(`[booking-email] No active templates found for trigger: ${triggerType} (team: ${teamId})`)
@@ -782,9 +787,9 @@ export async function triggerBookingCancelledEmail(
  * D1 has a 100-parameter limit per query. Chunk arrays to stay under the limit.
  * Reserve 5 params for non-array conditions (e.g. teamId, isActive).
  */
-const D1_PARAM_CHUNK_SIZE = 95
+export const D1_PARAM_CHUNK_SIZE = 95
 
-function chunkArray<T>(arr: T[], size: number): T[][] {
+export function chunkArray<T>(arr: T[], size: number): T[][] {
   const chunks: T[][] = []
   for (let i = 0; i < arr.length; i += size) {
     chunks.push(arr.slice(i, i + size))
