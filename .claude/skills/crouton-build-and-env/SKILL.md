@@ -55,13 +55,14 @@ This is exactly what the SessionStart hook (`.claude/hooks/session-start.sh`) do
 
 ## 3. The version catalog and the pins
 
-Shared versions live in the `catalog:` block of `pnpm-workspace.yaml` (single source of truth, #142) — packages reference them as `"dep": "catalog:"`. Read the current set with the catalog grep in the re-verify block. Per the in-file comment: the vitest family (`vitest`/`@vitest/coverage-v8`/`happy-dom`) and `@nuxt/kit|schema` are **intentionally NOT cataloged** (version spreads need a real migration, #141).
+Shared versions live in the `catalog:` block of `pnpm-workspace.yaml` (single source of truth, #142) — packages reference them as `"dep": "catalog:"`. Read the current set with the catalog grep in the re-verify block. Per the in-file comment: packages' own `@nuxt/kit|schema` pins are **intentionally NOT cataloged** (version spreads need a real migration, #141); the catalog's `@nuxt/schema` and `@nuxt/nitro-server` lines exist only to feed the root `pnpm.overrides`, so they always move with `nuxt` (#4496).
 
 Root `package.json` `pnpm.overrides` — do NOT loosen these outside the `dependency-sweep` flow. Current pin values: read them from the overrides (re-verify block); the prose here carries only the *why*:
 
 | Override | Pin style | Why |
 |---|---|---|
-| `vue`, `nuxt`, `@nuxt/schema`, `@nuxt/ui`, `@nuxt/devtools(-kit)` | caret ranges | force one framework version across the workspace |
+| `vue`, `nuxt`, `@nuxt/schema`, `@nuxt/nitro-server`, `@nuxt/ui` | `catalog:` | force one framework version across the workspace; the number lives only in the catalog, so a bump is one line there (#4496) |
+| `@nuxt/cli`, `@nuxt/devtools(-kit)` | caret ranges | force one tool version across the workspace |
 | `@tiptap/core`, `@tiptap/pm`, `@tiptap/vue-3` | **exact** | must match the tiptap version `@nuxt/ui` bundles, or the editor gets two tiptap instances — see #140/#141; #235 shows the pin being re-floored on a `@nuxt/ui` bump |
 | `unimport` | exact | workaround pin — rationale not recoverable from the shallow clone (unverified); treat as deliberate |
 | `youch` | exact | same: workaround pin, rationale unverified |

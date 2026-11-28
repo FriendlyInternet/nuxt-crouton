@@ -14,12 +14,13 @@ packages:
 
 # Single source of truth for shared dependency versions (#142).
 # Reference from any package.json with "<dep>": "catalog:".
-# NOTE: @nuxt/kit|schema are intentionally NOT cataloged yet
-# (version spreads require a real migration, not a dedup) — see #141.
+# NOTE: packages' own @nuxt/kit|schema pins stay un-cataloged (spread ranges need a real migration, #141); the @nuxt/schema entry below only feeds the root pnpm.overrides, so it always moves with nuxt.
 # vitest + happy-dom were unified and cataloged in #2291.
 catalog:
-  nuxt: ^4.6.4
-  vue: ^3.5.44
+  nuxt: ^4.7.0
+  '@nuxt/schema': ^4.7.0
+  '@nuxt/nitro-server': ^4.7.0
+  vue: ^3.5.46
   vue-router: ^5.1.0
   typescript: ^5.7.0
   wrangler: ^4.150.0
