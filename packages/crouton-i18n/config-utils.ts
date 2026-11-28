@@ -98,6 +98,18 @@ export function getCroutonLocales(): { code: string, name: string, file: string 
   })
 }
 
+/**
+ * The app's locales as one layer should declare them to @nuxtjs/i18n.
+ * A locale whose `{code}.json` exists in `langDir` keeps its `file`; one the
+ * layer ships no texts for gets `files: []` — a missing file would crash
+ * startup (ENOENT), and a locale with neither key is refused under a langDir.
+ * That layer's texts then fall back to the default locale.
+ */
+export function getLayerLocales(langDir: string): ({ code: string, name: string, file: string } | { code: string, name: string, files: string[] })[] {
+  return getCroutonLocales().map(({ code, name, file }) =>
+    existsSync(resolve(langDir, file)) ? { code, name, file } : { code, name, files: [] as string[] })
+}
+
 export function getCroutonDefaultLocale(): string {
   const config = loadCroutonConfig()
   return config?.defaultLocale || 'en'

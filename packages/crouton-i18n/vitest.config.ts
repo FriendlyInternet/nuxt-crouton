@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 
 export default defineConfig({
   test: {
-    include: ['app/composables/__tests__/**/*.test.ts', 'app/components/__tests__/**/*.test.ts', 'server/**/__tests__/**/*.test.ts'],
+    include: ['__tests__/**/*.test.ts', 'app/composables/__tests__/**/*.test.ts', 'app/components/__tests__/**/*.test.ts', 'server/**/__tests__/**/*.test.ts'],
     environment: 'happy-dom',
     globals: true,
     coverage: {

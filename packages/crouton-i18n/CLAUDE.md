@@ -14,7 +14,7 @@ Multi-language support layer for Nuxt Crouton. Provides database-backed translat
 | `app/components/Input.vue` | Multi-language input component |
 | `app/components/Display.vue` | Translated content display |
 | `cli/seed.ts` | Translation seeding CLI |
-| `locales/*.json` | Default locale files (en, es, fr, it, pt) |
+| `locales/*.json` | Default locale files (en, fr, nl) |
 
 ## Translation Lookup Order
 
@@ -163,8 +163,9 @@ export default defineNuxtConfig({
 The active locale set comes from the app's `crouton.config.js` `locales` field —
 **not** from per-package hardcoded arrays. All crouton layers that contribute
 i18n locales (`crouton-i18n`, `crouton-core`, `crouton-auth`, `crouton-admin`,
-`crouton-pages`, `crouton-sales`) call `getCroutonLocales()` from
-`@fyit/crouton-i18n/config-utils`, so they stay in sync.
+`crouton-pages`, `crouton-sales`) call `getLayerLocales(<their locales folder>)`
+(built on `getCroutonLocales()`) from `@fyit/crouton-i18n/config-utils`, so they
+stay in sync.
 
 ```js
 // crouton.config.js
@@ -175,7 +176,8 @@ defaultLocale: 'nl',
 - If `locales` is **omitted**, the default is `en`, `nl`, `fr` (the set the
   packages historically hardcoded — preserves existing apps).
 - If `locales` is set, you get **exactly** that set across every layer. Adding a
-  locale code that no package ships a `{code}.json` for will warn/skip.
+  locale code that a layer ships no `{code}.json` for is fine: `getLayerLocales()`
+  declares it with `files: []`, so that layer's texts fall back to the default locale.
 - The **base/required locale** in translation inputs (`CroutonI18nInput`,
   `FormTranslatableOptionItem`, etc.) — the tab marked `*`, the fallback source,
   and the value mirrored to a collection's root field — follows the configured
