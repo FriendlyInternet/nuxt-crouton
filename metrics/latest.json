@@ -1,6 +1,6 @@
 {
-  "as_of": "2026-11-27T21:20:15Z",
-  "data_commit": "0d206bf940dc54f83891e06eae5e0d3d8e776e7b",
+  "as_of": "2026-11-28T00:20:15Z",
+  "data_commit": "21061bd9ec201789f9b3788e9f26db86b3b1fa92",
   "weeks": {
     "2026-W46": {
       "jobs": {
@@ -4374,7 +4374,7 @@
           "green_same_sha": 0,
           "never_green": 0,
           "rate": 0,
-          "runs": 977
+          "runs": 978
         },
         "build-review.yml/Record run outcome": {
           "failed": 0,
@@ -6130,8 +6130,8 @@
         }
       },
       "jobs_coverage": {
-        "eligible_runs": 7960,
-        "runs_with_jobs": 7960
+        "eligible_runs": 7961,
+        "runs_with_jobs": 7961
       },
       "lines": {
         "building": {
@@ -6154,7 +6154,7 @@
         },
         "merging": {
           "failed": 0,
-          "runs": 3171,
+          "runs": 3172,
           "schedule_total": 0,
           "workflow_rate": 0
         },
@@ -6188,7 +6188,7 @@
         "automerge-epic-subpr.yml": {
           "failed": 0,
           "rate": 0,
-          "runs": 977
+          "runs": 978
         },
         "build-review.yml": {
           "failed": 4,
